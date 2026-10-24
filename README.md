@@ -79,9 +79,31 @@ result["escalated"]            # ["urgency"]
   ```
 - `ChatReasoner(model, base_url, api_key)`: any OpenAI-compatible endpoint as System 2, constrained to the
   question schema with structured outputs.
+- `ChatDecider` and `ChatReasoner` also take `extra={...}`, merged into every request body. A model that would
+  spend its one token starting to think (such as Gemma on Ollama) needs `extra={"reasoning_effort": "none"}` to put
+  probability on the options.
 - `ClaudeCLI(model=None)`: Claude through your local `claude` CLI login, with no tools. Text only.
 - `default_system2()`: `ClaudeAPI` when an Anthropic credential is set, else `ClaudeCLI` if installed.
 - `decide(..., escalate=False)` keeps System 1's answers and only lists the unsure keys.
+
+## Testing against a golden dataset
+
+`router.test(cases)` scores the router on cases you have already answered, so you can compare models or catch a
+regression before shipping. A case is `{"state": ..., "expected": {key: answer}}`, plus its own `"questions"` or a
+shared `questions=` argument. `cases` is a list or the path of a JSONL file with one case per line. Only the
+questions with an expected answer are asked, and nothing is written to the log.
+
+```python
+report = router.test("golden.jsonl", questions=questions)
+report["overall"]     # {"n": 120, "accuracy": 0.93, "system1_accuracy": 0.81, "escalation_rate": 0.24}
+report["questions"]   # the same per question
+report["latency_ms"]  # {"system1": {50: 310.2, 95: 642.9}, "system2": {50: 1480.0, 95: 2210.5}, "total": {...}}
+report["failures"]    # [{"case": 7, "key": "urgency", "expected": 2, "got": 1, "source": "hunch", "confidence": 0.97}, ...]
+```
+
+`accuracy` is the final answer and `system1_accuracy` is System 1 alone, so the gap is what escalation buys.
+Every `decide` result also has `latency_ms` (`system1`, `system2` or `None`, `total`), and it is stored in the log.
+Cases run one at a time, so the latencies are those of an unloaded system.
 
 ## Calibrating from your own data
 
@@ -125,6 +147,7 @@ switches models without code changes.
 | `HUNCH_SYSTEM1_MODEL`, `_URL`, `_API_KEY` | System 1 is a `ChatDecider`: model name (required), base URL (default OpenAI), key (optional for local servers) |
 | `HUNCH_SYSTEM2` | `auto` (default: Claude API, else CLI), `claude`, `claude-cli`, `chat`, `none` |
 | `HUNCH_SYSTEM2_MODEL`, `_URL`, `_API_KEY` | model for `claude` or `chat`; URL and key for `chat` |
+| `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON object merged into every request body, e.g. `{"reasoning_effort": "none"}` |
 | `HUNCH_THRESHOLD` | confidence below which a question escalates (default 0.8) |
 | `HUNCH_DB` | path of the SQLite log; set it to enable logging, `/feedback` and `/calibrate` |
 | `HUNCH_AUDIT` | share of confident questions also checked by System 2 for calibration (default 0) |

@@ -1,4 +1,5 @@
 """Build a Router from environment variables, so a deployment can swap models without code changes."""
+import json
 import os
 from hunch.backends import ChatDecider, ClaudeAPI, ClaudeCLI, ChatReasoner, default_system2
 from hunch.router import Router
@@ -9,7 +10,8 @@ DEFAULT_URL = "https://api.openai.com/v1"
 
 def _chat(cls, n):
     env = os.environ
-    return cls(env[f"HUNCH_SYSTEM{n}_MODEL"], env.get(f"HUNCH_SYSTEM{n}_URL", DEFAULT_URL), env.get(f"HUNCH_SYSTEM{n}_API_KEY"))
+    extra = json.loads(env.get(f"HUNCH_SYSTEM{n}_EXTRA", "{}"))
+    return cls(env[f"HUNCH_SYSTEM{n}_MODEL"], env.get(f"HUNCH_SYSTEM{n}_URL", DEFAULT_URL), env.get(f"HUNCH_SYSTEM{n}_API_KEY"), extra=extra)
 
 
 def system1_from_env():

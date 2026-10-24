@@ -274,3 +274,54 @@ def test_api_feedback_and_calibrate(tmp_path, monkeypatch):
     assert "importance" in client.post("/calibrate", json={}, headers=auth).json()
     monkeypatch.setattr(api, "_router", Router(FakeDecider()))
     assert client.post("/calibrate", json={}, headers=auth).status_code == 400
+
+
+def test_latency_is_reported_and_logged(tmp_path):
+    import time
+
+    class Slow(FakeClaude):
+        def answer(self, state, questions, images=()):
+            time.sleep(0.02)
+            return super().answer(state, questions, images)
+
+    store = _calibration_store(tmp_path)
+    result = Router(FakeDecider(), Slow(), log=store).decide("event", QUESTIONS)
+    latency = result["latency_ms"]
+    assert latency["system2"] >= 20 and latency["total"] >= latency["system2"] + latency["system1"] - 0.2
+    assert Router(FakeDecider(), Slow()).decide("event", {"event_type": QUESTIONS["event_type"]})["latency_ms"]["system2"] is None
+
+
+def test_golden_run(tmp_path):
+    import json
+
+    store = _calibration_store(tmp_path)
+    router = Router(FakeDecider(), FakeClaude(), log=store)
+    # System 1 says importance 3 (unsure), System 2 says 4: the second case expects 3, so System 2 gets it wrong.
+    cases = [{"state": "a", "expected": {"importance": 4, "event_type": "interview", "needs_prep": True}},
+             {"state": "b", "expected": {"importance": 3, "event_type": "meeting"}}]
+    path = tmp_path / "golden.jsonl"
+    path.write_text("\n".join(json.dumps(c) for c in cases))
+    report = router.test(path, questions=QUESTIONS)
+    assert report["cases"] == 2 and store.labeled() == []
+    assert report["questions"]["importance"] == {"n": 2, "accuracy": 0.5, "system1_accuracy": 0.5, "escalation_rate": 1.0}
+    assert report["questions"]["event_type"]["accuracy"] == 0.5 and report["questions"]["event_type"]["escalation_rate"] == 0.0
+    assert report["overall"]["n"] == 5 and report["overall"]["accuracy"] == pytest.approx(3 / 5)
+    assert {f["key"] for f in report["failures"]} == {"importance", "event_type"}
+    assert report["latency_ms"]["system1"][50] >= 0 and report["latency_ms"]["system2"] is not None
+    with pytest.raises(ValueError, match="case 0"):
+        router.test([{"state": "a", "expected": {"importance": 9}}], questions=QUESTIONS)
+
+
+def test_extra_fields_reach_the_request(monkeypatch):
+    import httpx
+    from hunch import ChatDecider
+
+    seen = {}
+
+    def post(url, json, headers, timeout):
+        seen.update(json)
+        return _logprob_response(url, [("yes", 0.0)])
+
+    monkeypatch.setattr(httpx, "post", post)
+    ChatDecider("m", "http://local/v1", extra={"reasoning_effort": "none", "max_tokens": 2}).decide("e", {"needs_prep": QUESTIONS["needs_prep"]})
+    assert seen["reasoning_effort"] == "none" and seen["max_tokens"] == 2
