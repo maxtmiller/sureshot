@@ -9,7 +9,7 @@ QUESTIONS = {
     "event_type": {"type": "choice", "instructions": "What kind of event?", "criteria": {"meeting": "A meeting", "interview": "An interview"}},
 }
 
-# A real pplx-decider response (reflex history), trimmed to two choice options.
+# Raw System 1 output for each question type, as an adapter's parse function returns it.
 RAW = {
     "needs_prep": {"type": "noul", "noul": 0.966},
     "importance": {"type": "score", "probabilities": {"0": 0.02, "1": 0.02, "2": 0.21, "3": 0.41, "4": 0.34}, "score": 3.03, "confidence": 0.456},
@@ -38,6 +38,42 @@ def test_normalize_each_type():
     assert a["event_type"]["answer"] == "interview" and a["event_type"]["confidence"] == 0.976
     low = normalize(QUESTIONS["needs_prep"], {"noul": 0.1})
     assert low["answer"] is False and low["confidence"] == pytest.approx(0.9)
+
+
+def test_http_decider_adapts_any_api(monkeypatch):
+    import httpx
+    from hunch.backends import HTTPDecider
+
+    seen = {}
+
+    def post(url, json, headers, timeout):
+        seen.update(url=url, json=json, headers=headers)
+        return httpx.Response(200, json={"out": RAW}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", post)
+    decider = HTTPDecider("https://example.test/classify", lambda s, q, i: {"text": s, "q": q},
+                          lambda data, questions: data["out"], api_key="k")
+    answers = decider.decide("event", QUESTIONS)
+    assert seen["url"] == "https://example.test/classify" and seen["json"]["text"] == "event"
+    assert seen["headers"] == {"Authorization": "Bearer k"}
+    assert answers["event_type"]["answer"] == "interview" and answers["needs_prep"]["answer"] is True
+
+
+def test_http_reasoner_adapts_any_api(monkeypatch):
+    import httpx
+    from hunch import HTTPReasoner, prompt
+
+    seen = {}
+
+    def post(url, json, headers, timeout):
+        seen.update(url=url, json=json, headers=headers)
+        return httpx.Response(200, json={"text": {"importance": {"answer": 4, "reason": "ok"}}}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", post)
+    reasoner = HTTPReasoner("https://llm.test/answer", lambda s, q, i: {"input": prompt(s, q)}, lambda data, q: data["text"], api_key="k")
+    result = Router(FakeDecider(), reasoner).decide("event", QUESTIONS)
+    assert seen["url"] == "https://llm.test/answer" and "importance" in seen["json"]["input"] and "needs_prep" not in seen["json"]["input"]
+    assert result["answers"]["importance"]["answer"] == 4 and result["answers"]["importance"]["source"] == "system2"
 
 
 def test_only_unsure_questions_escalate():
@@ -81,3 +117,160 @@ def test_api_requires_token(monkeypatch):
     assert ok.status_code == 200 and ok.json()["escalated"] == ["importance"]
     bad = client.post("/decide", json={"state": "x", "questions": {}}, headers={"Authorization": "Bearer secret"})
     assert bad.status_code == 422
+
+
+def _logprob_response(url, tops):
+    import httpx
+
+    content = [{"token": t, "logprob": lp} for t, lp in tops]
+    return httpx.Response(200, json={"choices": [{"logprobs": {"content": [{"top_logprobs": content}]}}]}, request=httpx.Request("POST", url))
+
+
+def test_chat_decider_turns_logprobs_into_confidence(monkeypatch):
+    import math
+    import httpx
+    from hunch import ChatDecider
+
+    sent = []
+
+    def post(url, json, headers, timeout):
+        sent.append(json)
+        text = json["messages"][1]["content"][-1]["text"]
+        if "yes or no" in text:
+            return _logprob_response(url, [("Yes", math.log(0.9)), ("no", math.log(0.1)), ("The", math.log(0.01))])
+        if "How important" in text:
+            return _logprob_response(url, [("3", math.log(0.5)), ("4", math.log(0.5))])
+        return _logprob_response(url, [(" B", math.log(0.96)), ("A", math.log(0.04))])
+
+    monkeypatch.setattr(httpx, "post", post)
+    answers = ChatDecider("m", "http://local/v1", api_key="k").decide("event", QUESTIONS)
+    assert answers["needs_prep"]["answer"] is True and answers["needs_prep"]["confidence"] == pytest.approx(0.9)
+    assert answers["event_type"]["answer"] == "interview" and answers["event_type"]["confidence"] == pytest.approx(0.96)
+    assert answers["importance"]["confidence"] == pytest.approx(0.5)
+    assert all(s["logprobs"] and s["max_tokens"] == 1 for s in sent) and len(sent) == 3
+
+
+def test_chat_reasoner_uses_structured_outputs(monkeypatch):
+    import httpx
+    from hunch import ChatReasoner
+
+    seen = {}
+
+    def post(url, json, headers, timeout):
+        seen.update(url=url, json=json)
+        body = {"choices": [{"message": {"content": '{"importance": {"answer": 4, "reason": "ok"}}'}}]}
+        return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", post)
+    result = Router(FakeDecider(), ChatReasoner("m", "http://local/v1")).decide("event", QUESTIONS)
+    assert seen["url"] == "http://local/v1/chat/completions" and seen["json"]["response_format"]["json_schema"]["strict"]
+    assert result["answers"]["importance"]["answer"] == 4
+
+
+def test_router_from_env(monkeypatch):
+    from hunch import ChatDecider, ChatReasoner, router_from_env
+
+    for k, v in {"HUNCH_SYSTEM1_MODEL": "a", "HUNCH_SYSTEM1_URL": "http://one/v1",
+                 "HUNCH_SYSTEM2": "chat", "HUNCH_SYSTEM2_MODEL": "b", "HUNCH_THRESHOLD": "0.9"}.items():
+        monkeypatch.setenv(k, v)
+    router = router_from_env()
+    assert isinstance(router.system1, ChatDecider) and router.system1.url == "http://one/v1/chat/completions"
+    assert isinstance(router.system2, ChatReasoner) and router.threshold == 0.9
+    monkeypatch.setenv("HUNCH_SYSTEM2", "none")
+    assert router_from_env().system2 is None
+    monkeypatch.setenv("HUNCH_SYSTEM2", "bogus")
+    with pytest.raises(ValueError):
+        router_from_env()
+
+
+def _calibration_store(tmp_path):
+    from hunch import Store
+
+    return Store(tmp_path / "hunch.db")
+
+
+class Scripted:
+    """System 1 that answers the first question with a given confidence, and is right only when told so."""
+
+    def __init__(self, confidence):
+        self.confidence = confidence
+
+    def decide(self, state, questions, images=()):
+        c = self.confidence
+        return {"needs_prep": {"answer": True, "confidence": c, "probabilities": {"true": c, "false": 1 - c}}}
+
+
+def test_log_label_and_audit(tmp_path):
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # System 2 disagrees (False); audit=1 means every confident answer is also checked and weighted 1.
+    class Slow:
+        def answer(self, state, questions, images=()):
+            return {k: {"answer": False, "reason": "no"} for k in questions}
+
+    result = Router(Scripted(0.9), Slow(), log=store, audit=1.0).decide("event", q)
+    assert result["escalated"] == [] and result["answers"]["needs_prep"]["source"] == "hunch"
+    assert result["answers"]["needs_prep"]["audit"]["answer"] is False
+    row = store.labeled()[0]
+    assert row["kind"] == "proxy" and row["weight"] == 1.0 and row["truth"] is False and row["answer"] is True
+    store.label(result["id"], "needs_prep", True)
+    assert store.labeled()[0]["kind"] == "human" and store.labeled()[0]["truth"] is True
+    with pytest.raises(ValueError):
+        store.label(result["id"], "needs_prep", "yes")
+    with pytest.raises(KeyError):
+        store.label("nope", "needs_prep", True)
+
+
+def test_calibrate_finds_threshold_and_router_uses_it(tmp_path):
+    from hunch import calibrate
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # 0.95-confidence answers are always right; 0.6-confidence answers are right half the time.
+    for i in range(120):
+        confidence = 0.95 if i % 2 else 0.6
+        result = Router(Scripted(confidence), None, log=store).decide("event", q)
+        store.label(result["id"], "needs_prep", i % 4 != 0 if confidence == 0.6 else True)
+    report = calibrate(store, target_accuracy=0.95, min_samples=30)["needs_prep"]
+    assert report["threshold"] == 0.95 and report["trusted_accuracy"] == 1.0 and report["escalation_rate"] == pytest.approx(0.5)
+    assert store.thresholds() == {"needs_prep": 0.95}
+    claude = FakeClaude()
+    # 0.9 was fine under the default 0.8 but is now below the learned 0.95 threshold.
+    assert Router(Scripted(0.9), claude, log=store).decide("event", q)["escalated"] == ["needs_prep"]
+    assert Router(Scripted(0.9), claude, log=store).decide("event", q, thresholds={"needs_prep": 0.5})["escalated"] == []
+    assert calibrate(store, min_samples=1000)["needs_prep"]["threshold"] is None
+
+
+def test_evaluate_compares_candidates(tmp_path):
+    from hunch import evaluate
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    for _ in range(40):
+        store.label(Router(Scripted(0.9), None, log=store).decide("event", q)["id"], "needs_prep", True)
+    report = evaluate(store, {"good": Scripted(0.99), "bad": FlippedScripted()}, min_samples=30)
+    assert report["good"]["needs_prep"]["accuracy"] == 1.0 and report["good"]["needs_prep"]["threshold"] == 0.99
+    assert report["bad"]["needs_prep"]["accuracy"] == 0.0 and report["bad"]["needs_prep"]["threshold"] is None
+
+
+class FlippedScripted:
+    def decide(self, state, questions, images=()):
+        return {"needs_prep": {"answer": False, "confidence": 0.9, "probabilities": {}}}
+
+
+def test_api_feedback_and_calibrate(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import hunch.api as api
+
+    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    store = _calibration_store(tmp_path)
+    monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude(), log=store))
+    client, auth = TestClient(api.app), {"Authorization": "Bearer secret"}
+    decision = client.post("/decide", json={"state": "event", "questions": QUESTIONS}, headers=auth).json()
+    assert client.post("/feedback", json={"id": decision["id"], "labels": {"importance": 4}}).status_code == 401
+    assert client.post("/feedback", json={"id": decision["id"], "labels": {"importance": 4}}, headers=auth).status_code == 200
+    assert client.post("/feedback", json={"id": decision["id"], "labels": {"importance": 9}}, headers=auth).status_code == 422
+    assert client.post("/feedback", json={"id": "nope", "labels": {"importance": 4}}, headers=auth).status_code == 404
+    assert "importance" in client.post("/calibrate", json={}, headers=auth).json()
+    monkeypatch.setattr(api, "_router", Router(FakeDecider()))
+    assert client.post("/calibrate", json={}, headers=auth).status_code == 400
