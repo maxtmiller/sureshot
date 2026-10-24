@@ -1,0 +1,18 @@
+[project]
+name = "system1"
+version = "0.1.0"
+description = "Fast, calibrated decisions from a System 1 model, with escalation to Claude when it's unsure"
+requires-python = ">=3.11"
+dependencies = ["httpx", "anthropic"]
+
+[project.optional-dependencies]
+api = ["fastapi", "uvicorn", "python-dotenv"]
+deploy = ["modal"]
+dev = ["pytest", "fastapi", "python-dotenv"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["system1"]
