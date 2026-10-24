@@ -1,7 +1,7 @@
 import pytest
-from system1.backends import normalize
-from system1.questions import answer_schema, validate
-from system1.router import Router
+from hunch.backends import normalize
+from hunch.questions import answer_schema, validate
+from hunch.router import Router
 
 QUESTIONS = {
     "needs_prep": {"type": "noul", "instructions": "Does this event need preparation?"},
@@ -45,8 +45,8 @@ def test_only_unsure_questions_escalate():
     result = Router(FakeDecider(), claude, threshold=0.8).decide("event", QUESTIONS)
     assert result["unsure"] == ["importance"] and result["escalated"] == ["importance"] and claude.asked == ["importance"]
     assert result["answers"]["importance"]["source"] == "system2" and result["answers"]["importance"]["answer"] == 4
-    assert result["answers"]["importance"]["system1"]["answer"] == 3
-    assert result["answers"]["event_type"]["source"] == "system1"
+    assert result["answers"]["importance"]["hunch"]["answer"] == 3
+    assert result["answers"]["event_type"]["source"] == "hunch"
 
 
 def test_per_question_threshold_and_no_escalation():
@@ -54,7 +54,7 @@ def test_per_question_threshold_and_no_escalation():
     result = Router(FakeDecider(), claude, threshold=0.8).decide("event", QUESTIONS, thresholds={"importance": 0.4, "event_type": 0.99})
     assert result["unsure"] == ["event_type"] and claude.asked == ["event_type"]
     kept = Router(FakeDecider(), claude, threshold=0.8).decide("event", QUESTIONS, escalate=False)
-    assert kept["unsure"] == ["importance"] and kept["escalated"] == [] and kept["answers"]["importance"]["source"] == "system1"
+    assert kept["unsure"] == ["importance"] and kept["escalated"] == [] and kept["answers"]["importance"]["source"] == "hunch"
     assert Router(FakeDecider(), None).decide("event", QUESTIONS)["escalated"] == []
 
 
@@ -69,9 +69,9 @@ def test_schema_and_validation():
 
 def test_api_requires_token(monkeypatch):
     from fastapi.testclient import TestClient
-    import system1.api as api
+    import hunch.api as api
 
-    monkeypatch.setenv("SYSTEM1_API_KEY", "secret")
+    monkeypatch.setenv("HUNCH_API_KEY", "secret")
     monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude()))
     client = TestClient(api.app)
     body = {"state": "event", "questions": QUESTIONS}

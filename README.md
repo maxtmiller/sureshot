@@ -1,4 +1,4 @@
-# system1
+# hunch
 
 Fast, calibrated decisions from a System 1 model, with escalation to a System 2 model when it isn't sure.
 
@@ -34,11 +34,11 @@ Every answer comes back in one shape: `answer` (an option key, a level index, or
 ## Library
 
 ```python
-from system1 import Router, Decider, ClaudeCLI, ClaudeAPI
+from hunch import Router, Decider, ClaudeCLI, ClaudeAPI
 
 router = Router(Decider(), ClaudeAPI(), threshold=0.8)
 result = router.decide(email_text, questions, thresholds={"urgency": 0.6})
-result["answers"]["urgency"]   # {"answer": 0, "reason": "...", "source": "system2", "system1": {...}}
+result["answers"]["urgency"]   # {"answer": 0, "reason": "...", "source": "system2", "hunch": {...}}
 result["escalated"]            # ["urgency"]
 ```
 
@@ -55,16 +55,16 @@ result["escalated"]            # ["urgency"]
 ```bash
 pip install -e ".[api]"
 cp .env.example .env    # fill in the keys
-uvicorn system1.api:app
-curl -s localhost:8000/decide -H "Authorization: Bearer $SYSTEM1_API_KEY" \
+uvicorn hunch.api:app
+curl -s localhost:8000/decide -H "Authorization: Bearer $HUNCH_API_KEY" \
   -d '{"state": "...", "questions": {...}, "thresholds": {"urgency": 0.6}}'
 ```
 
 `POST /decide` takes `state`, `questions`, and optionally `images` (data URIs), `thresholds` and `escalate`.
-Every request needs `Authorization: Bearer $SYSTEM1_API_KEY`.
+Every request needs `Authorization: Bearer $HUNCH_API_KEY`.
 
-On Modal: create a secret named `system1` with `PPLX_DECIDER_URL`, `PPLX_DECIDER_API_KEY`, `ANTHROPIC_API_KEY`
-and `SYSTEM1_API_KEY`, then `modal deploy deploy/modal_app.py`.
+On Modal: create a secret named `hunch` with `PPLX_DECIDER_URL`, `PPLX_DECIDER_API_KEY`, `ANTHROPIC_API_KEY`
+and `HUNCH_API_KEY`, then `modal deploy deploy/modal_app.py`.
 
 ## Tests
 

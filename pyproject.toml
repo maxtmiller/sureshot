@@ -1,5 +1,5 @@
 [project]
-name = "system1"
+name = "hunch"
 version = "0.1.0"
 description = "Fast, calibrated decisions from a System 1 model, with escalation to Claude when it's unsure"
 requires-python = ">=3.11"
@@ -15,4 +15,4 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["system1"]
+packages = ["hunch"]
