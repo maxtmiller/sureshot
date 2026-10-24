@@ -7,7 +7,6 @@ dependencies = ["httpx", "anthropic"]
 
 [project.optional-dependencies]
 api = ["fastapi", "uvicorn", "python-dotenv"]
-deploy = ["modal"]
 dev = ["pytest", "fastapi", "python-dotenv"]
 
 [build-system]

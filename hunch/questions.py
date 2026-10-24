@@ -1,4 +1,4 @@
-"""The question format pplx-decider takes: an object of named questions, each a choice, score or noul (yes/no)."""
+"""The question format: an object of named questions, each a choice, score or noul (yes/no)."""
 import json
 
 
@@ -22,6 +22,18 @@ def validate(questions):
     if problems:
         raise ValueError("; ".join(problems))
     return questions
+
+
+def check_answer(question, answer):
+    """Raises ValueError unless answer is a valid answer to the question."""
+    if question["type"] == "noul":
+        ok = isinstance(answer, bool)
+    elif question["type"] == "score":
+        ok = isinstance(answer, int) and not isinstance(answer, bool) and 0 <= answer < len(question["criteria"])
+    else:
+        ok = isinstance(answer, str) and answer in question["criteria"]
+    if not ok:
+        raise ValueError(f"{answer!r} is not a valid answer to this {question['type']} question")
 
 
 def answer_schema(questions):
