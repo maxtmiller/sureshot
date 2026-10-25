@@ -194,6 +194,40 @@ local.save("local.joblib")                     # LocalDecider.load("local.joblib
   (the classifier was trusted for only 12%, p50 461 ms), against 82% and 90% for the LLM alone. The classifier is
   strong on topical questions and weak on subtle ones such as tone; calibration decides per question.
 
+## Usage report
+
+`stats(store)` (or `GET /stats?since=<unix time>` on the API) summarizes the log, so you can see whether each tier is
+earning its place:
+
+```python
+from hunch import stats
+
+report = stats(store)
+report["questions"]["topic"]
+# {"asked": 100,
+#  "answered_by": {"tier 0": 0.74, "tier 1": 0.26},
+#  "tier_accuracy": {"tier 0": {"graded": 11, "accuracy": 0.636}, "tier 1": {"graded": 5, "accuracy": 1.0}},
+#  "accuracy_vs_labels": None}
+report["latency_ms"]
+# {"total": {"p50": 480.3, "p95": 1330.7, "mean": 498.6}, "tier_mean": {"tier 0": 15.7, "tier 1": 504.1},
+#  "system2_called": 0.255, "system2_mean": 774.9}
+```
+
+The output above is from a run of 200 decisions (100 per question) on public datasets, with a classifier, then
+`gpt-4o-mini`, then `gpt-4.1` as System 2 and `audit=0.2`. Eleven graded answers is too few to trust a 64%.
+
+- `answered_by` is the share of answers each tier and System 2 gave. A tier that answers few questions but adds
+  latency to all of them is not paying for itself.
+- `tier_accuracy` is the accuracy of the answers a tier gave and kept (not the ones it passed down), against your
+  label or else System 2's audit answer, with audited answers weighted up for the audit rate. It needs labels or
+  `audit` to have anything to grade.
+- Without your labels, `tier_accuracy` is agreement with System 2, which is not always the truth (in the run above,
+  System 2 disagreed with the dataset's own labels on some items), so give labels where you can.
+- `accuracy_vs_labels` is the accuracy of the final answers where you gave a label.
+- `system2_called` includes audit calls, so `audit` shows up as System 2 cost.
+- `latency_ms` times the whole decision, the mean time each tier took, and how often System 2 was called. The report also has
+  `degraded` (how many decisions had a model down) and `decisions` at the top level.
+
 ## Calibrating from your own data
 
 A confidence of 0.8 does not mean 80% right, especially from raw logprobs. Log decisions, grade some, and hunch

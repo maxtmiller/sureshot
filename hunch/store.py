@@ -57,6 +57,17 @@ class Store:
         with self._db() as db:
             db.executemany("INSERT OR REPLACE INTO tier_thresholds VALUES (?, ?, ?)", [(tier, key, value) for key, value in thresholds.items()])
 
+    def results(self, since=0.0):
+        """[(id, ts, questions, result)] of every logged decision since a unix time, oldest first."""
+        with self._db() as db:
+            rows = db.execute("SELECT id, ts, questions, result FROM decisions WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
+        return [(decision_id, ts, json.loads(questions), json.loads(result)) for decision_id, ts, questions, result in rows]
+
+    def labels(self):
+        """{(decision id, key): the true answer} for every graded question."""
+        with self._db() as db:
+            return {(i, k): json.loads(a) for i, k, a in db.execute("SELECT decision_id, key, answer FROM labels")}
+
     def labeled(self):
         """One row per graded question and tier that answered it: that tier's answer and confidence, the truth, and a weight.
 

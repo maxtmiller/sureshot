@@ -580,3 +580,60 @@ def test_golden_run_reports_who_answered(tmp_path):
     fast, llm = Tier({"needs_prep": (True, 0.99), "importance": (1, 0.5)}), Tier({"importance": (4, 0.95), "event_type": ("meeting", 0.95)})
     report = Router([fast, llm], None).test([{"state": "a", "expected": {"needs_prep": True, "importance": 4, "event_type": "meeting"}}], questions=QUESTIONS)
     assert report["answered_by"] == {"tier 0": pytest.approx(1 / 3), "tier 1": pytest.approx(2 / 3)} and report["overall"]["accuracy"] == 1.0
+
+
+def test_stats_reports_who_answers_and_how_accurate_each_tier_is(tmp_path):
+    import httpx
+    from hunch import stats
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+
+    class Script:
+        """A tier or System 2 that answers needs_prep from a list, one entry per call: (answer, confidence)."""
+
+        def __init__(self, *calls):
+            self.calls = list(calls)
+
+        def decide(self, state, questions, images=()):
+            answer, confidence = self.calls.pop(0)
+            return {"needs_prep": {"answer": answer, "confidence": confidence, "probabilities": {}}}
+
+        def answer(self, state, questions, images=()):
+            return {"needs_prep": {"answer": self.calls.pop(0)[0], "reason": "r"}}
+
+    # Six sure tier-0 answers (the audit says the last one is wrong), then four unsure there and sure in tier 1
+    # (the audit says one of them is wrong). audit=1 grades every kept answer, so each is weighted 1.
+    fast = Script(*[(True, 0.95)] * 6 + [(True, 0.5)] * 4)
+    llm = Script(*[(True, 0.9)] * 4)
+    audits = Script(*[(True,)] * 5 + [(False,)] + [(True,)] * 3 + [(False,)])
+    router = Router([fast, llm], audits, threshold=[0.8, 0.8], log=store, audit=1.0)
+    ids = [router.decide("event", q)["id"] for _ in range(10)]
+    store.label(ids[0], "needs_prep", False)  # a human says the first answer was wrong, whatever the audit said
+    report = stats(store)["questions"]["needs_prep"]
+    assert report["asked"] == 10 and report["answered_by"] == {"tier 0": 0.6, "tier 1": 0.4}
+    assert report["tier_accuracy"]["tier 0"] == {"graded": 6, "accuracy": pytest.approx(4 / 6)}  # 4 of 6 right: the audit's miss, and the human's
+    assert report["tier_accuracy"]["tier 1"] == {"graded": 4, "accuracy": pytest.approx(3 / 4)}
+    assert report["accuracy_vs_labels"] == {"graded": 1, "accuracy": 0.0}
+    latency = stats(store)["latency_ms"]
+    assert stats(store)["decisions"] == 10 and set(latency["tier_mean"]) == {"tier 0", "tier 1"} and latency["total"]["p95"] >= latency["total"]["p50"]
+    assert latency["system2_called"] == 1.0 and stats(store, since=9e12)["decisions"] == 0
+    # An outage shows up, and a System 2 answer is counted for who answered but not as a tier's accuracy.
+    down = Router(Flaky(FakeDecider(), [httpx.ConnectError("x")] * 9), FakeClaude(), retries=0, backoff=0, log=store)
+    down.decide("event", {"importance": QUESTIONS["importance"]})
+    after = stats(store)
+    assert after["degraded"] == 1 and after["questions"]["importance"]["answered_by"] == {"system2": 1.0}
+    assert after["questions"]["importance"]["tier_accuracy"] == {}
+
+
+def test_api_stats(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import hunch.api as api
+
+    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude(), log=_calibration_store(tmp_path)))
+    client = TestClient(api.app)
+    api._router.decide("event", QUESTIONS)
+    assert client.get("/stats").status_code == 401
+    body = client.get("/stats", headers={"Authorization": "Bearer secret"}).json()
+    assert body["decisions"] == 1 and body["questions"]["importance"]["answered_by"] == {"system2": 1.0}
