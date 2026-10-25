@@ -637,3 +637,64 @@ def test_api_stats(tmp_path, monkeypatch):
     assert client.get("/stats").status_code == 401
     body = client.get("/stats", headers={"Authorization": "Bearer secret"}).json()
     assert body["decisions"] == 1 and body["questions"]["importance"]["answered_by"] == {"system2": 1.0}
+
+
+def test_review_queue_lists_disagreements_and_clears_when_graded(tmp_path):
+    from hunch import review_queue, stats
+
+    store = _calibration_store(tmp_path)
+
+    class Say:
+        """A tier or System 2 answering needs_prep: (answer, confidence), one per call."""
+
+        def __init__(self, *calls):
+            self.calls = list(calls)
+
+        def decide(self, state, questions, images=()):
+            answer, confidence = self.calls.pop(0)
+            return {"needs_prep": {"answer": answer, "confidence": confidence, "probabilities": {}}}
+
+        def answer(self, state, questions, images=()):
+            return {"needs_prep": {"answer": self.calls.pop(0)[0], "reason": "because"}}
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # 1: unsure, System 2 disagrees -> queued.  2: unsure, System 2 agrees -> not queued.
+    # 3: sure but the audit disagrees -> queued.  4: sure and the audit agrees -> not queued.
+    # 5: unsure with escalate=False -> queued as unresolved.
+    ids = []
+    for state, tier, system2, escalate in [("one", (True, 0.5), (False,), True), ("two", (True, 0.5), (True,), True),
+                                           ("three", (True, 0.95), (False,), True), ("four", (True, 0.95), (True,), True),
+                                           ("five", (True, 0.5), (True,), False)]:
+        router = Router(Say(tier), Say(system2), threshold=0.8, log=store, audit=1.0)
+        ids.append(router.decide(state, q, escalate=escalate)["id"])
+    queue = review_queue(store)
+    assert [(item["state"], item["reason"]) for item in queue] == [("one", "disagreement"), ("three", "audit_disagreement"), ("five", "unresolved")]
+    first = queue[0]
+    assert first["id"] == ids[0] and first["answer"] is False and first["source"] == "system2" and first["question"] == q["needs_prep"]
+    assert [c["who"] for c in first["candidates"]] == ["tier 0", "system2"] and first["candidates"][1]["reason"] == "because"
+    assert [i["state"] for i in review_queue(store, reasons=("unresolved",))] == ["five"] and len(review_queue(store, limit=1)) == 1
+    assert stats(store)["review_queue"] == {"disagreement": 1, "audit_disagreement": 1, "unresolved": 1}
+    store.label(ids[0], "needs_prep", True)
+    assert [i["state"] for i in review_queue(store)] == ["three", "five"]
+    # A System 2 answer with no System 1 answer to compare against is not queued.
+    import httpx
+    down = Router(Flaky(FakeDecider(), [httpx.ConnectError("x")] * 9), FakeClaude(), retries=0, backoff=0, log=store)
+    down.decide("six", {"importance": QUESTIONS["importance"]})
+    assert [i["state"] for i in review_queue(store)] == ["three", "five"]
+
+
+def test_api_review_queue(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import hunch.api as api
+
+    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    store = _calibration_store(tmp_path)
+    monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude(), log=store))
+    client, auth = TestClient(api.app), {"Authorization": "Bearer secret"}
+    decision = client.post("/decide", json={"state": "event", "questions": QUESTIONS}, headers=auth).json()
+    assert client.get("/review").status_code == 401 and client.get("/review?reason=nope", headers=auth).status_code == 422
+    queue = client.get("/review", headers=auth).json()
+    # FakeDecider says importance 3, FakeClaude says 4: that disagreement is the only item.
+    assert [(i["id"], i["key"], i["reason"]) for i in queue] == [(decision["id"], "importance", "disagreement")] and queue[0]["state"] == "event"
+    assert client.post("/feedback", json={"id": decision["id"], "labels": {"importance": 3}}, headers=auth).status_code == 200
+    assert client.get("/review", headers=auth).json() == []
