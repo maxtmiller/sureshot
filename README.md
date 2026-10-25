@@ -315,6 +315,16 @@ evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/
   interval), meets the target. It is `None` until there are enough graded answers (`min_samples`, default 30), and
   that question keeps its current threshold. `escalation_rate` is the share of System 1's answers that would go to
   System 2 at that threshold, which is the cost of the target.
+- When there is no threshold, `reason` says why, and `best_target` is the highest target that *would* have found
+  one on this data (judged as conservatively as the threshold; try a target at or below it):
+  - `"not enough data"`: fewer than `min_samples` graded answers. Grade more.
+  - `"not enough evidence"`: the target is not ruled out, but the data cannot show it yet. Grade more.
+  - `"target unreachable"`: even the optimistic end of the estimate is below the target at every threshold that keeps
+    a tenth of the answers. Lower the target, or change or drop this tier. The router keeps trusting the tier at its
+    default threshold, so its answers are only as accurate as `best_target` suggests, not as the target you asked for.
+
+  Each failure is logged at warning level (logger `hunch`), `calibrate` returns the reason, and `stats(store)["uncalibrated"]`
+  lists the questions whose latest calibration found nothing, until a later one does.
 - How far to trust it, from simulations with a known accuracy curve (`tests/test_calibration_simulation.py`):
   with 100 graded answers about 15% of calibrations land below the target (nominally 10%), with 300 or more about
   8%, and the misses are small (under a point on average, rarely over two). With 100 answers it abstains (`None`)

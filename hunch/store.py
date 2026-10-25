@@ -9,6 +9,7 @@ from hunch.questions import check_answer
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts REAL, state TEXT, questions TEXT, images INTEGER, result TEXT);
 CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, source TEXT, PRIMARY KEY (decision_id, key));
+CREATE TABLE IF NOT EXISTS calibration_issues (tier INTEGER, key TEXT, reason TEXT, best_target REAL, target REAL, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value REAL, PRIMARY KEY (tier, key));
 """
 
@@ -56,6 +57,20 @@ class Store:
     def save_thresholds(self, thresholds, tier=0):
         with self._db() as db:
             db.executemany("INSERT OR REPLACE INTO tier_thresholds VALUES (?, ?, ?)", [(tier, key, value) for key, value in thresholds.items()])
+
+    def save_issues(self, issues, tier, calibrated):
+        """Records why a calibration found no threshold ({key: {reason, best_target, target}}), and clears the questions
+        in `calibrated` that now have one."""
+        with self._db() as db:
+            db.executemany("DELETE FROM calibration_issues WHERE tier = ? AND key = ?", [(tier, key) for key in calibrated])
+            db.executemany("INSERT INTO calibration_issues VALUES (?, ?, ?, ?, ?)",
+                           [(tier, key, i["reason"], i["best_target"], i["target"]) for key, i in issues.items()])
+
+    def issues(self):
+        """[{tier, key, reason, best_target, target}] for questions whose latest calibration found no threshold."""
+        with self._db() as db:
+            rows = db.execute("SELECT tier, key, reason, best_target, target FROM calibration_issues ORDER BY tier, key").fetchall()
+        return [dict(zip(("tier", "key", "reason", "best_target", "target"), row)) for row in rows]
 
     def results(self, since=0.0):
         """[(id, ts, questions, result)] of every logged decision since a unix time, oldest first."""

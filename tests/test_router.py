@@ -813,3 +813,47 @@ def test_cache_hit_rate_in_stats_and_env_config(tmp_path, monkeypatch):
     monkeypatch.setenv("HUNCH_CACHE_TTL", "60")
     assert router_from_env().cache.ttl == 60.0
 
+
+
+def test_summarize_says_why_there_is_no_threshold():
+    import random
+    from hunch.calibrate import summarize
+
+    few = summarize([(0.9, True, 1.0)] * 10, 0.9, 30)
+    assert few["threshold"] is None and few["reason"] == "not enough data" and few["best_target"] is None
+    assert summarize([], 0.9, 30)["reason"] == "not enough data"
+
+    rng = random.Random(0)
+    weak = [(0.5 + 0.5 * rng.random(), rng.random() < 0.7, 1.0) for _ in range(300)]  # 70% right at every confidence
+    unreachable = summarize(weak, 0.9, 30)
+    assert unreachable["threshold"] is None and unreachable["reason"] == "target unreachable" and unreachable["best_target"] < 0.75
+    # best_target is exactly the highest target that finds a threshold on this data.
+    assert summarize(weak, unreachable["best_target"] - 1e-9, 30)["threshold"] is not None
+    assert summarize(weak, unreachable["best_target"] + 1e-3, 30)["threshold"] is None
+
+    perfect = [(0.5 + i / 100, True, 1.0) for i in range(40)]  # right every time, but only 40 answers
+    thin = summarize(perfect, 0.97, 30)
+    assert thin["threshold"] is None and thin["reason"] == "not enough evidence" and 0.9 < thin["best_target"] < 0.97
+    ok = summarize(perfect * 10, 0.97, 30)
+    assert ok["threshold"] is not None and ok["reason"] is None and ok["best_target"] >= 0.97
+
+
+def test_calibrate_logs_stats_flags_and_clears_an_unreachable_target(tmp_path, caplog):
+    import logging
+    from hunch import calibrate, stats
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    for i in range(60):  # 70% right whatever the confidence
+        decision = Router(Tier({"needs_prep": (True, 0.6 + (i % 4) / 10)}), None, log=store).decide("event", q)
+        store.label(decision["id"], "needs_prep", i % 10 < 7)
+    with caplog.at_level(logging.WARNING, logger="hunch"):
+        report = calibrate(store, 0.9, 30)["needs_prep"]
+    assert report["reason"] == "target unreachable" and store.thresholds() == {}
+    assert "no threshold for 'needs_prep' at tier 0: target unreachable" in caplog.text and "the best this data supports is 0." in caplog.text
+    flagged, = stats(store)["uncalibrated"]
+    assert (flagged["tier"], flagged["key"], flagged["reason"], flagged["target"]) == (0, "needs_prep", "target unreachable", 0.9)
+    assert flagged["best_target"] == report["best_target"]
+    # Calibrating at a target the data supports finds a threshold and clears the flag.
+    assert calibrate(store, report["best_target"] - 0.01, 30)["needs_prep"]["threshold"] is not None
+    assert stats(store)["uncalibrated"] == [] and "needs_prep" in store.thresholds()
