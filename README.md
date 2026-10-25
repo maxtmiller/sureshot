@@ -315,6 +315,12 @@ evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/
   interval), meets the target. It is `None` until there are enough graded answers (`min_samples`, default 30), and
   that question keeps its current threshold. `escalation_rate` is the share of System 1's answers that would go to
   System 2 at that threshold, which is the cost of the target.
+- How far to trust it, from simulations with a known accuracy curve (`tests/test_calibration_simulation.py`):
+  with 100 graded answers about 15% of calibrations land below the target (nominally 10%), with 300 or more about
+  8%, and the misses are small (under a point on average, rarely over two). With 100 answers it abstains (`None`)
+  35 to 45% of the time, and with 300 almost never. When the model cannot reach the target at all, it abstains in
+  over 97% of runs. The audit weights recover a tier's true accuracy to within about 3 points, where averaging the
+  graded rows is off by 6 to 10 points for a tier that only sees what earlier tiers passed down.
 - `evaluate` replays the graded decisions through each candidate System 1 and returns the same report, so you can
   see which model meets the target with the least escalation. Decisions with images are skipped.
 - Thresholds passed to `decide` beat the calibrated ones, which beat `threshold`.
