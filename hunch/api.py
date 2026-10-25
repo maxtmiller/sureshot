@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 from hunch.calibrate import calibrate
+from hunch.stats import stats
 from hunch.config import router_from_env
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -84,6 +85,12 @@ def feedback(request: FeedbackRequest, authorization: str = Header(default="")):
     except ValueError as e:
         raise HTTPException(422, str(e))
     return {"ok": True}
+
+
+@app.get("/stats")
+def usage_stats(since: float = 0.0, authorization: str = Header(default="")):
+    authorize(authorization)
+    return stats(log(), since)
 
 
 @app.post("/calibrate")
