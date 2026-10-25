@@ -16,7 +16,13 @@ _router = None
 def router():
     global _router
     if _router is None:
-        _router = router_from_env()
+        built = router_from_env()
+        if hasattr(built.system1, "check"):
+            try:
+                built.system1.check()
+            except RuntimeError as e:
+                raise HTTPException(503, f"System 1 is not ready: {e}")
+        _router = built
     return _router
 
 
