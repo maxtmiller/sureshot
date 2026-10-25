@@ -97,21 +97,46 @@ class ChatDecider:
             timeout=self.timeout,
         )
         response.raise_for_status()
+        content = (response.json()["choices"][0].get("logprobs") or {}).get("content") or [{}]
+        tops = content[0].get("top_logprobs", [])
         mass = {option: 0.0 for _, option, _ in labels}
         by_label = {label.lower(): option for label, option, _ in labels}
-        for top in response.json()["choices"][0]["logprobs"]["content"][0]["top_logprobs"]:
+        for top in tops:
             if (option := by_label.get(top["token"].strip().lower())) is not None:
                 mass[option] += math.exp(top["logprob"])
         total = sum(mass.values())
         if not total:
-            raise RuntimeError(f"{self.model} put no probability on any option; it may not return logprobs")
+            hint = ("it returned no logprobs" if not tops else
+                    f"its top tokens were {[t['token'] for t in tops[:5]]}; if it thinks before answering, pass extra, e.g. "
+                    "{'reasoning_effort': 'none'} for Ollama or {'chat_template_kwargs': {'enable_thinking': False}} for vLLM")
+            raise RuntimeError(f"{self.model} put no probability on any option: {hint}")
         probs = {option: m / total for option, m in mass.items()}
         return {"noul": probs["true"]} if question["type"] == "noul" else {"probabilities": probs}
+
+    def check(self):
+        """Asks one yes/no question to confirm the endpoint is reachable, knows the model and returns usable logprobs.
+        Raises a RuntimeError saying what is wrong; returns self so it chains."""
+        try:
+            self.decide("The sky is blue.", {"probe": {"type": "noul", "instructions": "Is the statement in the state true?"}})
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(f"{self.url} answered {e.response.status_code}: {e.response.text[:300]}") from e
+        except httpx.TransportError as e:
+            raise RuntimeError(f"cannot reach {self.url}: {e!r}") from e
+        return self
 
     def decide(self, state, questions, images=()):
         with ThreadPoolExecutor(len(questions)) as pool:
             raw = list(pool.map(lambda q: self._ask(state, q, list(images)), questions.values()))
         return {key: normalize(questions[key], r) for key, r in zip(questions, raw)}
+
+
+class VLLMDecider(ChatDecider):
+    """A model you serve yourself with vLLM (`vllm serve <model> --max-logprobs 20`), ideally on the same machine or
+    network as hunch, where the lowest latency is. Defaults to a local server and turns off thinking for models that
+    support it (Qwen3...), since a model that starts thinking leaves no probability on the options."""
+
+    def __init__(self, model, base_url="http://localhost:8000/v1", api_key=None, timeout=60, extra=None):
+        super().__init__(model, base_url, api_key, timeout, {"chat_template_kwargs": {"enable_thinking": False}} | (extra or {}))
 
 
 def prompt(state, questions):

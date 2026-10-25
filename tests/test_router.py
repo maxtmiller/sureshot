@@ -325,3 +325,54 @@ def test_extra_fields_reach_the_request(monkeypatch):
     monkeypatch.setattr(httpx, "post", post)
     ChatDecider("m", "http://local/v1", extra={"reasoning_effort": "none", "max_tokens": 2}).decide("e", {"needs_prep": QUESTIONS["needs_prep"]})
     assert seen["reasoning_effort"] == "none" and seen["max_tokens"] == 2
+
+
+def test_check_explains_what_is_wrong(monkeypatch):
+    import httpx
+    from hunch import ChatDecider
+
+    def respond(status=200, tops=None, logprobs=True):
+        def post(url, json, headers, timeout):
+            if status != 200:
+                return httpx.Response(status, text="model not found", request=httpx.Request("POST", url))
+            choice = {"logprobs": {"content": [{"top_logprobs": [{"token": t, "logprob": -0.1} for t in tops]}]}} if logprobs else {"logprobs": None}
+            return httpx.Response(200, json={"choices": [choice]}, request=httpx.Request("POST", url))
+        return post
+
+    decider = ChatDecider("m", "http://local/v1")
+    monkeypatch.setattr(httpx, "post", respond(tops=["yes", "no"]))
+    assert decider.check() is decider
+    monkeypatch.setattr(httpx, "post", respond(tops=["<|channel>", "The"]))
+    with pytest.raises(RuntimeError, match=r"top tokens were \['<\|channel>', 'The'\].*extra"):
+        decider.check()
+    monkeypatch.setattr(httpx, "post", respond(logprobs=False))
+    with pytest.raises(RuntimeError, match="no logprobs"):
+        decider.check()
+    monkeypatch.setattr(httpx, "post", respond(status=404))
+    with pytest.raises(RuntimeError, match="404.*model not found"):
+        decider.check()
+
+    def unreachable(url, json, headers, timeout):
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(httpx, "post", unreachable)
+    with pytest.raises(RuntimeError, match="cannot reach http://local/v1/chat/completions"):
+        decider.check()
+
+
+def test_vllm_decider_and_env_option(monkeypatch):
+    from hunch import ChatDecider, VLLMDecider, router_from_env
+
+    local = VLLMDecider("Qwen/Qwen3-8B", extra={"top_p": 1})
+    assert local.url == "http://localhost:8000/v1/chat/completions" and local.headers == {}
+    assert local.extra == {"chat_template_kwargs": {"enable_thinking": False}, "top_p": 1}
+    monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
+    monkeypatch.setenv("HUNCH_SYSTEM2", "none")
+    assert type(router_from_env().system1) is ChatDecider
+    monkeypatch.setenv("HUNCH_SYSTEM1", "vllm")
+    assert isinstance(router_from_env().system1, VLLMDecider) and router_from_env().system1.url.startswith("http://localhost:8000")
+    monkeypatch.setenv("HUNCH_SYSTEM1_URL", "http://gpu-box:8000/v1")
+    assert router_from_env().system1.url == "http://gpu-box:8000/v1/chat/completions"
+    monkeypatch.setenv("HUNCH_SYSTEM1", "bogus")
+    with pytest.raises(ValueError):
+        router_from_env()

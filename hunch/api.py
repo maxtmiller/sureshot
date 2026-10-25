@@ -16,7 +16,10 @@ _router = None
 def router():
     global _router
     if _router is None:
-        _router = router_from_env()
+        built = router_from_env()
+        if hasattr(built.system1, "check"):
+            built.system1.check()
+        _router = built
     return _router
 
 

@@ -46,6 +46,11 @@ result["escalated"]            # ["urgency"]
   Ollama, Together, Fireworks, Groq), hosted or self-served, with no adapter code. Each question is asked with
   `max_tokens=1`, and the model's probability over the option labels is the calibrated confidence. Choices are
   limited to 26 options. Point it at your own server with `base_url="http://localhost:8000/v1"`.
+- `VLLMDecider(model, base_url="http://localhost:8000/v1")`: a model you serve yourself with vLLM. It is a
+  `ChatDecider` with a local default URL that turns off thinking for models that support it (see
+  [Self-hosting System 1](#self-hosting-system-1-with-vllm)).
+- `ChatDecider(...).check()` asks one yes/no question and raises an error saying what is wrong (unreachable, unknown
+  model, no logprobs, or a model that starts thinking and needs `extra`). The HTTP API runs it before its first request.
 - `HTTPDecider(url, request, parse, api_key)`: any System 1 model behind a non-OpenAI HTTP API. `request(state, questions,
   images)` returns the JSON body to POST, and `parse(response, questions)` returns `{key: raw}` where raw is
   `{"noul": p}` or `{"probabilities": {option: p}}`. hunch normalizes the rest.
@@ -85,6 +90,37 @@ result["escalated"]            # ["urgency"]
 - `ClaudeCLI(model=None)`: Claude through your local `claude` CLI login, with no tools. Text only.
 - `default_system2()`: `ClaudeAPI` when an Anthropic credential is set, else `ClaudeCLI` if installed.
 - `decide(..., escalate=False)` keeps System 1's answers and only lists the unsure keys.
+
+## Self-hosting System 1 with vLLM
+
+A hosted API costs at least ~500 ms per call in network and queueing. For a faster System 1, serve an open model
+with [vLLM](https://docs.vllm.ai) on a GPU on the same machine or network as hunch, so there is no internet hop.
+Prefix caching lets the per-question requests for one state share its prefill.
+
+```bash
+vllm serve Qwen/Qwen2.5-7B-Instruct --enable-prefix-caching --max-logprobs 20 --max-model-len 4096
+```
+
+```python
+from hunch import Router, VLLMDecider, ClaudeAPI
+
+router = Router(VLLMDecider("Qwen/Qwen2.5-7B-Instruct").check(), ClaudeAPI())
+```
+
+Or set `HUNCH_SYSTEM1=vllm`, `HUNCH_SYSTEM1_MODEL` and, for a remote box, `HUNCH_SYSTEM1_URL`. `serve/docker-compose.yml`
+runs vLLM and the hunch API together on one GPU machine (Docker with the NVIDIA container toolkit):
+`cp .env.example .env`, set `HUNCH_SYSTEM1_MODEL`, `HUNCH_API_KEY` and a System 2 key, then
+`docker compose -f serve/docker-compose.yml up --build`. The compose file has not been run. `VLLMDecider`, `check()`
+and `router.test` were run against a real vLLM server (Qwen2.5-7B-Instruct on an NVIDIA L4, hunch in the same
+container).
+
+A 7B model fits a 24 GB GPU. On the L4 it answered a three-question email in about 150 ms (p50 and p95), against about
+500 to 600 ms for hosted APIs; a faster GPU should lower that. Zero-shot it was less accurate than `gpt-4o-mini` on a
+small labeled set (71% against 84%), so log decisions, run `calibrate`, and keep a System 2 behind it.
+`--max-logprobs 20` matches the 20 top logprobs hunch requests.
+
+If you install vLLM with pip instead of using the official image, it may need `nvcc` for FlashInfer; set
+`VLLM_USE_FLASHINFER_SAMPLER=0` or use `vllm/vllm-openai`.
 
 ## Testing against a golden dataset
 
@@ -144,7 +180,8 @@ switches models without code changes.
 
 | Variable | Values |
 | --- | --- |
-| `HUNCH_SYSTEM1_MODEL`, `_URL`, `_API_KEY` | System 1 is a `ChatDecider`: model name (required), base URL (default OpenAI), key (optional for local servers) |
+| `HUNCH_SYSTEM1` | `chat` (default, a `ChatDecider`) or `vllm` (a `VLLMDecider`, URL defaulting to `http://localhost:8000/v1`) |
+| `HUNCH_SYSTEM1_MODEL`, `_URL`, `_API_KEY` | System 1: model name (required), base URL (default OpenAI), key (optional for local servers) |
 | `HUNCH_SYSTEM2` | `auto` (default: Claude API, else CLI), `claude`, `claude-cli`, `chat`, `none` |
 | `HUNCH_SYSTEM2_MODEL`, `_URL`, `_API_KEY` | model for `claude` or `chat`; URL and key for `chat` |
 | `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON object merged into every request body, e.g. `{"reasoning_effort": "none"}` |

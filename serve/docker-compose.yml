@@ -1,0 +1,44 @@
+# System 1 on your own GPU with vLLM, next to the hunch API. From the repo root:
+#   cp .env.example .env     # set HUNCH_SYSTEM1_MODEL, HUNCH_API_KEY and a System 2 key (e.g. ANTHROPIC_API_KEY)
+#   docker compose -f serve/docker-compose.yml up --build
+# Needs Docker with the NVIDIA container toolkit. The hunch API is then at http://localhost:8000/decide.
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    command: --model ${HUNCH_SYSTEM1_MODEL} --enable-prefix-caching --max-logprobs 20 --max-model-len 4096
+    ipc: host
+    environment:
+      - HF_TOKEN
+    volumes:
+      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 60
+
+  hunch:
+    build:
+      context: ..
+      dockerfile: serve/Dockerfile
+    env_file: ../.env
+    environment:
+      HUNCH_SYSTEM1: vllm
+      HUNCH_SYSTEM1_URL: http://vllm:8000/v1
+      HUNCH_DB: /data/hunch.db
+    volumes:
+      - hunch-data:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      vllm:
+        condition: service_healthy
+
+volumes:
+  hunch-data:
