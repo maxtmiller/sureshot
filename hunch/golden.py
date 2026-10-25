@@ -36,14 +36,15 @@ def run(router, cases, questions=None, thresholds=None):
         for key, expected in case["expected"].items():
             answer = result["answers"][key]
             fast = answer["hunch"] if answer["source"] == "system2" else answer
+            fast_answer = fast and fast["answer"]
             t = tally.setdefault(key, {"n": 0, "final": 0, "system1": 0, "escalated": 0})
             t["n"] += 1
             t["final"] += answer["answer"] == expected
-            t["system1"] += fast["answer"] == expected
+            t["system1"] += fast is not None and fast_answer == expected
             t["escalated"] += answer["source"] == "system2"
             if answer["answer"] != expected:
                 failures.append({"case": i, "key": key, "expected": expected, "got": answer["answer"],
-                                 "source": answer["source"], "confidence": fast["confidence"]})
+                                 "source": answer["source"], "confidence": fast and fast["confidence"]})
     total = {field: sum(t[field] for t in tally.values()) for field in ("n", "final", "system1", "escalated")}
     rates = lambda t: {"n": t["n"], "accuracy": t["final"] / t["n"], "system1_accuracy": t["system1"] / t["n"], "escalation_rate": t["escalated"] / t["n"]}
     return {"cases": len(cases), "overall": rates(total) if total["n"] else None, "questions": {key: rates(t) for key, t in tally.items()},

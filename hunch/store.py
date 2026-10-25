@@ -71,6 +71,8 @@ class Store:
             for key, answer in result["answers"].items():
                 escalated = answer["source"] == "system2"
                 fast = answer["hunch"] if escalated else answer
+                if fast is None:  # System 1 was down, so there is no confidence to calibrate
+                    continue
                 proxy = answer["answer"] if escalated else answer.get("audit", {}).get("answer")
                 if (decision_id, key) in labels:
                     truth, kind, weight = labels[(decision_id, key)], "human", 1.0
