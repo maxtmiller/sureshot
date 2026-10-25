@@ -23,6 +23,13 @@ class LocalDecider:
         self.heads, self.embedding, self._embed = heads, embedding, embed
 
     @property
+    def identity(self):
+        """Changes whenever the heads or the embedding model do, so retraining never reuses cached answers."""
+        import joblib
+
+        return f"local|{self.embedding}|{joblib.hash(self.heads)}"
+
+    @property
     def embed(self):
         if self._embed is None:
             self._embed = sentence_embedder(self.embedding)

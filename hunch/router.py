@@ -5,6 +5,7 @@ import subprocess
 import time
 import anthropic
 import httpx
+from hunch.cache import cache_key
 from hunch.questions import validate
 
 RETRY_STATUS = (408, 429, 500, 502, 503, 504)
@@ -21,7 +22,7 @@ def _transient(error):
 
 
 class Router:
-    def __init__(self, system1, system2=None, threshold=0.8, log=None, audit=0.0, retries=2, backoff=0.5):
+    def __init__(self, system1, system2=None, threshold=0.8, log=None, audit=0.0, retries=2, backoff=0.5, cache=None):
         """system1 is one decider, or a list of them tried in order (say a trained classifier, then an LLM): a question
         stops at the first tier that is confident about it. A tier may answer only some of the questions it is given;
         the rest pass down. threshold is a number, or a list with one number per tier, since a classifier's 0.9 and
@@ -29,13 +30,17 @@ class Router:
 
         log is a Store that records every decision and supplies calibrated thresholds. audit is the share of confident
         questions that also go to System 2, only to be graded: it keeps the log's labels unbiased for calibration.
-        A failed call to either model is retried `retries` times, waiting backoff, 2x backoff... seconds between tries."""
+        A failed call to either model is retried `retries` times, waiting backoff, 2x backoff... seconds between tries.
+
+        cache is a hunch.Cache: a model's answer to a question about a text is reused instead of asking again. It caches
+        what the models said, not the decision, so changing a threshold or recalibrating needs no cache clearing. Only
+        models with an `identity` are cached."""
         self.system1, self.system2, self.threshold, self.log, self.audit = system1, system2, threshold, log, audit
         self.tiers = list(system1) if isinstance(system1, (list, tuple)) else [system1]
         self.tier_thresholds = list(threshold) if isinstance(threshold, (list, tuple)) else [threshold] * len(self.tiers)
         if len(self.tier_thresholds) != len(self.tiers):
             raise ValueError(f"{len(self.tiers)} tiers but {len(self.tier_thresholds)} thresholds")
-        self.retries, self.backoff, self.record = retries, backoff, True
+        self.retries, self.backoff, self.record, self.cache = retries, backoff, True, cache
 
     def _call(self, fn, *args):
         for attempt in range(self.retries + 1):
@@ -46,9 +51,25 @@ class Router:
                     raise
                 time.sleep(self.backoff * 2 ** attempt)
 
+    def _cached(self, model, method, state, questions, images, tally):
+        """model.method(state, questions, images), taking from the cache what it has and calling the model for the rest."""
+        identity = getattr(model, "identity", None) if self.cache else None
+        call = getattr(model, method)
+        if identity is None:
+            return self._call(call, state, questions, images)
+        hashes = {key: cache_key(identity, key, question, state, images) for key, question in questions.items()}
+        found = self.cache.get_many(hashes.values())
+        hits = {key: found[h] for key, h in hashes.items() if h in found}
+        missing = {key: question for key, question in questions.items() if key not in hits}
+        fresh = self._call(call, state, missing, images) if missing else {}
+        self.cache.put_many({hashes[key]: value for key, value in fresh.items() if key in hashes})
+        tally["hits"] += len(hits)
+        tally["misses"] += len(missing)
+        return hits | fresh
+
     def decide(self, state, questions, images=(), thresholds=None, escalate=True):
         """Returns {"answers": {key: {answer, confidence, source, ...}}, "unsure": [...], "escalated": [...],
-        "degraded", "latency_ms": {"system1" (all tiers), "tiers" (each), "system2" (None if not called), "total"}},
+        "degraded", "cache" ({"hits", "misses"}: how many model answers came from the cache; None without one), "latency_ms": {"system1" (all tiers), "tiers" (each), "system2" (None if not called), "total"}},
         plus "id" when a log is set (pass it to the log's label() to grade the answer).
 
         Each question goes to the first tier; if its confidence is below that tier's threshold it goes to the next.
@@ -66,13 +87,14 @@ class Router:
         validate(questions)
         thresholds = thresholds or {}
         start = time.perf_counter()
+        tally = {"hits": 0, "misses": 0}
         degraded, tier_ms, tried, latest, answers, remaining = [], [], {key: [] for key in questions}, {}, {}, list(questions)
         for i, tier in enumerate(self.tiers):
             if not remaining:
                 break
             tier_start = time.perf_counter()
             try:
-                fast = self._call(tier.decide, state, {key: questions[key] for key in remaining}, images)
+                fast = self._cached(tier, "decide", state, {key: questions[key] for key in remaining}, images, tally)
             except Exception as e:
                 if not (_transient(e) and (i + 1 < len(self.tiers) or (escalate and self.system2))):
                     raise
@@ -98,7 +120,7 @@ class Router:
         if escalated or audited:
             slow_start = time.perf_counter()
             try:
-                slow = self._call(self.system2.answer, state, {key: questions[key] for key in escalated + audited}, images)
+                slow = self._cached(self.system2, "answer", state, {key: questions[key] for key in escalated + audited}, images, tally)
             except Exception as e:
                 if not _transient(e) or any(key not in latest for key in escalated):
                     raise
@@ -120,7 +142,7 @@ class Router:
                 answers[key] = latest[key] | {"source": "hunch"}
         answers = {key: answers[key] | {"tried": tried[key]} for key in questions}
         latency = {"system1": sum(tier_ms), "system2": system2_ms, "total": (time.perf_counter() - start) * 1000}
-        result = {"answers": answers, "unsure": remaining, "escalated": escalated, "degraded": degraded or None,
+        result = {"answers": answers, "unsure": remaining, "escalated": escalated, "degraded": degraded or None, "cache": tally if self.cache else None,
                   "latency_ms": {k: v and round(v, 1) for k, v in latency.items()} | {"tiers": [round(ms, 1) for ms in tier_ms]}}
         if self.log and self.record:
             result["id"] = self.log.log(state, questions, result | {"audit_rate": self.audit}, len(images))

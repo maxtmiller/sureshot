@@ -194,6 +194,34 @@ local.save("local.joblib")                     # LocalDecider.load("local.joblib
   (the classifier was trusted for only 12%, p50 461 ms), against 82% and 90% for the LLM alone. The classifier is
   strong on topical questions and weak on subtle ones such as tone; calibration decides per question.
 
+## Response cache
+
+`Router(..., cache=Cache("cache.db"))` reuses a model's answer to a question about a text instead of asking again. It
+helps when the same items are processed more than once: a job that reprocesses overlapping data, retries, and above
+all rescoring a golden set or trying thresholds, which then makes no model calls at all. On a stream of unique items
+it saves nothing, so check the hit rate in `stats(store)["cache"]`.
+
+```python
+from hunch import Router, Cache
+
+router = Router(system1, system2, cache=Cache("cache.db", ttl=7 * 24 * 3600))   # ttl in seconds; None keeps answers forever
+router.decide(email_text, questions)["cache"]    # {"hits": 0, "misses": 4}; the second call is {"hits": 4, "misses": 0}
+router.test("golden.jsonl", questions=questions, thresholds={"urgency": 0.7})   # free once the models have answered
+```
+
+- It caches what the models said, not the decision, so changing `threshold`, recalibrating, or editing the thresholds
+  you pass needs no clearing. Only a question that newly becomes unsure calls System 2.
+- It is per question and per model. The key is the model's `identity`, the question's name and definition, the
+  text and the images. A different model, `extra`, URL, question wording or text is a different key. An API key is
+  not part of it. A trained `LocalDecider` has an identity that changes when it is retrained. `ClaudeAPI`, `ChatDecider`,
+  `VLLMDecider` and `ChatReasoner` have one; give `HTTPDecider` or `HTTPReasoner` an `identity=` string (change it when
+  you change the model or your functions) or they are not cached. Bump `PROMPT_VERSION` in `hunch/backends.py` when a
+  prompt changes.
+- System 2 is cached per question too, so a repeat call asks it only about the questions it has not answered.
+- A cached repeat is still a logged decision, so a repeated item counts again in `calibrate` and `LocalDecider.train`.
+  `Cache.clear()` empties the cache and `Cache.size()` counts it. It stores answers, not texts (the key is a hash).
+- `HUNCH_CACHE=cache.db` and `HUNCH_CACHE_TTL=<seconds>` turn it on for the API.
+
 ## Usage report
 
 `stats(store)` (or `GET /stats?since=<unix time>` on the API) summarizes the log, so you can see whether each tier is
@@ -305,6 +333,7 @@ switches models without code changes.
 | `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON object merged into every request body, e.g. `{"reasoning_effort": "none"}` |
 | `HUNCH_THRESHOLD` | confidence below which a question escalates (default 0.8) |
 | `HUNCH_DB` | path of the SQLite log; set it to enable logging, `/feedback` and `/calibrate` |
+| `HUNCH_CACHE`, `HUNCH_CACHE_TTL` | path of the response cache, and how many seconds an answer stays valid (default forever) |
 | `HUNCH_AUDIT` | share of confident questions also checked by System 2 for calibration (default 0) |
 
 ```bash
