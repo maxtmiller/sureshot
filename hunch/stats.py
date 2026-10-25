@@ -16,7 +16,8 @@ def _timing(values):
 def stats(store, since=0.0):
     """Summarizes the log since a unix time. Returns:
 
-    decisions, degraded (how many had a model down), and latency_ms: timing of the whole decision, the mean time each
+    decisions, degraded (how many had a model down), cache (model answers served from the cache against asked of
+    the models, and the hit rate; None if no cache was used), and latency_ms: timing of the whole decision, the mean time each
     tier took, and how often System 2 was called (and its mean time when it was).
 
     review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
@@ -29,9 +30,11 @@ def stats(store, since=0.0):
     labels = store.labels()
     decisions = store.results(since)
     latency = {"total": [], "tiers": {}, "system2": []}
-    questions, degraded = {}, 0
+    questions, degraded, hits, misses = {}, 0, 0, 0
     for decision_id, _, _, result in decisions:
         degraded += bool(result.get("degraded"))
+        hits += (result.get("cache") or {}).get("hits", 0)
+        misses += (result.get("cache") or {}).get("misses", 0)
         latency["total"].append(result["latency_ms"]["total"])
         for i, ms in enumerate(result["latency_ms"].get("tiers", [result["latency_ms"]["system1"]])):
             latency["tiers"].setdefault(i, []).append(ms)
@@ -61,6 +64,7 @@ def stats(store, since=0.0):
         q["tier_accuracy"] = {who: {"graded": n, "accuracy": right / weight} for who, (n, right, weight) in sorted(q["tiers"].items())}
         del q["human"], q["tiers"]
     return {"decisions": len(decisions), "degraded": degraded,
+            "cache": {"hits": hits, "misses": misses, "hit_rate": hits / (hits + misses)} if hits + misses else None,
             "latency_ms": {"total": _timing(latency["total"]), "tier_mean": {f"tier {i}": statistics.mean(ms) for i, ms in sorted(latency["tiers"].items())},
                            "system2_called": len(latency["system2"]) / len(decisions) if decisions else None,
                            "system2_mean": statistics.mean(latency["system2"]) if latency["system2"] else None},

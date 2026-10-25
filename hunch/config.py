@@ -3,6 +3,7 @@ import json
 import os
 from hunch.local import LocalDecider
 from hunch.backends import ChatDecider, VLLMDecider, ClaudeAPI, ClaudeCLI, ChatReasoner, default_system2
+from hunch.cache import Cache
 from hunch.router import Router
 from hunch.store import Store
 
@@ -44,6 +45,8 @@ def system2_from_env():
 
 
 def router_from_env():
-    db = os.environ.get("HUNCH_DB")
+    db, cache = os.environ.get("HUNCH_DB"), os.environ.get("HUNCH_CACHE")
+    ttl = os.environ.get("HUNCH_CACHE_TTL")
     return Router(system1_from_env(), system2_from_env(), float(os.environ.get("HUNCH_THRESHOLD", 0.8)),
-                  Store(db) if db else None, float(os.environ.get("HUNCH_AUDIT", 0)))
+                  Store(db) if db else None, float(os.environ.get("HUNCH_AUDIT", 0)),
+                  cache=Cache(cache, float(ttl) if ttl else None) if cache else None)

@@ -698,3 +698,118 @@ def test_api_review_queue(tmp_path, monkeypatch):
     assert [(i["id"], i["key"], i["reason"]) for i in queue] == [(decision["id"], "importance", "disagreement")] and queue[0]["state"] == "event"
     assert client.post("/feedback", json={"id": decision["id"], "labels": {"importance": 3}}, headers=auth).status_code == 200
     assert client.get("/review", headers=auth).json() == []
+
+
+class Counting:
+    """A tier and System 2 in one that counts the questions it was asked, with an identity so it can be cached."""
+
+    def __init__(self, identity="m1", confidence=0.6):
+        self.identity, self.confidence, self.asked = identity, confidence, []
+
+    def decide(self, state, questions, images=()):
+        self.asked += list(questions)
+        return {k: {"answer": True, "confidence": self.confidence, "probabilities": {}} for k in questions}
+
+    def answer(self, state, questions, images=()):
+        self.asked += list(questions)
+        return {k: {"answer": True, "reason": "r"} for k in questions}
+
+
+def test_cache_skips_repeated_questions_and_rescoring_is_free(tmp_path):
+    from hunch import Cache
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    cache = Cache(tmp_path / "cache.db")
+    tier, claude = Counting(confidence=0.6), Counting("c1")
+    router = Router(tier, claude, threshold=0.8, cache=cache)
+    first = router.decide("event", q)
+    assert first["cache"] == {"hits": 0, "misses": 2} and tier.asked == ["needs_prep"] and claude.asked == ["needs_prep"] and cache.size() == 2
+    again = router.decide("event", q)
+    assert again["cache"] == {"hits": 2, "misses": 0} and tier.asked == ["needs_prep"] and claude.asked == ["needs_prep"]
+    assert again["answers"]["needs_prep"]["answer"] == first["answers"]["needs_prep"]["answer"] and again["escalated"] == ["needs_prep"]
+    # The cache holds what the models said, not the decision: a new threshold is applied with no new calls.
+    trusting = router.decide("event", q, thresholds={"needs_prep": 0.5})
+    assert trusting["escalated"] == [] and trusting["answers"]["needs_prep"]["source"] == "hunch" and len(tier.asked) == 1
+    # A different text, question definition, question name or image is a different question.
+    router.decide("another event", q)
+    router.decide("event", {"needs_prep": QUESTIONS["needs_prep"] | {"instructions": "Different?"}})
+    router.decide("event", {"renamed": QUESTIONS["needs_prep"]})
+    router.decide("event", q, images=["data:image/png;base64,AAAA"])
+    assert len(tier.asked) == 5
+    # Rescoring a golden set with another threshold calls nothing.
+    calls = len(tier.asked) + len(claude.asked)
+    cases = [{"state": "event", "expected": {"needs_prep": True}}]
+    assert router.test(cases, questions=q, thresholds={"needs_prep": 0.5})["overall"]["accuracy"] == 1.0
+    assert router.test(cases, questions=q, thresholds={"needs_prep": 0.9})["overall"]["accuracy"] == 1.0
+    assert len(tier.asked) + len(claude.asked) == calls
+
+
+def test_cache_is_per_model_and_only_for_models_with_an_identity(tmp_path):
+    from hunch import Cache
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    cache = Cache(tmp_path / "cache.db")
+    one = Counting("model-1", 0.95)
+    Router(one, None, cache=cache).decide("event", q)
+    other = Counting("model-2", 0.95)
+    Router(other, None, cache=cache).decide("event", q)
+    assert one.asked == other.asked == ["needs_prep"]  # a different model is never served the first one's answer
+    anonymous = Counting(None, 0.95)
+    for _ in range(2):
+        result = Router(anonymous, None, cache=cache).decide("event", q)
+    assert anonymous.asked == ["needs_prep"] * 2 and result["cache"] == {"hits": 0, "misses": 0}
+    assert Router(one, None).decide("event", q)["cache"] is None and one.asked == ["needs_prep", "needs_prep"]
+
+
+def test_partial_hits_call_the_model_only_for_what_is_missing(tmp_path):
+    from hunch import Cache
+
+    cache = Cache(tmp_path / "cache.db")
+    claude = Counting("c1")
+    router = Router(Counting(confidence=0.0), claude, threshold=0.8, cache=cache)
+    router.decide("event", {"needs_prep": QUESTIONS["needs_prep"]})
+    router.decide("event", {"needs_prep": QUESTIONS["needs_prep"], "event_type": QUESTIONS["event_type"]})
+    assert claude.asked == ["needs_prep", "event_type"]
+
+
+def test_cache_ttl_clear_and_identities(tmp_path):
+    from hunch import Cache, ChatDecider, ChatReasoner, ClaudeAPI, LocalDecider
+    from hunch.cache import cache_key
+
+    cache = Cache(tmp_path / "ttl.db", ttl=0.05)
+    cache.put_many({"k": {"a": 1}})
+    assert cache.get_many(["k", "missing"]) == {"k": {"a": 1}}
+    import time
+    time.sleep(0.1)
+    assert cache.get_many(["k"]) == {}
+    cache.put_many({"k": {"a": 2}})
+    Cache(tmp_path / "ttl.db").clear()
+    assert cache.size() == 0
+    assert cache_key("m", "q", QUESTIONS["needs_prep"], "x", []) == cache_key("m", "q", QUESTIONS["needs_prep"], "x", ())
+    a, b = ChatDecider("m", "http://one/v1", api_key="secret"), ChatDecider("m", "http://one/v1", api_key="other")
+    assert a.identity == b.identity and "secret" not in a.identity  # a key is not part of the model
+    assert a.identity != ChatDecider("m", "http://two/v1").identity != ChatDecider("m", "http://one/v1", extra={"x": 1}).identity
+    assert ChatReasoner("m", "http://one/v1").identity != ChatReasoner("n", "http://one/v1").identity
+    assert ClaudeAPI(client=object()).identity != ClaudeAPI("claude-opus-5-5", client=object()).identity
+    rows = [{"state": s, "key": "k", "truth": t} for s, t in [("server meeting", True), ("invoice sale", False)] * 4]
+    assert LocalDecider.train(rows, embed=_bag).identity == LocalDecider.train(rows, embed=_bag).identity
+    assert LocalDecider.train(rows, embed=_bag).identity != LocalDecider.train(rows[:-2] + [{"state": "meeting", "key": "k", "truth": False}] * 2, embed=_bag).identity
+
+
+def test_cache_hit_rate_in_stats_and_env_config(tmp_path, monkeypatch):
+    from hunch import Cache, Store, router_from_env, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store = _calibration_store(tmp_path)
+    router = Router(Counting(confidence=0.95), None, cache=Cache(tmp_path / "c.db"), log=store)
+    for _ in range(4):
+        router.decide("event", q)
+    assert stats(store)["cache"] == {"hits": 3, "misses": 1, "hit_rate": 0.75}
+    assert stats(Store(tmp_path / "empty.db"))["cache"] is None
+    monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
+    monkeypatch.setenv("HUNCH_SYSTEM2", "none")
+    assert router_from_env().cache is None
+    monkeypatch.setenv("HUNCH_CACHE", str(tmp_path / "env.db"))
+    monkeypatch.setenv("HUNCH_CACHE_TTL", "60")
+    assert router_from_env().cache.ttl == 60.0
+
