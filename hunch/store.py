@@ -9,7 +9,7 @@ from hunch.questions import check_answer
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts REAL, state TEXT, questions TEXT, images INTEGER, result TEXT);
 CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, source TEXT, PRIMARY KEY (decision_id, key));
-CREATE TABLE IF NOT EXISTS thresholds (key TEXT PRIMARY KEY, value REAL);
+CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value REAL, PRIMARY KEY (tier, key));
 """
 
 
@@ -48,16 +48,17 @@ class Store:
             check_answer(questions[key], answer)
             db.execute("INSERT OR REPLACE INTO labels VALUES (?, ?, ?, ?)", (decision_id, key, json.dumps(answer), source))
 
-    def thresholds(self):
+    def thresholds(self, tier=0):
+        """The calibrated thresholds of one tier, {key: value}."""
         with self._db() as db:
-            return dict(db.execute("SELECT key, value FROM thresholds").fetchall())
+            return dict(db.execute("SELECT key, value FROM tier_thresholds WHERE tier = ?", (tier,)).fetchall())
 
-    def save_thresholds(self, thresholds):
+    def save_thresholds(self, thresholds, tier=0):
         with self._db() as db:
-            db.executemany("INSERT OR REPLACE INTO thresholds VALUES (?, ?)", thresholds.items())
+            db.executemany("INSERT OR REPLACE INTO tier_thresholds VALUES (?, ?, ?)", [(tier, key, value) for key, value in thresholds.items()])
 
     def labeled(self):
-        """One row per graded question: System 1's answer and confidence, the truth, and a weight.
+        """One row per graded question and tier that answered it: that tier's answer and confidence, the truth, and a weight.
 
         The truth is a human label ("human"), else System 2's answer ("proxy"). System 2 saw every escalated question
         (weight 1) and a random audit_rate share of the confident ones (weight 1/audit_rate), so weighting by the
@@ -70,9 +71,9 @@ class Store:
             questions, result = json.loads(questions), json.loads(result)
             for key, answer in result["answers"].items():
                 escalated = answer["source"] == "system2"
-                fast = answer["hunch"] if escalated else answer
-                if fast is None:  # System 1 was down, so there is no confidence to calibrate
-                    continue
+                # Decisions logged before tiers existed have no "tried": their only System 1 answer is the one itself.
+                tried = answer.get("tried") or ([{"tier": 0, **{k: (answer["hunch"] if escalated else answer)[k] for k in ("answer", "confidence")}}]
+                                                if (answer["hunch"] if escalated else answer) else [])
                 proxy = answer["answer"] if escalated else answer.get("audit", {}).get("answer")
                 if (decision_id, key) in labels:
                     truth, kind, weight = labels[(decision_id, key)], "human", 1.0
@@ -80,6 +81,7 @@ class Store:
                     truth, kind, weight = proxy, "proxy", 1.0 if escalated else 1 / result["audit_rate"]
                 else:
                     continue
-                rows.append({"id": decision_id, "key": key, "state": state, "question": questions[key], "images": images,
-                             "confidence": fast["confidence"], "answer": fast["answer"], "truth": truth, "kind": kind, "weight": weight})
+                for entry in tried:
+                    rows.append({"id": decision_id, "key": key, "state": state, "question": questions[key], "images": images, "tier": entry["tier"],
+                                 "confidence": entry["confidence"], "answer": entry["answer"], "truth": truth, "kind": kind, "weight": weight})
         return rows

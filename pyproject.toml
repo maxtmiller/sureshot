@@ -7,7 +7,8 @@ dependencies = ["httpx", "anthropic"]
 
 [project.optional-dependencies]
 api = ["fastapi", "uvicorn", "python-dotenv"]
-dev = ["pytest", "fastapi", "python-dotenv"]
+local = ["scikit-learn", "sentence-transformers"]
+dev = ["pytest", "fastapi", "python-dotenv", "scikit-learn"]
 
 [build-system]
 requires = ["setuptools>=69"]

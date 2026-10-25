@@ -1,4 +1,5 @@
-"""Answer with System 1, and send only the questions it is unsure about to System 2."""
+"""Answer with System 1 (one decider, or a chain of them), and send only the questions it is unsure about to System 2."""
+import copy
 import random
 import subprocess
 import time
@@ -21,11 +22,20 @@ def _transient(error):
 
 class Router:
     def __init__(self, system1, system2=None, threshold=0.8, log=None, audit=0.0, retries=2, backoff=0.5):
-        """log is a Store that records every decision and supplies calibrated thresholds. audit is the share of confident
+        """system1 is one decider, or a list of them tried in order (say a trained classifier, then an LLM): a question
+        stops at the first tier that is confident about it. A tier may answer only some of the questions it is given;
+        the rest pass down. threshold is a number, or a list with one number per tier, since a classifier's 0.9 and
+        an LLM's 0.9 mean different things.
+
+        log is a Store that records every decision and supplies calibrated thresholds. audit is the share of confident
         questions that also go to System 2, only to be graded: it keeps the log's labels unbiased for calibration.
         A failed call to either model is retried `retries` times, waiting backoff, 2x backoff... seconds between tries."""
         self.system1, self.system2, self.threshold, self.log, self.audit = system1, system2, threshold, log, audit
-        self.retries, self.backoff = retries, backoff
+        self.tiers = list(system1) if isinstance(system1, (list, tuple)) else [system1]
+        self.tier_thresholds = list(threshold) if isinstance(threshold, (list, tuple)) else [threshold] * len(self.tiers)
+        if len(self.tier_thresholds) != len(self.tiers):
+            raise ValueError(f"{len(self.tiers)} tiers but {len(self.tier_thresholds)} thresholds")
+        self.retries, self.backoff, self.record = retries, backoff, True
 
     def _call(self, fn, *args):
         for attempt in range(self.retries + 1):
@@ -38,62 +48,81 @@ class Router:
 
     def decide(self, state, questions, images=(), thresholds=None, escalate=True):
         """Returns {"answers": {key: {answer, confidence, source, ...}}, "unsure": [...], "escalated": [...],
-        "degraded", "latency_ms": {"system1", "system2" (None if not called), "total"}}, plus "id" when a log is set (pass
-        it to the log's label() to grade the answer).
+        "degraded", "latency_ms": {"system1" (all tiers), "tiers" (each), "system2" (None if not called), "total"}},
+        plus "id" when a log is set (pass it to the log's label() to grade the answer).
 
-        "degraded" is None unless a model was down (after retries): {"system": 1 or 2, "error": ...}. If System 1 is
-        down, System 2 answers every question (each answer has "hunch": None). If System 2 is down, System 1's answers
-        stand, "escalated" is empty and the unsure keys are still listed in "unsure". Only outages fall back this way: a
-        bad key or an unknown model raises, so a misconfiguration is not hidden by silently using the other model.
+        Each question goes to the first tier; if its confidence is below that tier's threshold it goes to the next.
+        A tier's threshold is thresholds[key] (the same for every tier), else the log's calibrated one for that tier
+        and question, else the router's. Questions no tier is confident about are "unsure". They go to System 2 when
+        escalate is true and a System 2 is set; their answer then comes from it, with the last tier's answer kept under
+        "hunch". Otherwise the last tier's answer stands and the key is only listed in "unsure". An answer from a tier
+        has "source": "hunch" and "tier"; every answer lists what each tier said under "tried".
 
-        A question is unsure when System 1's confidence is below its threshold: thresholds[key], else the log's
-        calibrated one, else the router's. Unsure questions go to System 2 when escalate is true and a System 2 is set;
-        their answer then comes from it, with System 1's answer kept under "hunch". Otherwise System 1's answer stands
-        and the key is only listed in "unsure"."""
+        "degraded" is None unless a model was down (after retries): a list of {"system": 1 or 2, "tier", "error"}. A
+        tier that is down is skipped. If every tier is down, System 2 answers every question (each answer has
+        "hunch": None). If System 2 is down, the last tier's answers stand and "escalated" is empty. Only outages fall
+        back this way: a bad key or an unknown model raises, so a misconfiguration is not hidden by silently using
+        another model."""
         validate(questions)
-        thresholds = (self.log.thresholds() if self.log else {}) | (thresholds or {})
+        thresholds = thresholds or {}
         start = time.perf_counter()
-        degraded = None
-        try:
-            fast = self._call(self.system1.decide, state, questions, images)
-        except Exception as e:
-            if not (escalate and self.system2 and _transient(e)):
-                raise
-            fast, degraded = None, {"system": 1, "error": repr(e)}
-        system1_ms = (time.perf_counter() - start) * 1000
-        system2_ms = None
-        if fast is None:
-            slow_start = time.perf_counter()
-            slow = self._call(self.system2.answer, state, questions, images)
-            system2_ms = (time.perf_counter() - slow_start) * 1000
-            answers = {key: {"answer": slow[key]["answer"], "reason": slow[key]["reason"], "source": "system2", "hunch": None} for key in questions}
-            unsure = escalated = list(questions)
-        else:
-            answers = {key: answer | {"source": "hunch"} for key, answer in fast.items()}
-            unsure = [key for key, answer in fast.items() if answer["confidence"] < thresholds.get(key, self.threshold)]
-            escalated = unsure if escalate and self.system2 and unsure else []
-            audited = [key for key in fast if key not in unsure and escalate and self.system2 and random.random() < self.audit]
-            if escalated or audited:
-                slow_start = time.perf_counter()
-                try:
-                    slow = self._call(self.system2.answer, state, {key: questions[key] for key in escalated + audited}, images)
-                except Exception as e:
-                    if not _transient(e):
-                        raise
-                    slow = None
-                    if escalated:
-                        degraded = {"system": 2, "error": repr(e)}
-                system2_ms = (time.perf_counter() - slow_start) * 1000
-                if slow is None:
-                    escalated = []
+        degraded, tier_ms, tried, latest, answers, remaining = [], [], {key: [] for key in questions}, {}, {}, list(questions)
+        for i, tier in enumerate(self.tiers):
+            if not remaining:
+                break
+            tier_start = time.perf_counter()
+            try:
+                fast = self._call(tier.decide, state, {key: questions[key] for key in remaining}, images)
+            except Exception as e:
+                if not (_transient(e) and (i + 1 < len(self.tiers) or (escalate and self.system2))):
+                    raise
+                degraded.append({"system": 1, "tier": i, "error": repr(e)})
+                fast = {}
+            tier_ms.append((time.perf_counter() - tier_start) * 1000)
+            saved = self.log.thresholds(i) if self.log else {}
+            unsure = []
+            for key in remaining:
+                if key not in fast:
+                    unsure.append(key)
+                    continue
+                tried[key].append({"tier": i, "answer": fast[key]["answer"], "confidence": fast[key]["confidence"]})
+                latest[key] = fast[key] | {"tier": i}
+                if fast[key]["confidence"] < thresholds.get(key, saved.get(key, self.tier_thresholds[i])):
+                    unsure.append(key)
                 else:
-                    for key in escalated:
-                        answers[key] = {"answer": slow[key]["answer"], "reason": slow[key]["reason"], "source": "system2", "hunch": fast[key]}
-                    for key in audited:
-                        answers[key]["audit"] = slow[key]
-        latency = {"system1": system1_ms, "system2": system2_ms, "total": (time.perf_counter() - start) * 1000}
-        result = {"answers": answers, "unsure": unsure, "escalated": escalated, "degraded": degraded, "latency_ms": {k: v and round(v, 1) for k, v in latency.items()}}
-        if self.log:
+                    answers[key] = fast[key] | {"source": "hunch", "tier": i}
+            remaining = unsure
+        system2_ms = None
+        escalated = remaining if escalate and self.system2 and remaining else []
+        audited = [key for key in answers if escalate and self.system2 and random.random() < self.audit]
+        if escalated or audited:
+            slow_start = time.perf_counter()
+            try:
+                slow = self._call(self.system2.answer, state, {key: questions[key] for key in escalated + audited}, images)
+            except Exception as e:
+                if not _transient(e) or any(key not in latest for key in escalated):
+                    raise
+                slow = None
+                if escalated:
+                    degraded.append({"system": 2, "tier": None, "error": repr(e)})
+            system2_ms = (time.perf_counter() - slow_start) * 1000
+            if slow is None:
+                escalated = []
+            else:
+                for key in escalated:
+                    answers[key] = {"answer": slow[key]["answer"], "reason": slow[key]["reason"], "source": "system2", "hunch": latest.get(key)}
+                for key in audited:
+                    answers[key]["audit"] = slow[key]
+        for key in remaining:
+            if key not in escalated:
+                if key not in latest:
+                    raise ValueError(f"no System 1 tier answered {key!r}, and there is no System 2 to escalate it to")
+                answers[key] = latest[key] | {"source": "hunch"}
+        answers = {key: answers[key] | {"tried": tried[key]} for key in questions}
+        latency = {"system1": sum(tier_ms), "system2": system2_ms, "total": (time.perf_counter() - start) * 1000}
+        result = {"answers": answers, "unsure": remaining, "escalated": escalated, "degraded": degraded or None,
+                  "latency_ms": {k: v and round(v, 1) for k, v in latency.items()} | {"tiers": [round(ms, 1) for ms in tier_ms]}}
+        if self.log and self.record:
             result["id"] = self.log.log(state, questions, result | {"audit_rate": self.audit}, len(images))
         return result
 
@@ -102,5 +131,6 @@ class Router:
         without writing to the log. The log's calibrated thresholds still apply."""
         from hunch.golden import run
 
-        plain = Router(self.system1, self.system2, self.threshold, retries=self.retries, backoff=self.backoff)
-        return run(plain, cases, questions, (self.log.thresholds() if self.log else {}) | (thresholds or {}))
+        plain = copy.copy(self)
+        plain.record = False
+        return run(plain, cases, questions, thresholds)

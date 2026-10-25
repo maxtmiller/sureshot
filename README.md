@@ -126,11 +126,13 @@ If you install vLLM with pip instead of using the official image, it may need `n
 ## When a model is down
 
 Each call to System 1 or System 2 is retried on network errors and on HTTP 408, 429 and 5xx (`Router(retries=2,
-backoff=0.5)` waits 0.5 s, then 1 s). If it still fails, the result says so in `degraded` (`None` when all is well):
+backoff=0.5)` waits 0.5 s, then 1 s). If it still fails, the result says so in `degraded` (`None` when all is well,
+else a list of `{"system": 1 or 2, "tier", "error"}`):
 
-- **System 1 down:** System 2 answers every question, and each answer has `"hunch": None`.
-- **System 2 down:** System 1's answers stand, `escalated` is empty, and the unsure keys stay in `unsure`.
-- **Both down, or `escalate=False` / no System 2:** the error is raised.
+- **A System 1 tier down:** it is skipped and its questions pass to the next tier. If every tier is down, System 2
+  answers every question, and each answer has `"hunch": None`.
+- **System 2 down:** the last tier's answers stand, `escalated` is empty, and the unsure keys stay in `unsure`.
+- **Everything down, or no System 2 to fall back to:** the error is raised.
 
 Only outages fall back. A bad key or an unknown model (401, 404...) raises, so a misconfiguration is not hidden by
 quietly using, and paying for, the other model. Decisions made while System 1 was down are logged but skipped by
@@ -155,6 +157,43 @@ report["failures"]    # [{"case": 7, "key": "urgency", "expected": 2, "got": 1, 
 Every `decide` result also has `latency_ms` (`system1`, `system2` or `None`, `total`), and it is stored in the log.
 Cases run one at a time, so the latencies are those of an unloaded system.
 
+## Chaining tiers: a trained classifier in front of an LLM
+
+`Router` takes one System 1 or a list of them, tried in order. A question stops at the first tier that is confident
+about it; the rest pass down, and what no tier is sure about goes to System 2.
+
+```python
+from hunch import Router, Store, LocalDecider, ChatDecider, ClaudeAPI, calibrate
+
+store = Store("hunch.db")
+router = Router([LocalDecider.load("local.joblib"), ChatDecider("gpt-4o-mini")], ClaudeAPI(), log=store, audit=0.1)
+result = router.decide(email_text, questions)
+result["answers"]["urgency"]["tier"]    # 0 = the classifier, 1 = the LLM; "source" is "system2" if Claude answered
+result["answers"]["urgency"]["tried"]   # what each tier said: [{"tier": 0, "answer": 1, "confidence": 0.62}, ...]
+```
+
+`LocalDecider` is a System 1 that runs in-process in about 10 ms: it embeds the state with a small local model
+(`all-MiniLM-L6-v2`) and trains one logistic regression per question on your graded decisions. Install it with
+`pip install "hunch[local]"`, train it from the log once there are enough labels (roughly 100 to 300 per question),
+and save it:
+
+```python
+local = LocalDecider.train(store.labeled())    # or any list of {"state", "key", "truth"} rows
+local.save("local.joblib")                     # LocalDecider.load("local.joblib") in production
+```
+
+- It answers only the questions it was trained on (and no images); the others pass to the next tier. Retrain when
+  you change a question.
+- `threshold` can be a list with one number per tier, and each tier has its own calibrated thresholds, since a
+  classifier's 0.9 and an LLM's 0.9 mean different things. Calibrate each tier: `calibrate(store, tier=0)`,
+  `calibrate(store, tier=1)`.
+- `HUNCH_LOCAL_MODEL=local.joblib` puts a saved classifier in front of the LLM for the HTTP API.
+- `escalate=False` skips only System 2; the tiers still run.
+- Measured on public datasets (200 held-out items per question, 300 training labels): a classifier then `gpt-4o-mini`
+  scored 92% on a topic question (the classifier answered 71% of items, p50 12 ms) and 89% on a sentiment question
+  (the classifier was trusted for only 12%, p50 461 ms), against 82% and 90% for the LLM alone. The classifier is
+  strong on topical questions and weak on subtle ones such as tone; calibration decides per question.
+
 ## Calibrating from your own data
 
 A confidence of 0.8 does not mean 80% right, especially from raw logprobs. Log decisions, grade some, and hunch
@@ -169,6 +208,7 @@ result = router.decide(email_text, questions)          # result["id"] identifies
 store.label(result["id"], "urgency", 2)                 # the true answer, from a human or a downstream outcome
 
 calibrate(store, target_accuracy=0.95)                  # saves per-question thresholds the router now applies
+                                                        # (tier=1 etc. for later tiers of a chain)
 # {"urgency": {"threshold": 0.71, "accuracy": 0.9, "trusted_accuracy": 0.96, "escalation_rate": 0.22, "samples": 410}}
 
 evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/v1"),
