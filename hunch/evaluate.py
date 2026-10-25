@@ -6,7 +6,8 @@ from hunch.calibrate import summarize
 def evaluate(store, candidates, target_accuracy=0.95, min_samples=30):
     """candidates is {name: system1}. Returns {name: {key: summarize(...)}}: each model's accuracy against the truth,
     the threshold it would need for the target, and how much would escalate. Decisions with images are skipped."""
-    rows = [r for r in store.labeled() if not r["images"]]
+    # One row per question: the tiers that answered it share its truth and weight.
+    rows = list({(r["id"], r["key"]): r for r in store.labeled() if not r["images"]}.values())
     rows.sort(key=lambda r: r["id"])
     report = {}
     for name, system1 in candidates.items():

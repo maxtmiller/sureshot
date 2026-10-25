@@ -437,7 +437,7 @@ def test_system1_outage_sends_everything_to_system2():
     claude = FakeClaude()
     router = Router(Flaky(FakeDecider(), [httpx.ConnectError("refused")] * 9), claude, retries=1, backoff=0)
     result = router.decide("event", QUESTIONS)
-    assert result["degraded"]["system"] == 1 and "refused" in result["degraded"]["error"]
+    assert result["degraded"][0]["system"] == 1 and "refused" in result["degraded"][0]["error"]
     assert claude.asked == list(QUESTIONS) and result["escalated"] == list(QUESTIONS) and result["unsure"] == list(QUESTIONS)
     assert all(a["source"] == "system2" and a["hunch"] is None for a in result["answers"].values())
     with pytest.raises(httpx.ConnectError):
@@ -453,11 +453,11 @@ def test_system2_outage_keeps_system1_answers(tmp_path):
     store = _calibration_store(tmp_path)
     router = Router(FakeDecider(), Flaky(FakeClaude(), [_status_error(500)] * 9), retries=0, backoff=0, log=store)
     result = router.decide("event", QUESTIONS)
-    assert result["degraded"]["system"] == 2 and result["escalated"] == [] and result["unsure"] == ["importance"]
+    assert result["degraded"][-1]["system"] == 2 and result["escalated"] == [] and result["unsure"] == ["importance"]
     assert result["answers"]["importance"]["source"] == "hunch" and result["answers"]["importance"]["answer"] == 3
     # A System 1 outage logs answers that have no confidence; calibration skips them instead of crashing.
     down = Router(Flaky(FakeDecider(), [httpx.ConnectError("x")] * 9), FakeClaude(), retries=0, backoff=0, log=store).decide("event", QUESTIONS)
-    assert down["degraded"]["system"] == 1 and calibrate(store, min_samples=1) == {}
+    assert down["degraded"][0]["system"] == 1 and calibrate(store, min_samples=1) == {}
 
 
 def test_mistakes_are_not_hidden_by_falling_back():
@@ -468,3 +468,115 @@ def test_mistakes_are_not_hidden_by_falling_back():
     assert claude.asked is None
     with pytest.raises(Exception, match="x"):
         Router(FakeDecider(), Flaky(FakeClaude(), [_status_error(401)] * 9), backoff=0).decide("event", QUESTIONS)
+
+
+def _bag(texts):
+    import numpy as np
+
+    words = ["server", "invoice", "sale", "meeting"]
+    return np.array([[t.lower().count(w) for w in words] for t in texts], dtype=float)
+
+
+def test_local_decider_trains_on_the_log_and_answers_in_the_same_shape(tmp_path):
+    from hunch import LocalDecider
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"], "event_type": QUESTIONS["event_type"]}
+    docs = [("server meeting", True, "meeting"), ("meeting about server", True, "meeting"),
+            ("invoice sale", False, "interview"), ("sale invoice due", False, "interview")] * 5
+    for text, prep, kind in docs:
+        decision = Router(FakeDecider(), None, log=store).decide(text, q)
+        store.label(decision["id"], "needs_prep", prep)
+        store.label(decision["id"], "event_type", kind)
+    local = LocalDecider.train(store.labeled(), embed=_bag)
+    answers = local.decide("a server meeting today", q)
+    assert answers["needs_prep"]["answer"] is True and answers["event_type"]["answer"] == "meeting"
+    assert 0.5 < answers["event_type"]["confidence"] <= 1 and set(answers["event_type"]["probabilities"]) == {"meeting", "interview"}
+    # It drops into a Router like any System 1, and round-trips through disk.
+    local.save(tmp_path / "local.joblib")
+    reloaded = LocalDecider.load(tmp_path / "local.joblib", embed=_bag)
+    assert Router(reloaded, None).decide("sale invoice", q)["answers"]["needs_prep"]["answer"] is False
+    assert local.decide("x", {"importance": QUESTIONS["importance"]}) == {}  # no head, so left for the next tier
+    with pytest.raises(ValueError, match="images"):
+        local.decide("x", q, images=["data:image/png;base64,AAAA"])
+    with pytest.raises(ValueError, match="two different answers"):
+        LocalDecider.train([{"state": "a", "key": "k", "truth": True}] * 3, embed=_bag)
+
+
+class Tier:
+    """A System 1 tier that answers the keys in `known` with fixed confidences, and leaves the rest out."""
+
+    def __init__(self, known):
+        self.known, self.asked = known, []
+
+    def decide(self, state, questions, images=()):
+        self.asked.append(list(questions))
+        return {k: {"answer": self.known[k][0], "confidence": self.known[k][1], "probabilities": {}} for k in questions if k in self.known}
+
+
+def test_chain_passes_only_unsure_questions_down():
+    fast = Tier({"needs_prep": (True, 0.99), "importance": (1, 0.5), "event_type": ("meeting", 0.6)})
+    llm = Tier({"importance": (3, 0.9), "event_type": ("interview", 0.7)})
+    claude = FakeClaude()
+    result = Router([fast, llm], claude, threshold=[0.9, 0.8]).decide("event", QUESTIONS)
+    assert fast.asked == [["needs_prep", "importance", "event_type"]] and llm.asked == [["importance", "event_type"]]
+    a = result["answers"]
+    assert (a["needs_prep"]["source"], a["needs_prep"]["tier"]) == ("hunch", 0)
+    assert (a["importance"]["source"], a["importance"]["tier"], a["importance"]["answer"]) == ("hunch", 1, 3)
+    assert [t["tier"] for t in a["importance"]["tried"]] == [0, 1] and a["importance"]["tried"][0]["confidence"] == 0.5
+    # event_type is still below the second tier's threshold, so only it reaches System 2, with the last tier's answer kept.
+    assert result["unsure"] == ["event_type"] and claude.asked == ["event_type"]
+    assert a["event_type"]["source"] == "system2" and a["event_type"]["hunch"]["tier"] == 1 and a["event_type"]["hunch"]["answer"] == "interview"
+    assert len(result["latency_ms"]["tiers"]) == 2 and result["degraded"] is None
+
+
+def test_a_tier_that_cannot_answer_a_question_passes_it_down():
+    fast, llm = Tier({"needs_prep": (True, 0.99)}), Tier({"importance": (3, 0.95), "event_type": ("meeting", 0.95)})
+    result = Router([fast, llm], None).decide("event", QUESTIONS)
+    assert llm.asked == [["importance", "event_type"]] and result["unsure"] == []
+    assert result["answers"]["importance"]["tier"] == 1 and result["answers"]["needs_prep"]["tier"] == 0
+    with pytest.raises(ValueError, match="no System 1 tier answered 'importance'"):
+        Router([fast], None).decide("event", QUESTIONS)
+    assert Router([fast], FakeClaude()).decide("event", QUESTIONS)["answers"]["importance"]["hunch"] is None
+    with pytest.raises(ValueError, match="2 tiers but 3 thresholds"):
+        Router([fast, llm], None, threshold=[0.5, 0.5, 0.5])
+
+
+def test_a_tier_outage_is_skipped():
+    import httpx
+
+    llm = Tier({"needs_prep": (True, 0.95), "importance": (2, 0.95), "event_type": ("meeting", 0.95)})
+    router = Router([Flaky(FakeDecider(), [httpx.ConnectError("down")] * 9), llm], None, retries=0, backoff=0)
+    result = router.decide("event", QUESTIONS)
+    assert result["degraded"] == [{"system": 1, "tier": 0, "error": result["degraded"][0]["error"]}] and "down" in result["degraded"][0]["error"]
+    assert all(a["tier"] == 1 for a in result["answers"].values())
+    with pytest.raises(httpx.ConnectError):
+        Router([Flaky(FakeDecider(), [httpx.ConnectError("down")] * 9)], None, retries=0, backoff=0).decide("event", QUESTIONS)
+
+
+def test_each_tier_is_calibrated_on_its_own(tmp_path):
+    from hunch import calibrate
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # Tier 0 is right only when it is very sure (0.95); at 0.7 it is always wrong. Tier 1 is right at 0.7.
+    for i in range(100):
+        sure = i % 2 == 0
+        fast = Tier({"needs_prep": (True if sure else False, 0.95 if sure else 0.7)})
+        llm = Tier({"needs_prep": (True, 0.7)})
+        result = Router([fast, llm], None, threshold=[0.8, 0.5], log=store).decide("event", q)
+        store.label(result["id"], "needs_prep", True)
+    assert calibrate(store, 0.95, 30, tier=0)["needs_prep"]["threshold"] == 0.95
+    assert calibrate(store, 0.95, 30, tier=1)["needs_prep"]["threshold"] == 0.7
+    assert store.thresholds(0) == {"needs_prep": 0.95} and store.thresholds(1) == {"needs_prep": 0.7}
+    # The router now trusts tier 0 only at 0.95 and tier 1 at 0.7, instead of its 0.8 and 0.5 defaults.
+    tier0 = Tier({"needs_prep": (True, 0.9)})
+    tier1 = Tier({"needs_prep": (True, 0.6)})
+    result = Router([tier0, tier1], FakeClaude(), threshold=[0.8, 0.5], log=store).decide("event", q)
+    assert tier1.asked and result["escalated"] == ["needs_prep"]
+
+
+def test_golden_run_reports_who_answered(tmp_path):
+    fast, llm = Tier({"needs_prep": (True, 0.99), "importance": (1, 0.5)}), Tier({"importance": (4, 0.95), "event_type": ("meeting", 0.95)})
+    report = Router([fast, llm], None).test([{"state": "a", "expected": {"needs_prep": True, "importance": 4, "event_type": "meeting"}}], questions=QUESTIONS)
+    assert report["answered_by"] == {"tier 0": pytest.approx(1 / 3), "tier 1": pytest.approx(2 / 3)} and report["overall"]["accuracy"] == 1.0

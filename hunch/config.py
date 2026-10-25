@@ -1,6 +1,7 @@
 """Build a Router from environment variables, so a deployment can swap models without code changes."""
 import json
 import os
+from hunch.local import LocalDecider
 from hunch.backends import ChatDecider, VLLMDecider, ClaudeAPI, ClaudeCLI, ChatReasoner, default_system2
 from hunch.router import Router
 from hunch.store import Store
@@ -15,12 +16,15 @@ def _chat(cls, n, default_url=DEFAULT_URL):
 
 
 def system1_from_env():
+    """The LLM System 1, behind a trained LocalDecider tier when HUNCH_LOCAL_MODEL names a saved one."""
     kind = os.environ.get("HUNCH_SYSTEM1", "chat")
     if kind == "chat":
-        return _chat(ChatDecider, 1)
-    if kind == "vllm":
-        return _chat(VLLMDecider, 1, "http://localhost:8000/v1")
-    raise ValueError(f"HUNCH_SYSTEM1 must be chat or vllm, not {kind!r}")
+        llm = _chat(ChatDecider, 1)
+    elif kind == "vllm":
+        llm = _chat(VLLMDecider, 1, "http://localhost:8000/v1")
+    else:
+        raise ValueError(f"HUNCH_SYSTEM1 must be chat or vllm, not {kind!r}")
+    return [LocalDecider.load(os.environ["HUNCH_LOCAL_MODEL"]), llm] if os.environ.get("HUNCH_LOCAL_MODEL") else llm
 
 
 def system2_from_env():

@@ -31,13 +31,16 @@ def summarize(samples, target_accuracy=0.95, min_samples=30):
     return report
 
 
-def calibrate(store, target_accuracy=0.95, min_samples=30, save=True):
-    """Calibrates every question in the log from its graded answers and, with save, stores the thresholds so a Router
-    using this store applies them. Returns {key: summarize(...)}; a key with threshold None keeps its current one."""
+def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0):
+    """Calibrates every question for one tier (the first by default; call it once per tier of a chain) from its graded
+    answers in the log and, with save, stores the thresholds so a Router using this store applies them. Returns
+    {key: summarize(...)}; a key with threshold None keeps its current one."""
     by_key = {}
     for row in store.labeled():
+        if row["tier"] != tier:
+            continue
         by_key.setdefault(row["key"], []).append((row["confidence"], row["answer"] == row["truth"], row["weight"]))
     report = {key: summarize(samples, target_accuracy, min_samples) for key, samples in by_key.items()}
     if save:
-        store.save_thresholds({key: r["threshold"] for key, r in report.items() if r["threshold"] is not None})
+        store.save_thresholds({key: r["threshold"] for key, r in report.items() if r["threshold"] is not None}, tier)
     return report
