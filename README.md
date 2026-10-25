@@ -123,6 +123,19 @@ small labeled set (71% against 84%), so log decisions, run `calibrate`, and keep
 If you install vLLM with pip instead of using the official image, it may need `nvcc` for FlashInfer; set
 `VLLM_USE_FLASHINFER_SAMPLER=0` or use `vllm/vllm-openai`.
 
+## When a model is down
+
+Each call to System 1 or System 2 is retried on network errors and on HTTP 408, 429 and 5xx (`Router(retries=2,
+backoff=0.5)` waits 0.5 s, then 1 s). If it still fails, the result says so in `degraded` (`None` when all is well):
+
+- **System 1 down:** System 2 answers every question, and each answer has `"hunch": None`.
+- **System 2 down:** System 1's answers stand, `escalated` is empty, and the unsure keys stay in `unsure`.
+- **Both down, or `escalate=False` / no System 2:** the error is raised.
+
+Only outages fall back. A bad key or an unknown model (401, 404...) raises, so a misconfiguration is not hidden by
+quietly using, and paying for, the other model. Decisions made while System 1 was down are logged but skipped by
+`calibrate`, since they have no System 1 confidence.
+
 ## Testing against a golden dataset
 
 `router.test(cases)` scores the router on cases you have already answered, so you can compare models or catch a

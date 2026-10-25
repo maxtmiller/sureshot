@@ -392,3 +392,79 @@ def test_api_reports_an_unready_system1(monkeypatch):
     response = TestClient(api.app).post("/decide", json={"state": "x", "questions": QUESTIONS}, headers={"Authorization": "Bearer secret"})
     assert response.status_code == 503 and "cannot reach http://vllm:8000" in response.json()["detail"]
     assert api._router is None
+
+
+class Flaky:
+    """System 1 or 2 that fails with the given errors before it works."""
+
+    def __init__(self, inner, errors):
+        self.inner, self.errors, self.calls = inner, list(errors), 0
+
+    def _maybe_fail(self):
+        self.calls += 1
+        if self.errors:
+            raise self.errors.pop(0)
+
+    def decide(self, state, questions, images=()):
+        self._maybe_fail()
+        return self.inner.decide(state, questions, images)
+
+    def answer(self, state, questions, images=()):
+        self._maybe_fail()
+        return self.inner.answer(state, questions, images)
+
+
+def _status_error(code):
+    import httpx
+
+    return httpx.HTTPStatusError("x", request=httpx.Request("POST", "http://m"), response=httpx.Response(code, request=httpx.Request("POST", "http://m")))
+
+
+def test_transient_errors_are_retried():
+    import httpx
+
+    system1 = Flaky(FakeDecider(), [httpx.ConnectError("refused"), _status_error(503)])
+    result = Router(system1, FakeClaude(), backoff=0).decide("event", QUESTIONS)
+    assert system1.calls == 3 and result["degraded"] is None and result["escalated"] == ["importance"]
+    gave_up = Flaky(FakeDecider(), [httpx.ConnectError("refused")] * 5)
+    Router(gave_up, FakeClaude(), retries=1, backoff=0).decide("event", QUESTIONS)
+    assert gave_up.calls == 2
+
+
+def test_system1_outage_sends_everything_to_system2():
+    import httpx
+
+    claude = FakeClaude()
+    router = Router(Flaky(FakeDecider(), [httpx.ConnectError("refused")] * 9), claude, retries=1, backoff=0)
+    result = router.decide("event", QUESTIONS)
+    assert result["degraded"]["system"] == 1 and "refused" in result["degraded"]["error"]
+    assert claude.asked == list(QUESTIONS) and result["escalated"] == list(QUESTIONS) and result["unsure"] == list(QUESTIONS)
+    assert all(a["source"] == "system2" and a["hunch"] is None for a in result["answers"].values())
+    with pytest.raises(httpx.ConnectError):
+        Router(Flaky(FakeDecider(), [httpx.ConnectError("refused")] * 9), claude, retries=1, backoff=0).decide("event", QUESTIONS, escalate=False)
+    with pytest.raises(httpx.ConnectError):
+        Router(Flaky(FakeDecider(), [httpx.ConnectError("refused")] * 9), None, retries=1, backoff=0).decide("event", QUESTIONS)
+
+
+def test_system2_outage_keeps_system1_answers(tmp_path):
+    import httpx
+    from hunch import calibrate
+
+    store = _calibration_store(tmp_path)
+    router = Router(FakeDecider(), Flaky(FakeClaude(), [_status_error(500)] * 9), retries=0, backoff=0, log=store)
+    result = router.decide("event", QUESTIONS)
+    assert result["degraded"]["system"] == 2 and result["escalated"] == [] and result["unsure"] == ["importance"]
+    assert result["answers"]["importance"]["source"] == "hunch" and result["answers"]["importance"]["answer"] == 3
+    # A System 1 outage logs answers that have no confidence; calibration skips them instead of crashing.
+    down = Router(Flaky(FakeDecider(), [httpx.ConnectError("x")] * 9), FakeClaude(), retries=0, backoff=0, log=store).decide("event", QUESTIONS)
+    assert down["degraded"]["system"] == 1 and calibrate(store, min_samples=1) == {}
+
+
+def test_mistakes_are_not_hidden_by_falling_back():
+    claude = FakeClaude()
+    for code in (401, 404):
+        with pytest.raises(Exception, match="x"):
+            Router(Flaky(FakeDecider(), [_status_error(code)] * 9), claude, backoff=0).decide("event", QUESTIONS)
+    assert claude.asked is None
+    with pytest.raises(Exception, match="x"):
+        Router(FakeDecider(), Flaky(FakeClaude(), [_status_error(401)] * 9), backoff=0).decide("event", QUESTIONS)
