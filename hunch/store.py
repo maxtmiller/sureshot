@@ -63,6 +63,12 @@ class Store:
             rows = db.execute("SELECT id, ts, questions, result FROM decisions WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
         return [(decision_id, ts, json.loads(questions), json.loads(result)) for decision_id, ts, questions, result in rows]
 
+    def states(self, decision_ids):
+        """{id: the state text} of some logged decisions."""
+        ids = list(decision_ids)
+        with self._db() as db:
+            return dict(db.execute(f"SELECT id, state FROM decisions WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()) if ids else {}
+
     def labels(self):
         """{(decision id, key): the true answer} for every graded question."""
         with self._db() as db:

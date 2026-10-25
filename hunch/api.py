@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 from hunch.calibrate import calibrate
+from hunch.review import REASONS, review_queue
 from hunch.stats import stats
 from hunch.config import router_from_env
 
@@ -91,6 +92,14 @@ def feedback(request: FeedbackRequest, authorization: str = Header(default="")):
 def usage_stats(since: float = 0.0, authorization: str = Header(default="")):
     authorize(authorization)
     return stats(log(), since)
+
+
+@app.get("/review")
+def review(limit: int = 50, reason: str | None = None, authorization: str = Header(default="")):
+    authorize(authorization)
+    if reason is not None and reason not in REASONS:
+        raise HTTPException(422, f"reason must be one of {list(REASONS)}")
+    return review_queue(log(), limit, (reason,) if reason else REASONS)
 
 
 @app.post("/calibrate")

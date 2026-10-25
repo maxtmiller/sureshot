@@ -1,6 +1,7 @@
 """A usage report from the decision log: who answers what, how accurate each tier is, and what each stage costs."""
 import math
 import statistics
+from hunch.review import REASONS, pending
 
 
 def _percentile(values, p):
@@ -18,10 +19,13 @@ def stats(store, since=0.0):
     decisions, degraded (how many had a model down), and latency_ms: timing of the whole decision, the mean time each
     tier took, and how often System 2 was called (and its mean time when it was).
 
+    review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
+
     questions: for each question, how many times it was asked, answered_by (the share each tier and System 2 gave),
     and accuracy against your labels. Per tier, accuracy is of the answers that tier gave and kept (not the ones it
     passed down), against your label or else System 2's audit answer, with audited answers weighted up for the
     audit rate; that is what to look at to decide whether a tier is earning its place."""
+    queue = pending(store, since)
     labels = store.labels()
     decisions = store.results(since)
     latency = {"total": [], "tiers": {}, "system2": []}
@@ -60,4 +64,4 @@ def stats(store, since=0.0):
             "latency_ms": {"total": _timing(latency["total"]), "tier_mean": {f"tier {i}": statistics.mean(ms) for i, ms in sorted(latency["tiers"].items())},
                            "system2_called": len(latency["system2"]) / len(decisions) if decisions else None,
                            "system2_mean": statistics.mean(latency["system2"]) if latency["system2"] else None},
-            "questions": questions}
+            "review_queue": {reason: sum(item["reason"] == reason for item in queue) for reason in REASONS}, "questions": questions}

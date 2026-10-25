@@ -228,6 +228,36 @@ The output above is from a run of 200 decisions (100 per question) on public dat
 - `latency_ms` times the whole decision, the mean time each tier took, and how often System 2 was called. The report also has
   `degraded` (how many decisions had a model down) and `decisions` at the top level.
 
+## Human review queue
+
+The labels that calibration and `LocalDecider` learn from are cheapest to get where the models disagree.
+`review_queue(store)` (or `GET /review?limit=50&reason=disagreement`) lists the ungraded questions a person's answer
+would help most, most useful first:
+
+```python
+from hunch import review_queue
+
+for item in review_queue(store, limit=20):
+    item["reason"]       # "disagreement", "audit_disagreement" or "unresolved"
+    item["state"]        # the text that was judged
+    item["question"]     # the question as asked
+    item["answer"]       # what the router decided
+    item["candidates"]   # what each tier and System 2 said, with System 2's reason
+    store.label(item["id"], item["key"], true_answer)    # or POST /feedback; the item leaves the queue
+```
+
+- `disagreement`: a tier was unsure, System 2 answered, and the two differ.
+- `audit_disagreement`: a confident answer was audited (`audit=`) and System 2 disagreed. This is how errors that the
+  tiers were sure about get found.
+- `unresolved`: no tier was confident and System 2 was not asked (`escalate=False`, or it was down).
+- An answer from System 2 with no System 1 answer to compare against (System 1 was down) is not queued. Claude's
+  answers carry no confidence score, so "System 2 was also unsure" cannot be detected; disagreement is the signal.
+- The queue is only as informative as System 2 is different from your tiers. In a run on public datasets with
+  `gpt-4o-mini` as the last tier and `gpt-4.1` as System 2, System 2 agreed with the tier on all 16 questions it was
+  asked, so every queued item came from the audit (3 of 36 audited answers). A System 2 from a different model family
+  disagrees more.
+- `stats(store)["review_queue"]` counts what is waiting, by reason.
+
 ## Calibrating from your own data
 
 A confidence of 0.8 does not mean 80% right, especially from raw logprobs. Log decisions, grade some, and hunch
