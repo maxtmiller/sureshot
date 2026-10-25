@@ -376,3 +376,19 @@ def test_vllm_decider_and_env_option(monkeypatch):
     monkeypatch.setenv("HUNCH_SYSTEM1", "bogus")
     with pytest.raises(ValueError):
         router_from_env()
+
+
+def test_api_reports_an_unready_system1(monkeypatch):
+    from fastapi.testclient import TestClient
+    import hunch.api as api
+
+    class Down(FakeDecider):
+        def check(self):
+            raise RuntimeError("cannot reach http://vllm:8000/v1/chat/completions")
+
+    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    monkeypatch.setattr(api, "_router", None)
+    monkeypatch.setattr(api, "router_from_env", lambda: Router(Down()))
+    response = TestClient(api.app).post("/decide", json={"state": "x", "questions": QUESTIONS}, headers={"Authorization": "Bearer secret"})
+    assert response.status_code == 503 and "cannot reach http://vllm:8000" in response.json()["detail"]
+    assert api._router is None

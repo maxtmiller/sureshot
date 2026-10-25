@@ -110,9 +110,10 @@ router = Router(VLLMDecider("Qwen/Qwen2.5-7B-Instruct").check(), ClaudeAPI())
 Or set `HUNCH_SYSTEM1=vllm`, `HUNCH_SYSTEM1_MODEL` and, for a remote box, `HUNCH_SYSTEM1_URL`. `serve/docker-compose.yml`
 runs vLLM and the hunch API together on one GPU machine (Docker with the NVIDIA container toolkit):
 `cp .env.example .env`, set `HUNCH_SYSTEM1_MODEL`, `HUNCH_API_KEY` and a System 2 key, then
-`docker compose -f serve/docker-compose.yml up --build`. The compose file has not been run. `VLLMDecider`, `check()`
-and `router.test` were run against a real vLLM server (Qwen2.5-7B-Instruct on an NVIDIA L4, hunch in the same
-container).
+`docker compose -f serve/docker-compose.yml up --build`. The compose file itself has not been run (it needs Docker with an NVIDIA GPU). Its pieces were: the official
+`vllm/vllm-openai` image started with the compose flags on an NVIDIA L4 and served Qwen2.5-7B-Instruct, `serve/Dockerfile`
+built and started the API, and `VLLMDecider`, `check()`, `router.test`, `/decide` and `/feedback` ran against that server.
+When System 1 is unreachable, `/decide` answers 503 with the reason.
 
 A 7B model fits a 24 GB GPU. On the L4 it answered a three-question email in about 150 ms (p50 and p95), against about
 500 to 600 ms for hosted APIs; a faster GPU should lower that. Zero-shot it was less accurate than `gpt-4o-mini` on a
