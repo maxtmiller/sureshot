@@ -1,6 +1,8 @@
 """Answer with System 1 (one decider, or a chain of them), and send only the questions it is unsure about to System 2."""
 import copy
 import random
+import threading
+from contextlib import contextmanager
 import subprocess
 import time
 import anthropic
@@ -41,6 +43,7 @@ class Router:
         if len(self.tier_thresholds) != len(self.tiers):
             raise ValueError(f"{len(self.tiers)} tiers but {len(self.tier_thresholds)} thresholds")
         self.retries, self.backoff, self.record, self.cache = retries, backoff, True, cache
+        self._flights, self._flights_lock = {}, threading.Lock()
 
     def _call(self, fn, *args):
         for attempt in range(self.retries + 1):
@@ -50,6 +53,30 @@ class Router:
                 if attempt == self.retries or not _retriable(e):
                     raise
                 time.sleep(self.backoff * 2 ** attempt)
+
+    @contextmanager
+    def _single_flight(self, hashes):
+        """Holds a lock per cache key, so concurrent requests for the same question wait for the first instead of all
+        asking the model. Locks are taken in sorted order (no deadlock) and dropped when nobody is using them."""
+        ordered = sorted(set(hashes))
+        with self._flights_lock:
+            flights = [self._flights.setdefault(h, [threading.Lock(), 0]) for h in ordered]
+            for flight in flights:
+                flight[1] += 1
+        held = []
+        try:
+            for flight in flights:
+                flight[0].acquire()
+                held.append(flight)
+            yield
+        finally:
+            for flight in reversed(held):
+                flight[0].release()
+            with self._flights_lock:
+                for h, flight in zip(ordered, flights):
+                    flight[1] -= 1
+                    if not flight[1]:
+                        del self._flights[h]
 
     def _cached(self, model, method, state, questions, images, tally):
         """model.method(state, questions, images), taking from the cache what it has and calling the model for the rest."""
@@ -61,8 +88,15 @@ class Router:
         found = self.cache.get_many(hashes.values())
         hits = {key: found[h] for key, h in hashes.items() if h in found}
         missing = {key: question for key, question in questions.items() if key not in hits}
-        fresh = self._call(call, state, missing, images) if missing else {}
-        self.cache.put_many({hashes[key]: value for key, value in fresh.items() if key in hashes})
+        fresh = {}
+        if missing:
+            with self._single_flight(hashes[key] for key in missing):
+                # Another request may have asked the model while this one waited.
+                found = self.cache.get_many(hashes[key] for key in missing)
+                hits |= {key: found[hashes[key]] for key in missing if hashes[key] in found}
+                missing = {key: question for key, question in missing.items() if key not in hits}
+                fresh = self._call(call, state, missing, images) if missing else {}
+                self.cache.put_many({hashes[key]: value for key, value in fresh.items() if key in hashes})
         tally["hits"] += len(hits)
         tally["misses"] += len(missing)
         return hits | fresh
