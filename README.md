@@ -374,6 +374,30 @@ With `HUNCH_DB` set, `/decide` also returns an `id`. `POST /feedback` with `{"id
 records the true answers, and `POST /calibrate` with `{"target_accuracy": 0.95}` computes and saves thresholds. A
 workflow tool can send feedback from wherever a person corrects the result.
 
+## Running under load
+
+`examples/loadtest.py <url> questions.json --clients 32 --requests 1000` sends concurrent `/decide` requests with a fresh
+text each and prints throughput, p50/p95/p99 latency and the errors by kind.
+
+What load testing found, with fake models that take 20 ms (so these show hunch's own limits, not a model's), on a laptop:
+
+- **One process** handles `/decide` at roughly 90 requests per second with two model calls each, and in-process fakes
+  at 600+ requests per second at 128 clients with p99 under 250 ms. Run more with `uvicorn hunch.api:app --workers 4`:
+  the workers share the SQLite log and cache (WAL mode), and four reached about 300 requests per second with no
+  errors and no lost decisions, including `/feedback`, `/stats` and `/review` calls against a log of 12,000 decisions.
+  The load generator shared a process with the fake model server, so treat these as a floor.
+- **Model calls share one connection pool.** Building a client per call (what `httpx.post` does) held the GIL for
+  about 10 ms and capped a process near 30 model calls a second however many threads it had; a fast local model such
+  as vLLM would have hit that immediately.
+- **Identical requests at once ask the model once**: concurrent requests for the same question wait for the first
+  and then read the cache. This is per process, so with `--workers N` up to N identical requests can still reach the
+  model at once.
+- **`/stats` and `/review` read the whole log** (about 0.5 s of CPU at 20,000 decisions). While one runs in a
+  process, that process answers other requests more slowly. Use `since=` on `/stats`, poll them rarely, and run
+  several workers so one heavy call does not stall everything.
+- **SQLite is for one machine.** Several worker processes on the same disk are fine. Separate machines need to share
+  one log, which this does not support.
+
 ## Tests
 
 ```bash

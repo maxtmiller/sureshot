@@ -22,10 +22,11 @@ class Cache:
         self.path, self.ttl = str(path), ttl
         with self._db() as db:
             db.execute("CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, ts REAL, value TEXT)")
+            db.execute("PRAGMA journal_mode=WAL")
 
     @contextmanager
     def _db(self):
-        db = sqlite3.connect(self.path)
+        db = sqlite3.connect(self.path, timeout=30)
         try:
             with db:
                 yield db

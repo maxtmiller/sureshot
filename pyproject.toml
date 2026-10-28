@@ -8,7 +8,7 @@ dependencies = ["httpx", "anthropic"]
 [project.optional-dependencies]
 api = ["fastapi", "uvicorn", "python-dotenv"]
 local = ["scikit-learn", "sentence-transformers"]
-dev = ["pytest", "fastapi", "python-dotenv", "scikit-learn"]
+dev = ["pytest", "fastapi", "uvicorn", "python-dotenv", "scikit-learn"]
 
 [build-system]
 requires = ["setuptools>=69"]
@@ -16,3 +16,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["hunch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,4 +1,5 @@
 import pytest
+import hunch.backends as backends
 from hunch.backends import normalize
 from hunch.questions import answer_schema, validate
 from hunch.router import Router
@@ -50,7 +51,7 @@ def test_http_decider_adapts_any_api(monkeypatch):
         seen.update(url=url, json=json, headers=headers)
         return httpx.Response(200, json={"out": RAW}, request=httpx.Request("POST", url))
 
-    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(backends, "post", post)
     decider = HTTPDecider("https://example.test/classify", lambda s, q, i: {"text": s, "q": q},
                           lambda data, questions: data["out"], api_key="k")
     answers = decider.decide("event", QUESTIONS)
@@ -69,7 +70,7 @@ def test_http_reasoner_adapts_any_api(monkeypatch):
         seen.update(url=url, json=json, headers=headers)
         return httpx.Response(200, json={"text": {"importance": {"answer": 4, "reason": "ok"}}}, request=httpx.Request("POST", url))
 
-    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(backends, "post", post)
     reasoner = HTTPReasoner("https://llm.test/answer", lambda s, q, i: {"input": prompt(s, q)}, lambda data, q: data["text"], api_key="k")
     result = Router(FakeDecider(), reasoner).decide("event", QUESTIONS)
     assert seen["url"] == "https://llm.test/answer" and "importance" in seen["json"]["input"] and "needs_prep" not in seen["json"]["input"]
@@ -142,7 +143,7 @@ def test_chat_decider_turns_logprobs_into_confidence(monkeypatch):
             return _logprob_response(url, [("3", math.log(0.5)), ("4", math.log(0.5))])
         return _logprob_response(url, [(" B", math.log(0.96)), ("A", math.log(0.04))])
 
-    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(backends, "post", post)
     answers = ChatDecider("m", "http://local/v1", api_key="k").decide("event", QUESTIONS)
     assert answers["needs_prep"]["answer"] is True and answers["needs_prep"]["confidence"] == pytest.approx(0.9)
     assert answers["event_type"]["answer"] == "interview" and answers["event_type"]["confidence"] == pytest.approx(0.96)
@@ -161,7 +162,7 @@ def test_chat_reasoner_uses_structured_outputs(monkeypatch):
         body = {"choices": [{"message": {"content": '{"importance": {"answer": 4, "reason": "ok"}}'}}]}
         return httpx.Response(200, json=body, request=httpx.Request("POST", url))
 
-    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(backends, "post", post)
     result = Router(FakeDecider(), ChatReasoner("m", "http://local/v1")).decide("event", QUESTIONS)
     assert seen["url"] == "http://local/v1/chat/completions" and seen["json"]["response_format"]["json_schema"]["strict"]
     assert result["answers"]["importance"]["answer"] == 4
@@ -322,7 +323,7 @@ def test_extra_fields_reach_the_request(monkeypatch):
         seen.update(json)
         return _logprob_response(url, [("yes", 0.0)])
 
-    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr(backends, "post", post)
     ChatDecider("m", "http://local/v1", extra={"reasoning_effort": "none", "max_tokens": 2}).decide("e", {"needs_prep": QUESTIONS["needs_prep"]})
     assert seen["reasoning_effort"] == "none" and seen["max_tokens"] == 2
 
@@ -340,22 +341,22 @@ def test_check_explains_what_is_wrong(monkeypatch):
         return post
 
     decider = ChatDecider("m", "http://local/v1")
-    monkeypatch.setattr(httpx, "post", respond(tops=["yes", "no"]))
+    monkeypatch.setattr(backends, "post", respond(tops=["yes", "no"]))
     assert decider.check() is decider
-    monkeypatch.setattr(httpx, "post", respond(tops=["<|channel>", "The"]))
+    monkeypatch.setattr(backends, "post", respond(tops=["<|channel>", "The"]))
     with pytest.raises(RuntimeError, match=r"top tokens were \['<\|channel>', 'The'\].*extra"):
         decider.check()
-    monkeypatch.setattr(httpx, "post", respond(logprobs=False))
+    monkeypatch.setattr(backends, "post", respond(logprobs=False))
     with pytest.raises(RuntimeError, match="no logprobs"):
         decider.check()
-    monkeypatch.setattr(httpx, "post", respond(status=404))
+    monkeypatch.setattr(backends, "post", respond(status=404))
     with pytest.raises(RuntimeError, match="404.*model not found"):
         decider.check()
 
     def unreachable(url, json, headers, timeout):
         raise httpx.ConnectError("refused")
 
-    monkeypatch.setattr(httpx, "post", unreachable)
+    monkeypatch.setattr(backends, "post", unreachable)
     with pytest.raises(RuntimeError, match="cannot reach http://local/v1/chat/completions"):
         decider.check()
 

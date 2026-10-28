@@ -19,10 +19,11 @@ class Store:
         self.path = str(path)
         with self._db() as db:
             db.executescript(SCHEMA)
+            db.execute("PRAGMA journal_mode=WAL")  # readers (stats, review) stop blocking the writers that log decisions
 
     @contextmanager
     def _db(self):
-        db = sqlite3.connect(self.path)
+        db = sqlite3.connect(self.path, timeout=30)
         try:
             with db:
                 yield db
