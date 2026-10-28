@@ -184,6 +184,10 @@ local.save("local.joblib")                     # LocalDecider.load("local.joblib
 
 - It answers only the questions it was trained on (and no images); the others pass to the next tier. Retrain when
   you change a question.
+- `retrain(store, current=local)` trains a new classifier on the log's graded decisions and promotes it, question by
+  question, only if on held-out decisions it reaches the accuracy target and passes on fewer questions than `current`.
+  It saves the promoted questions' thresholds to the store and returns `{"decider", "report"}`, so the escalation rate
+  falls as labels and System 2 answers accumulate.
 - `threshold` can be a list with one number per tier, and each tier has its own calibrated thresholds, since a
   classifier's 0.9 and an LLM's 0.9 mean different things. Calibrate each tier: `calibrate(store, tier=0)`,
   `calibrate(store, tier=1)`.
