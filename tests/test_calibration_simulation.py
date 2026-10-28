@@ -115,3 +115,37 @@ def test_a_threshold_picked_from_audited_logs_meets_the_target(tmp_path):
     threshold = calibrate(store, 0.9, 30, save=False)["q"]["threshold"]
     assert threshold is not None
     assert true_kept_accuracy(lambda c: min(1.0, 0.4 + 1.2 * (c - 0.5)), threshold) >= 0.89
+
+
+def test_reasons_match_what_the_simulated_model_can_do():
+    from hunch.calibrate import summarize
+
+    rng = random.Random(4)
+    # Never above 80% right: at a 90% target, 300 answers are enough to see it is out of reach.
+    weak = [(c, rng.random() < 0.5 + 0.6 * (c - 0.5), 1.0) for c in (CONF(rng) for _ in range(300))]
+    report = summarize(weak, 0.9, 30)
+    assert report["threshold"] is None and report["reason"] == "target unreachable" and report["best_target"] < 0.85
+
+
+def test_unreachable_is_only_claimed_when_the_data_rules_the_target_out():
+    from hunch.calibrate import summarize
+
+    def reasons(curve, n, target, trials=200):
+        rng, out = random.Random(5), []
+        for _ in range(trials):
+            samples = [(c, rng.random() < curve(c), 1.0) for c in (CONF(rng) for _ in range(n))]
+            out.append(summarize(samples, target, 30)["reason"])
+        return out
+
+    # A model that can reach 95%. With little data the numbers may not show it yet, but the data must rarely say the
+    # target is out of reach: about 15% of the time at 40 answers, 1% at 100, never by 300.
+    curve = lambda c: min(1.0, 0.4 + 1.2 * (c - 0.5))
+    assert reasons(curve, 40, 0.95).count("target unreachable") <= 50
+    assert reasons(curve, 100, 0.95).count("target unreachable") <= 8
+    assert reasons(curve, 300, 0.95).count("target unreachable") == 0
+    # A model capped near 80% right: the data says so reliably only with plenty of answers, and before that it says
+    # "not enough evidence" (which is true) and never finds a threshold.
+    capped = lambda c: 0.5 + 0.6 * (c - 0.5)
+    assert reasons(capped, 1000, 0.9, trials=100).count("target unreachable") >= 80
+    few = reasons(capped, 100, 0.9)
+    assert few.count(None) <= 4 and "target unreachable" in few

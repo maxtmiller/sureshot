@@ -20,6 +20,9 @@ def stats(store, since=0.0):
     the models, and the hit rate; None if no cache was used), and latency_ms: timing of the whole decision, the mean time each
     tier took, and how often System 2 was called (and its mean time when it was).
 
+    uncalibrated: the questions whose latest calibration found no threshold, with the reason and the best target
+    their data supports (see hunch.calibrate); until one is found the router trusts that tier at its default threshold.
+
     review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
 
     questions: for each question, how many times it was asked, answered_by (the share each tier and System 2 gave),
@@ -68,4 +71,4 @@ def stats(store, since=0.0):
             "latency_ms": {"total": _timing(latency["total"]), "tier_mean": {f"tier {i}": statistics.mean(ms) for i, ms in sorted(latency["tiers"].items())},
                            "system2_called": len(latency["system2"]) / len(decisions) if decisions else None,
                            "system2_mean": statistics.mean(latency["system2"]) if latency["system2"] else None},
-            "review_queue": {reason: sum(item["reason"] == reason for item in queue) for reason in REASONS}, "questions": questions}
+            "uncalibrated": store.issues(), "review_queue": {reason: sum(item["reason"] == reason for item in queue) for reason in REASONS}, "questions": questions}
