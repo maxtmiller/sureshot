@@ -310,6 +310,13 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   System 2 disagreed with the dataset's own labels on some items), so give labels where you can.
 - `accuracy_vs_labels` is the accuracy of the final answers where you gave a label.
 - `system2_called` includes audit calls, so `audit` shows up as System 2 cost.
+- `drift` compares each calibrated question and tier with its last `calibrate` run, and `flags` names what moved:
+  `"escalation_rate"` when the share of the tier's answers below the threshold differs from the share at
+  calibration by more than chance (the inputs or the model changed), and `"accuracy"` when its graded answers since
+  then (labels, else audits) are below the target even at the optimistic end of a 90% interval. Each needs
+  `min_samples` (default 30) answers since the calibration. A flag means grade a fresh sample and calibrate again.
+  The accuracy check needs labels or `audit` after calibrating; without them only the escalation rate is watched.
+  `retrain` clears the snapshot of the questions it promotes until the next `calibrate`.
 - `latency_ms` times the whole decision, the mean time each tier took, and how often System 2 was called. The report also has
   `degraded` (how many decisions had a model down) and `decisions` at the top level.
 

@@ -177,8 +177,8 @@ definition automatically misses. A model with no `identity` is not cached.
 
 ### The Store (`store.py`)
 
-SQLite with four tables: `decisions` (every result), `labels` (true answers), `tier_thresholds` (calibration output),
-`calibration_issues` (why a question has none). It uses WAL mode and a 30 second busy timeout, which fixed `database is
+SQLite with five tables: `decisions` (every result), `labels` (true answers), `tier_thresholds` (calibration output),
+`calibration_issues` (why a question has none), `calibrations` (what the latest calibration saw, for drift). It uses WAL mode and a 30 second busy timeout, which fixed `database is
 locked` errors and lost decisions under concurrent load.
 
 `Store.labeled()` is the bridge between logging and learning. It returns one row per graded question and tier with the
