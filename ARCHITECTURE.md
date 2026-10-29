@@ -85,7 +85,8 @@ remote models never loads them.
    to the next tier. A tier may skip a question (a `LocalDecider` only knows the questions it was trained on), which
    also passes it down.
 3. **Guard check** (if a `guard` is set). Questions a tier was confident about are shown to the guard. If the guard
-   disagrees with probability at or above `guard_threshold`, the answer is pulled back and treated as unsure.
+   disagrees with probability at or above `guard_threshold`, the answer is pulled back and treated as unsure. A
+   guard that is down vetoes nothing and is listed in `degraded`.
 4. **Pick audits.** With `audit=0.1`, a random 10% of the still-confident answers are also sent to System 2, only to
    be graded (the answer returned still comes from System 1).
 5. **Ask System 2** about the unsure questions plus the audited ones, in a single call.

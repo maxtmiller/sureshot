@@ -920,6 +920,18 @@ def test_guard_vetoes_a_confident_answer_it_confidently_disagrees_with(tmp_path)
     assert watcher.asked == [["importance", "event_type"]]
 
 
+def test_a_guard_that_is_down_vetoes_nothing_and_a_broken_one_raises():
+    from hunch import Outage
+
+    fast =Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99), "event_type": ("meeting", 0.99)})
+    claude = FakeClaude()
+    result = Router(fast, claude, guard=Flaky(fast, [Outage("overloaded")] * 9), retries=0, backoff=0).decide("event", QUESTIONS)
+    assert result["unsure"] == [] and claude.asked is None and all(a["source"] == "hunch" for a in result["answers"].values())
+    assert result["degraded"] == [{"system": "guard", "tier": None, "error": result["degraded"][0]["error"]}] and "overloaded" in result["degraded"][0]["error"]
+    with pytest.raises(RuntimeError, match="bad key"):
+        Router(fast, claude, guard=Flaky(fast, [RuntimeError("bad key")] * 9), retries=0, backoff=0).decide("event", QUESTIONS)
+
+
 def test_the_core_needs_no_anthropic_sdk():
     import subprocess
     import sys
