@@ -7,7 +7,7 @@ import os
 
 PROVIDERS = {
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY"),
-    "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
+    "xai": ("https://api.x.ai/v1", "XAI_API_KEY"),
     "mistral": ("https://api.mistral.ai/v1", "MISTRAL_API_KEY"),
     "deepseek": ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),

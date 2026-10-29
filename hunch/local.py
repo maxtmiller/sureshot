@@ -1,5 +1,5 @@
 """System 1 as a small classifier trained on your graded decisions, running in-process: no server, no prompt."""
-from hunch.backends import normalize
+from hunch.adapters.base import normalize
 
 DEFAULT_EMBEDDING = "sentence-transformers/all-MiniLM-L6-v2"
 

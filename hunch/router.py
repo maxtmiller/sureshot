@@ -6,7 +6,7 @@ from contextlib import contextmanager
 import subprocess
 import time
 import httpx
-from hunch.backends import Outage
+from hunch.adapters.base import Outage
 from hunch.cache import cache_key
 from hunch.questions import validate
 

@@ -10,7 +10,7 @@ Two kinds of model, borrowed from the "System 1 / System 2" picture of thinking:
 
 - **System 1** is fast and cheap, and tells you how sure it is. Its confidence comes from the probability it puts on
   each answer (token logprobs from an LLM, or class probabilities from a small classifier).
-- **System 2** is slow and expensive (Claude) and gives an answer with a reason. It is only asked about the questions
+- **System 2** is slow and expensive (a stronger model) and gives an answer with a reason. It is only asked about the questions
   System 1 was unsure about.
 
 Everything else in the library exists to make that handoff trustworthy: to know *how much to trust* System 1's
@@ -33,7 +33,7 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
    |      v                                                |
    |   guard: disagrees with a confident answer? -> unsure |
    |      v                                                |
-   |   System 2 (Claude), only for the unsure questions    |
+   |   System 2 (stronger model), only for unsure questions |
    +-------------------------------------------------------+
         |                      |
         v                      v
@@ -49,7 +49,13 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 | Path | Role |
 |---|---|
 | `hunch/questions.py` | The question format (choice, score, noul), validation, JSON schema for System 2 |
-| `hunch/backends.py` | Every model adapter: `ChatDecider`, `VLLMDecider`, `HTTPDecider`, `ClaudeAPI`, `ClaudeCLI`, `HTTPReasoner`, `ChatReasoner` |
+| `hunch/adapters/base.py` | What adapters share: the pooled HTTP client, `Outage`, the prompts, `normalize` (the System 1 answer shape) |
+| `hunch/adapters/chat.py` | Chat-completions (OpenAI-format) endpoints: `ChatDecider`, `VLLMDecider`, `ChatReasoner` |
+| `hunch/adapters/http.py` | Any API you describe with two functions: `HTTPDecider`, `HTTPReasoner` |
+| `hunch/adapters/gemini.py` | Gemini through its own `generateContent` API (logprobs for System 1, `responseSchema` for System 2): `GeminiDecider`, `GeminiReasoner` |
+| `hunch/adapters/vendors.py` | One System 1 and System 2 class per major OpenAI-format vendor (OpenAI, Mistral, DeepSeek, xAI, Groq, Together, Fireworks, OpenRouter, Ollama) with its endpoint and key built in |
+| `hunch/adapters/anthropic.py` | Claude, which has its own protocol and SDK: `ClaudeAPI`, `ClaudeCLI` (optional install) |
+| `hunch/providers.py` | URLs and key variables of common OpenAI-compatible services, so `provider="groq"` replaces a URL |
 | `hunch/local.py` | `LocalDecider`: an in-process classifier (embeddings + logistic regression) used as a System 1 tier or a guard |
 | `hunch/router.py` | `Router`: the cascade, thresholds, retries, outage fallback, guard, audit, cache use |
 | `hunch/cache.py` | `Cache`: SQLite cache of model answers |
@@ -100,10 +106,10 @@ A question is `{"type": "choice" | "score" | "noul", "instructions", "criteria"}
 - `choice`: pick one of named options. `score`: pick a level from an ordered list. `noul`: yes/no.
 - Every type reduces to "a probability over a small, closed set of answers", which is what makes a confidence
   meaningful. Open-ended text answers would have no calibrated confidence, so they are not supported.
-- The same definition drives the System 1 prompt, the System 2 JSON schema (so Claude cannot return an invalid
+- The same definition drives the System 1 prompt, the System 2 JSON schema (so System 2 cannot return an invalid
   answer), and label validation (`check_answer`), so the three can never drift apart.
 
-### System 1 (`backends.py`, `local.py`)
+### System 1 (`adapters/`, `local.py`)
 
 All System 1 models share one contract: `decide(state, questions, images) -> {key: {answer, confidence, probabilities}}`.
 `normalize` produces that shape from any model's raw output, so the Router and calibration never care which model
@@ -127,7 +133,7 @@ answered.
 - **One shared `httpx` client** for all model calls. *Why:* building a client per call cost about 10 ms of CPU holding
   the GIL and capped a process near 30 model calls a second no matter how many threads it had.
 
-### System 2 (`backends.py`)
+### System 2 (`adapters/`)
 
 Contract: `answer(state, questions, images) -> {key: {answer, reason}}`.
 
@@ -143,7 +149,7 @@ available truth for grading System 1 when no human has labeled the item.
 ### The Router (`router.py`)
 
 - **Tier chain.** `system1` is one decider or a list. *Why a chain:* different models are best at different questions
-  and cost very different amounts. A 10 ms classifier can settle the easy majority, an LLM the middle, Claude the rest.
+  and cost very different amounts. A 10 ms classifier can settle the easy majority, an LLM the middle, a stronger model the rest.
   Each tier has its own threshold because a classifier's 0.9 and an LLM's 0.9 do not mean the same thing.
 - **Failure handling.** Network errors and 408/429/5xx are retried with exponential backoff. If a model is still down
   after retries, that is an *outage* and the router falls back: a dead tier is skipped, System 2 answers everything if
