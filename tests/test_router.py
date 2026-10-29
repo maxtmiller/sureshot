@@ -1149,7 +1149,7 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     assert drift == [{"tier": 0, "key": "needs_prep", "calibrated_at": drift[0]["calibrated_at"], "threshold": 0.95, "target": 0.95,
                       "answers_since": 0, "escalation_rate": {"at_calibration": 0.5, "since": None}, "accuracy_since": None,
                       "distribution_change": None, "recent": None, "flags": [], "unchecked": ["escalation_rate", "distribution", "accuracy"],
-                      "upstream": []}]
+                      "baseline": None, "upstream": []}]
     # The same mix as at calibration is not drift. Labels on unaudited answers are not a random sample, so even all
     # wrong they do not count toward accuracy.
     for i in range(60):
@@ -1300,3 +1300,34 @@ def test_drift_points_at_the_upstream_tier(tmp_path):
     assert tier0["flags"] == [] and tier1["upstream"] == [{"tier": 0, "reason": "recalibrated"}]
     calibrate(store, 0.95, 30, tier=1)
     assert stats(store)["drift"][1]["upstream"] == []
+
+
+def test_drift_watches_questions_without_a_calibration(tmp_path):
+    from hunch import Store, calibrate, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store = Store(tmp_path / "hunch.db")
+    # Never calibrated: its first 30 answers are the baseline (all sure, so all kept at the default 0.8).
+    for _ in range(30):
+        Router(Tier({"needs_prep": (True, 0.95)}), None, log=store).decide("event", q)
+    drift = stats(store)["drift"]
+    assert len(drift) == 1 and drift[0]["baseline"] == {"answers": 30} and drift[0]["calibrated_at"] is None
+    assert drift[0]["threshold"] is None and drift[0]["answers_since"] == 0
+    for _ in range(40):
+        Router(Tier({"needs_prep": (True, 0.95)}), None, log=store).decide("event", q)
+    drift = stats(store)["drift"][0]
+    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["escalation_rate"] == {"at_calibration": 0.0, "since": 0.0}
+    # Now it is unsure about everything: it passes more on, and its confidences moved.
+    for _ in range(60):
+        Router(Tier({"needs_prep": (True, 0.6)}), None, log=store).decide("event", q)
+    assert stats(store)["drift"][0]["flags"] == ["escalation_rate", "distribution"]
+
+    # A calibration that fails closed starts a new baseline: the tier now passes everything on, which is not drift.
+    for _ in range(100):
+        result = Router(Tier({"needs_prep": (True, 0.95)}), None, log=store).decide("event", q)
+        store.label(result["id"], "needs_prep", False)
+    assert calibrate(store, 0.95, 30)["needs_prep"]["reason"] == "target unreachable" and stats(store)["drift"] == []
+    for _ in range(70):
+        Router(Tier({"needs_prep": (True, 0.95)}), None, log=store).decide("event", q)
+    drift = stats(store)["drift"][0]
+    assert drift["flags"] == [] and drift["escalation_rate"] == {"at_calibration": 1.0, "since": 1.0} and drift["answers_since"] == 40

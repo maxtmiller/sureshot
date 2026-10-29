@@ -75,22 +75,29 @@ class Store:
                            [(tier, key, i["reason"], i["best_target"], i["target"]) for key, i in issues.items()])
 
     def save_calibrations(self, snapshots, tier, calibrated):
-        """Records what a calibration found ({key: {threshold, target, escalation_rate, answers}}), so stats can tell
-        when later answers drift from it, and drops the snapshots of the questions in `calibrated` left without one."""
+        """Records what a calibration found ({key: {threshold, target, escalation_rate, answers, histogram}}), so stats
+        can tell when later answers drift from it. The questions in `calibrated` left without one (it failed closed,
+        or retrain replaced the classifier) get a reset instead: drift learns a new baseline from their answers after it."""
         now = time.time()
         with self._db() as db:
             db.executemany("DELETE FROM calibrations WHERE tier = ? AND key = ?", [(tier, key) for key in calibrated])
             db.executemany("INSERT INTO calibrations VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                            [(tier, key, now, s["threshold"], s["target"], s["escalation_rate"], s["answers"], s["histogram"] and json.dumps(s["histogram"]))
                             for key, s in snapshots.items()])
+            db.executemany("INSERT INTO calibrations (tier, key, ts) VALUES (?, ?, ?)", [(tier, key, now) for key in calibrated if key not in snapshots])
 
     def calibrations(self):
         """[{tier, key, ts, threshold, target, escalation_rate, answers, histogram}]: the latest calibration of each question
         that has a threshold. histogram is {edges, counts} of the tier's confidences then, or None for older snapshots."""
         with self._db() as db:
-            rows = db.execute("SELECT tier, key, ts, threshold, target, escalation_rate, answers, histogram FROM calibrations ORDER BY tier, key").fetchall()
+            rows = db.execute("SELECT tier, key, ts, threshold, target, escalation_rate, answers, histogram FROM calibrations WHERE threshold IS NOT NULL ORDER BY tier, key").fetchall()
         fields = ("tier", "key", "ts", "threshold", "target", "escalation_rate", "answers")
         return [dict(zip(fields, row[:-1]), histogram=row[-1] and json.loads(row[-1])) for row in rows]
+
+    def resets(self):
+        """{(tier, key): unix time} of the questions whose snapshot was dropped and not yet replaced by a calibration."""
+        with self._db() as db:
+            return {(tier, key): ts for tier, key, ts in db.execute("SELECT tier, key, ts FROM calibrations WHERE threshold IS NULL")}
 
     def issues(self):
         """[{tier, key, reason, best_target, target}] for questions whose latest calibration found no threshold."""
