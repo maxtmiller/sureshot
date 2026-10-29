@@ -329,6 +329,10 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   under `recent` and as `recent_escalation_rate`, `recent_distribution` and `recent_accuracy`, so a change that
   starts months after calibrating is not diluted by the normal traffic before it. Snapshots saved before the
   distribution check have no bins, so it is `unchecked` until you calibrate.
+- `upstream` lists the earlier tiers of the same question that flagged drift in the same report (`"reason":
+  "drift"`) or were recalibrated after this tier (`"recalibrated"`). A later tier only sees what the earlier ones
+  pass down, so when tier 0 starts passing harder questions, tier 1 drifts too. Look at the earliest tier first, and
+  recalibrate the later tiers after recalibrating an earlier one.
 - The accuracy check uses only audited answers, because `audit` picks them at random. A label on an answer that was
   not audited is left out, since it was picked some other way (often because it looked wrong) and would make drift
   look worse than it is. With `audit=0` the accuracy check never runs, and a model that stays confident while

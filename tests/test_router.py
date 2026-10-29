@@ -1148,7 +1148,8 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     drift = stats(store)["drift"]
     assert drift == [{"tier": 0, "key": "needs_prep", "calibrated_at": drift[0]["calibrated_at"], "threshold": 0.95, "target": 0.95,
                       "answers_since": 0, "escalation_rate": {"at_calibration": 0.5, "since": None}, "accuracy_since": None,
-                      "distribution_change": None, "recent": None, "flags": [], "unchecked": ["escalation_rate", "distribution", "accuracy"]}]
+                      "distribution_change": None, "recent": None, "flags": [], "unchecked": ["escalation_rate", "distribution", "accuracy"],
+                      "upstream": []}]
     # The same mix as at calibration is not drift. Labels on unaudited answers are not a random sample, so even all
     # wrong they do not count toward accuracy.
     for i in range(60):
@@ -1272,3 +1273,30 @@ def test_holm_shares_one_false_alarm_budget():
     assert _holm([0.004, 0.001, 0.02], 0.01) == [True, True, False]
     assert _holm([0.006, 0.006], 0.01) == [False, False]  # each would pass alone at 0.01
     assert _holm([], 0.01) == []
+
+
+def test_drift_points_at_the_upstream_tier(tmp_path):
+    from hunch import Store, calibrate, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store = Store(tmp_path / "hunch.db")
+    # Each tier is right when sure (0.95) and wrong when not (0.7), half each, so both calibrate to 0.95.
+    for i in range(200):
+        fast = Tier({"needs_prep": (True, 0.95) if i % 2 == 0 else (False, 0.7)})
+        llm = Tier({"needs_prep": (True, 0.95) if i % 4 == 1 else (False, 0.7)})
+        result = Router([fast, llm], None, threshold=[0.8, 0.8], log=store).decide("event", q)
+        store.label(result["id"], "needs_prep", True)
+    assert calibrate(store, 0.95, 30, tier=0)["needs_prep"]["threshold"] == 0.95
+    assert calibrate(store, 0.95, 30, tier=1)["needs_prep"]["threshold"] == 0.95
+    # Tier 0 now passes everything down, and tier 1 is unsure about what it gets: both drift, and tier 0 is why.
+    for _ in range(100):
+        Router([Tier({"needs_prep": (False, 0.7)}), Tier({"needs_prep": (False, 0.7)})], None, log=store).decide("event", q)
+    tier0, tier1 = stats(store)["drift"]
+    assert (tier0["tier"], tier1["tier"]) == (0, 1) and "escalation_rate" in tier0["flags"] and "escalation_rate" in tier1["flags"]
+    assert tier0["upstream"] == [] and tier1["upstream"] == [{"tier": 0, "reason": "drift"}]
+    # Recalibrating tier 0 changes what tier 1 is asked, until tier 1 is recalibrated too.
+    calibrate(store, 0.95, 30, tier=0)
+    tier0, tier1 = stats(store)["drift"]
+    assert tier0["flags"] == [] and tier1["upstream"] == [{"tier": 0, "reason": "recalibrated"}]
+    calibrate(store, 0.95, 30, tier=1)
+    assert stats(store)["drift"][1]["upstream"] == []
