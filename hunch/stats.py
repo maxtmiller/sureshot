@@ -119,6 +119,11 @@ def _drift(store, decisions, labels, min_samples, window, alpha, min_escalation_
     for (entry, name, _, big), rejected in zip(tests, _holm([p for _, _, p, _ in tests], alpha)):
         if rejected and big:
             entry["flags"].append(name)
+    # A tier only sees what the tiers before it passed down, so drift or a new threshold there changes its inputs.
+    for entry in entries:
+        before = [other for other in entries if other["key"] == entry["key"] and other["tier"] < entry["tier"]]
+        entry["upstream"] = ([{"tier": other["tier"], "reason": "drift"} for other in before if other["flags"]]
+                             + [{"tier": other["tier"], "reason": "recalibrated"} for other in before if other["calibrated_at"] > entry["calibrated_at"]])
     return entries
 
 
@@ -146,7 +151,9 @@ def stats(store, since=0.0, min_samples=30, window=500, alpha=0.01, min_escalati
     latest `window` alone ("recent", flagged as "recent_escalation_rate" and so on), so a change that starts long
     after calibrating is not hidden by the normal traffic before it. Snapshots from before the distribution check
     have no bins, so it is unchecked until the next calibration. A flag means: grade a fresh sample and calibrate
-    again.
+    again. "upstream" lists the earlier tiers of the same question that flagged drift in this report, or were
+    recalibrated after this tier was: a tier only sees what they pass down, so its flags may be theirs. Fix those
+    first.
 
     review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
 
