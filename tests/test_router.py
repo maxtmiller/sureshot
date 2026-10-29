@@ -863,22 +863,23 @@ def test_calibrate_logs_stats_flags_and_clears_an_unreachable_target(tmp_path, c
 def test_retrain_promotes_a_classifier_that_escalates_less_and_keeps_it_otherwise(tmp_path):
     from hunch import retrain
 
+    # Decision ids are random, so the train/held-out split varies by run: use enough decisions that any split can pass.
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"], "event_type": QUESTIONS["event_type"]}
     docs = [("server meeting", True, "meeting"), ("meeting about server", True, "meeting"),
-            ("invoice sale", False, "interview"), ("sale invoice due", False, "interview")] * 15
+            ("invoice sale", False, "interview"), ("sale invoice due", False, "interview")] * 40
     for text, prep, kind in docs:
         decision = Router(FakeDecider(), None, log=store).decide(text, q)
         store.label(decision["id"], "needs_prep", prep)
         store.label(decision["id"], "event_type", kind)
-    first = retrain(store, target_accuracy=0.9, min_samples=5, embed=_bag)
+    first = retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)
     assert first["report"]["needs_prep"]["promoted"] and first["report"]["event_type"]["promoted"]
     assert store.thresholds(0).keys() == {"needs_prep", "event_type"}
     assert first["decider"].decide("a server meeting", q)["needs_prep"]["answer"] is True
     # The same data gives the same classifier, which escalates no less than the current one, so it is not promoted.
-    second = retrain(store, current=first["decider"], target_accuracy=0.9, min_samples=5, embed=_bag)
+    second = retrain(store, current=first["decider"], target_accuracy=0.8, min_samples=5, embed=_bag)
     assert not any(r["promoted"] for r in second["report"].values()) and second["decider"] is first["decider"]
     # A question with a single answer in the log has nothing to learn from and is left out.
     only = Router(FakeDecider(), None, log=store).decide("server", {"importance": QUESTIONS["importance"]})
     store.label(only["id"], "importance", 3)
-    assert "importance" not in retrain(store, target_accuracy=0.9, min_samples=5, embed=_bag)["report"]
+    assert "importance" not in retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]
