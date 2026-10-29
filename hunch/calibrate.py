@@ -5,7 +5,10 @@ from math import ceil, sqrt
 log = logging.getLogger("hunch")
 
 
-def wilson_lower(p, n, z=1.28):
+Z = 1.28
+
+
+def wilson_lower(p, n, z=Z):
     """A conservative accuracy: the lower end of a one-sided 90% interval, so small samples don't pass by luck."""
     if n <= 0:
         return 0.0
@@ -14,25 +17,15 @@ def wilson_lower(p, n, z=1.28):
     return (centre - spread) / (1 + z * z / n)
 
 
-def summarize(samples, target_accuracy=0.95, min_samples=30):
-    """samples are (confidence, correct, weight). Returns the threshold (None if no confidence level has enough
-    evidence), System 1's accuracy overall and above that threshold, and the share of answers below it (what escalates).
-
-    When there is no threshold, "reason" says why: "not enough data" (fewer than min_samples graded answers),
-    "not enough evidence" (the target is not ruled out: at some threshold the optimistic end of the accuracy estimate
-    reaches it, so more graded answers may find one), or "target unreachable" (even the optimistic end is below it,
-    at every threshold that keeps a tenth of the answers). "best_target" is the highest target that
-    would have found a threshold on this data, judged as conservatively as the threshold is (None if there were too
-    few answers to judge any): try a target at or below it."""
-    samples = sorted(samples, key=lambda s: -s[0])
+def _scan(samples, target_accuracy, min_samples):
+    """One fixed-sequence pass over samples sorted by descending confidence: (the last certified slice as {threshold,
+    trusted_accuracy, escalation_rate} or None, the best optimistic accuracy of any slice keeping a tenth of the answers)."""
     total = sum(w for _, _, w in samples)
-    report = {"samples": len(samples), "threshold": None, "accuracy": None, "trusted_accuracy": None, "escalation_rate": None,
-              "reason": "not enough data", "best_target": None}
-    if not samples:
-        return report
-    report["accuracy"] = sum(w for _, ok, w in samples if ok) / total
     weight = right = weight_sq = 0.0
-    best_optimistic = None
+    best_optimistic, certified, stopped = None, None, False
+    # A slice shorter than `perfect` could not reach the target even with no errors, and testing it would end the sequence at once.
+    perfect = ceil(Z * Z * target_accuracy / (1 - target_accuracy)) if target_accuracy < 1 else float("inf")
+    start = max(min_samples, ceil(0.1 * len(samples)), perfect)
     for i, (confidence, ok, w) in enumerate(samples):
         weight, right, weight_sq = weight + w, right + w * ok, weight_sq + w * w
         if i + 1 < len(samples) and samples[i + 1][0] == confidence:
@@ -43,23 +36,61 @@ def summarize(samples, target_accuracy=0.95, min_samples=30):
         # A slice too thin to certify (under min_samples answers) still counts toward "could the target be reached", as
         # long as it keeps a tenth of the answers: a threshold that escalates nearly everything is not a way to reach it.
         best_optimistic = max(best_optimistic or 0.0, 1 - wilson_lower(1 - accuracy, weight * weight / weight_sq))
-        if i + 1 < min_samples:
+        if i + 1 < start or stopped:
             continue
-        lower = wilson_lower(accuracy, weight * weight / weight_sq)
-        report["best_target"] = max(report["best_target"] or 0.0, lower)
-        if lower >= target_accuracy:
-            report.update(threshold=confidence, trusted_accuracy=accuracy, escalation_rate=1 - weight / total)
-    if report["threshold"] is not None:
-        report["reason"] = None
+        if wilson_lower(accuracy, weight * weight / weight_sq) >= target_accuracy:
+            certified = {"threshold": confidence, "trusted_accuracy": accuracy, "escalation_rate": 1 - weight / total}
+        else:
+            stopped = True
+    return certified, best_optimistic
+
+
+def summarize(samples, target_accuracy=0.95, min_samples=30):
+    """samples are (confidence, correct, weight). Returns the threshold (None if no confidence level has enough
+    evidence), System 1's accuracy overall and above that threshold, and the share of answers below it (what escalates).
+
+    The threshold comes from a fixed-sequence test: it starts at the most confident answers (the first slice with at
+    least min_samples answers, a tenth of the total, and enough that a slice with no errors could pass), moves to ever
+    less confident slices, certifies each with the one-sided bound above, and stops at the first slice that fails. The
+    threshold is the last slice certified. Testing in an order fixed by the confidences alone is why the bound holds
+    for the threshold that was picked; taking the best of many separate tests claims the same bound but misses the
+    target up to twice as often.
+
+    When there is no threshold, "reason" says why: "not enough data" (fewer than min_samples graded answers),
+    "not enough evidence" (the target is not ruled out: at some threshold the optimistic end of the accuracy estimate
+    reaches it, so more graded answers may find one), or "target unreachable" (even the optimistic end is below it,
+    at every threshold that keeps a tenth of the answers). "best_target" is the highest target that
+    finds a threshold on this data, judged as conservatively as the threshold is (None if there were too
+    few answers to judge any): try a target at or below it."""
+    samples = sorted(samples, key=lambda s: -s[0])
+    report = {"samples": len(samples), "threshold": None, "accuracy": None, "trusted_accuracy": None, "escalation_rate": None,
+              "reason": "not enough data", "best_target": None}
+    if not samples:
+        return report
+    report["accuracy"] = sum(w for _, ok, w in samples if ok) / sum(w for _, _, w in samples)
+    certified, best_optimistic = _scan(samples, target_accuracy, min_samples)
+    if len(samples) >= min_samples:
+        low, high = (target_accuracy, 1.0) if certified else (0.0, target_accuracy)  # low finds a threshold, high does not
+        while high - low > 1e-4:
+            mid = (low + high) / 2
+            low, high = (mid, high) if _scan(samples, mid, min_samples)[0] else (low, mid)
+        report["best_target"] = low
+    if certified:
+        report.update(certified, reason=None)
     elif best_optimistic is not None and len(samples) >= min_samples:
         report["reason"] = "not enough evidence" if best_optimistic >= target_accuracy else "target unreachable"
     return report
 
 
-def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0):
+def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fail_closed=True):
     """Calibrates every question for one tier (the first by default; call it once per tier of a chain) from its graded
     answers in the log and, with save, stores the thresholds so a Router using this store applies them. Returns
-    {key: summarize(...)}; a key with threshold None keeps its current one."""
+    {key: summarize(...)}.
+
+    A key with threshold None keeps its current one, except when fail_closed is true and the data could not certify the
+    target ("not enough evidence" or "target unreachable"): the tier is then never trusted for that question, which
+    always passes to the next tier or System 2, until a later calibration finds a threshold. "not enough data" keeps
+    the default, so a question with few graded answers still works."""
     by_key = {}
     for row in store.labeled():
         if row["tier"] != tier:
@@ -71,7 +102,8 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0):
             best = f"; the best this data supports is {r['best_target']:.2f}" if r["best_target"] is not None else ""
             log.warning("no threshold for %r at tier %d: %s (target %.2f%s)", key, tier, r["reason"], target_accuracy, best)
     if save:
-        store.save_thresholds({key: r["threshold"] for key, r in report.items() if r["threshold"] is not None}, tier)
+        closed = {key: float("inf") for key, r in report.items() if fail_closed and r["reason"] in ("not enough evidence", "target unreachable")}
+        store.save_thresholds(closed | {key: r["threshold"] for key, r in report.items() if r["threshold"] is not None}, tier)
         store.save_issues({key: {"reason": r["reason"], "best_target": r["best_target"], "target": target_accuracy} for key, r in report.items() if r["threshold"] is None},
                           tier, list(report))
     return report

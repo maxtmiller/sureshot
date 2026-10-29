@@ -25,12 +25,12 @@ def calibrate_once(curve, n, target, rng):
 
 
 def test_threshold_meets_the_accuracy_target_about_as_often_as_claimed():
-    # A "calibrated" model (right with probability equal to its confidence), 300 graded answers, 90% target.
-    # The bound is one-sided at 90%, and picking the best of many thresholds makes it a little liberal: expect
-    # about 10 to 15% of calibrations to land under the target, and only by a hair.
+    # A "calibrated" model (right with probability equal to its confidence), 1000 graded answers, 90% target. The bound
+    # is one-sided at 90%, and the fixed-sequence test keeps it honest for the threshold it picks: about 10% of
+    # calibrations or fewer land under the target, and only by a hair.
     rng, curve = random.Random(1), lambda c: c
     cache, misses, shortfalls = {}, 0, []
-    thresholds = [calibrate_once(curve, 300, 0.9, rng) for _ in range(200)]
+    thresholds = [calibrate_once(curve, 1000, 0.9, rng) for _ in range(200)]
     assert sum(t is None for t in thresholds) <= 10
     for t in filter(None, thresholds):
         key = round(t, 3)
@@ -38,8 +38,19 @@ def test_threshold_meets_the_accuracy_target_about_as_often_as_claimed():
         misses += cache[key] < 0.9
         shortfalls.append(max(0, 0.9 - cache[key]))
     ran = len(shortfalls)
-    assert misses / ran <= 0.20
+    assert misses / ran <= 0.12
     assert sum(shortfalls) / ran < 0.01 and max(shortfalls) < 0.04
+
+
+def test_a_strong_model_gets_a_threshold_at_a_hard_target_with_few_answers():
+    # The sequence starts at the first slice that could pass with no errors, so a model that can reach 95% is certified
+    # in more than half of calibrations on 300 answers, and about as rarely too optimistic as the bound claims.
+    rng, curve = random.Random(6), lambda c: min(1.0, 0.4 + 1.2 * (c - 0.5))
+    thresholds = [t for t in (calibrate_once(curve, 300, 0.95, rng) for _ in range(200)) if t is not None]
+    assert len(thresholds) >= 100
+    cache = {}
+    misses = sum(cache.setdefault(round(t, 3), true_kept_accuracy(curve, round(t, 3))) < 0.95 for t in thresholds)
+    assert misses / len(thresholds) <= 0.12
 
 
 def test_it_abstains_when_the_target_cannot_be_reached():

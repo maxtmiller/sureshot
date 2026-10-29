@@ -841,7 +841,7 @@ def test_summarize_says_why_there_is_no_threshold():
 
 def test_calibrate_logs_stats_flags_and_clears_an_unreachable_target(tmp_path, caplog):
     import logging
-    from hunch import calibrate, stats
+    from hunch import Store, calibrate, stats
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -850,7 +850,16 @@ def test_calibrate_logs_stats_flags_and_clears_an_unreachable_target(tmp_path, c
         store.label(decision["id"], "needs_prep", i % 10 < 7)
     with caplog.at_level(logging.WARNING, logger="hunch"):
         report = calibrate(store, 0.9, 30)["needs_prep"]
-    assert report["reason"] == "target unreachable" and store.thresholds() == {}
+    assert report["reason"] == "target unreachable" and store.thresholds() == {"needs_prep": float("inf")}
+    # Failing closed: the tier is no longer trusted for this question, so even a confident answer escalates.
+    closed = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store).decide("event", q)
+    assert closed["escalated"] == ["needs_prep"] and closed["answers"]["needs_prep"]["source"] == "system2"
+    open_store = Store(tmp_path / "open.db")
+    for i in range(60):
+        decision = Router(Tier({"needs_prep": (True, 0.6 + (i % 4) / 10)}), None, log=open_store).decide("event", q)
+        open_store.label(decision["id"], "needs_prep", i % 10 < 7)
+    calibrate(open_store, 0.9, 30, fail_closed=False)
+    assert open_store.thresholds() == {}
     assert "no threshold for 'needs_prep' at tier 0: target unreachable" in caplog.text and "the best this data supports is 0." in caplog.text
     flagged, = stats(store)["uncalibrated"]
     assert (flagged["tier"], flagged["key"], flagged["reason"], flagged["target"]) == (0, "needs_prep", "target unreachable", 0.9)

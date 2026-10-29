@@ -316,25 +316,30 @@ evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/
   (their answers still come from System 1), and calibration weights those 10x, so the estimate covers every
   confidence level. Without audit or human labels the calibration only sees the unsure questions.
 - `threshold` is the lowest confidence at which System 1's accuracy, judged conservatively (the lower end of a 90%
-  interval), meets the target. It is `None` until there are enough graded answers (`min_samples`, default 30), and
-  that question keeps its current threshold. `escalation_rate` is the share of System 1's answers that would go to
+  interval), meets the target. It is found by a fixed-sequence test: from the most confident answers down to less
+  confident ones, each slice is certified in turn and the first failure stops the search, so the bound holds for the
+  threshold that was picked and not just for the best of many tries. It is `None` until there are enough graded
+  answers (`min_samples`, default 30). `escalation_rate` is the share of System 1's answers that would go to
   System 2 at that threshold, which is the cost of the target.
 - When there is no threshold, `reason` says why, and `best_target` is the highest target that *would* have found
   one on this data (judged as conservatively as the threshold; try a target at or below it):
-  - `"not enough data"`: fewer than `min_samples` graded answers. Grade more.
+  - `"not enough data"`: fewer than `min_samples` graded answers. Grade more. The question keeps its current threshold.
   - `"not enough evidence"`: the target is not ruled out, but the data cannot show it yet. Grade more.
   - `"target unreachable"`: even the optimistic end of the estimate is below the target at every threshold that keeps
-    a tenth of the answers. Lower the target, or change or drop this tier. The router keeps trusting the tier at its
-    default threshold, so its answers are only as accurate as `best_target` suggests, not as the target you asked for.
+    a tenth of the answers. Lower the target, or change or drop this tier.
 
-  Each failure is logged at warning level (logger `hunch`), `calibrate` returns the reason, and `stats(store)["uncalibrated"]`
-  lists the questions whose latest calibration found nothing, until a later one does.
-- How far to trust it, from simulations with a known accuracy curve (`tests/test_calibration_simulation.py`):
-  with 100 graded answers about 15% of calibrations land below the target (nominally 10%), with 300 or more about
-  8%, and the misses are small (under a point on average, rarely over two). With 100 answers it abstains (`None`)
-  35 to 45% of the time, and with 300 almost never. When the model cannot reach the target at all, it abstains in
-  over 97% of runs. The audit weights recover a tier's true accuracy to within about 3 points, where averaging the
-  graded rows is off by 6 to 10 points for a tier that only sees what earlier tiers passed down.
+  The last two fail closed: `calibrate` saves a threshold nothing can reach, so that tier is not trusted for the
+  question and everything passes to the next tier or System 2 until a later calibration finds a threshold. Pass
+  `fail_closed=False` to keep the current threshold instead. Each failure is logged at warning level (logger
+  `hunch`), `calibrate` returns the reason, and `stats(store)["uncalibrated"]` lists the questions whose latest
+  calibration found nothing, until a later one does.
+- How far to trust it, from simulations with a known accuracy curve (`tests/test_calibration_simulation.py`): for a
+  calibrated model with 1000 graded answers and a 90% target, about 6% of calibrations land below the target
+  (nominally 10%), and the misses are small (under a point on average). A model that can reach 95% gets a
+  threshold in more than half of calibrations on 300 answers, about 5% of them below the target. When the model
+  cannot reach the target at all, it abstains in over 97% of runs. The audit weights recover a tier's true accuracy to
+  within about 3 points, where averaging the graded rows is off by 6 to 10 points for a tier that only sees what
+  earlier tiers passed down.
 - `evaluate` replays the graded decisions through each candidate System 1 and returns the same report, so you can
   see which model meets the target with the least escalation. Decisions with images are skipped.
 - Thresholds passed to `decide` beat the calibrated ones, which beat `threshold`.
