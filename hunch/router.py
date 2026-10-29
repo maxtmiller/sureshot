@@ -24,7 +24,7 @@ def _transient(error):
 
 
 class Router:
-    def __init__(self, system1, system2=None, threshold=0.8, log=None, audit=0.0, retries=2, backoff=0.5, cache=None):
+    def __init__(self, system1, system2=None, threshold=0.8, log=None, audit=0.0, retries=2, backoff=0.5, cache=None, guard=None, guard_threshold=0.9):
         """system1 is one decider, or a list of them tried in order (say a trained classifier, then an LLM): a question
         stops at the first tier that is confident about it. A tier may answer only some of the questions it is given;
         the rest pass down. threshold is a number, or a list with one number per tier, since a classifier's 0.9 and
@@ -36,8 +36,14 @@ class Router:
 
         cache is a hunch.Cache: a model's answer to a question about a text is reused instead of asking again. It caches
         what the models said, not the decision, so changing a threshold or recalibrating needs no cache clearing. Only
-        models with an `identity` are cached."""
+        models with an `identity` are cached.
+
+        guard is a second System 1 (say a LocalDecider trained on your labels) that checks the answers the tiers were
+        confident about: where it disagrees with probability at least guard_threshold, the answer is treated as unsure
+        and escalates. A model's confidence says nothing about errors it is confidently wrong about; a model trained
+        on your own labels often knows them. It runs in-process with the router, and its errors are not caught."""
         self.system1, self.system2, self.threshold, self.log, self.audit = system1, system2, threshold, log, audit
+        self.guard, self.guard_threshold = guard, guard_threshold
         self.tiers = list(system1) if isinstance(system1, (list, tuple)) else [system1]
         self.tier_thresholds = list(threshold) if isinstance(threshold, (list, tuple)) else [threshold] * len(self.tiers)
         if len(self.tier_thresholds) != len(self.tiers):
@@ -111,7 +117,8 @@ class Router:
         and question, else the router's. Questions no tier is confident about are "unsure". They go to System 2 when
         escalate is true and a System 2 is set; their answer then comes from it, with the last tier's answer kept under
         "hunch". Otherwise the last tier's answer stands and the key is only listed in "unsure". An answer from a tier
-        has "source": "hunch" and "tier"; every answer lists what each tier said under "tried".
+        has "source": "hunch" and "tier"; every answer lists what each tier said under "tried". A confident answer the
+        guard disagreed with is unsure, and carries the guard's answer under "guard".
 
         "degraded" is None unless a model was down (after retries): a list of {"system": 1 or 2, "tier", "error"}. A
         tier that is down is skipped. If every tier is down, System 2 answers every question (each answer has
@@ -148,6 +155,14 @@ class Router:
                 else:
                     answers[key] = fast[key] | {"source": "hunch", "tier": i}
             remaining = unsure
+        vetoed = {}
+        if self.guard and answers:
+            checks = self._cached(self.guard, "decide", state, {key: questions[key] for key in answers}, images, tally)
+            vetoed = {key: check for key, check in checks.items()
+                      if check["answer"] != answers[key]["answer"] and check["confidence"] >= self.guard_threshold}
+            for key in vetoed:
+                del answers[key]
+            remaining = remaining + list(vetoed)
         system2_ms = None
         escalated = remaining if escalate and self.system2 and remaining else []
         audited = [key for key in answers if escalate and self.system2 and random.random() < self.audit]
@@ -174,7 +189,7 @@ class Router:
                 if key not in latest:
                     raise ValueError(f"no System 1 tier answered {key!r}, and there is no System 2 to escalate it to")
                 answers[key] = latest[key] | {"source": "hunch"}
-        answers = {key: answers[key] | {"tried": tried[key]} for key in questions}
+        answers = {key: answers[key] | {"tried": tried[key]} | ({"guard": vetoed[key]} if key in vetoed else {}) for key in questions}
         latency = {"system1": sum(tier_ms), "system2": system2_ms, "total": (time.perf_counter() - start) * 1000}
         result = {"answers": answers, "unsure": remaining, "escalated": escalated, "degraded": degraded or None, "cache": tally if self.cache else None,
                   "latency_ms": {k: v and round(v, 1) for k, v in latency.items()} | {"tiers": [round(ms, 1) for ms in tier_ms]}}

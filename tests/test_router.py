@@ -892,3 +892,24 @@ def test_retrain_promotes_a_classifier_that_escalates_less_and_keeps_it_otherwis
     only = Router(FakeDecider(), None, log=store).decide("server", {"importance": QUESTIONS["importance"]})
     store.label(only["id"], "importance", 3)
     assert "importance" not in retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]
+
+
+def test_guard_vetoes_a_confident_answer_it_confidently_disagrees_with(tmp_path):
+    fast = Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99), "event_type": ("meeting", 0.99)})
+    # Disagrees on needs_prep (sure), disagrees on event_type (not sure enough), agrees on importance.
+    guard = Tier({"needs_prep": (False, 0.95), "importance": (3, 0.99), "event_type": ("interview", 0.6)})
+    claude = FakeClaude()
+    result = Router(fast, claude, guard=guard, guard_threshold=0.9, log=_calibration_store(tmp_path)).decide("event", QUESTIONS)
+    a = result["answers"]
+    assert result["unsure"] == ["needs_prep"] and result["escalated"] == ["needs_prep"] and claude.asked == ["needs_prep"]
+    assert a["needs_prep"]["source"] == "system2" and a["needs_prep"]["hunch"]["answer"] is True and a["needs_prep"]["guard"]["answer"] is False
+    assert a["importance"]["source"] == "hunch" and a["event_type"]["source"] == "hunch" and "guard" not in a["event_type"]
+    assert guard.asked == [["needs_prep", "importance", "event_type"]]
+    # Without a System 2 the vetoed answer stands, flagged as unsure.
+    alone = Router(fast, None, guard=guard).decide("event", QUESTIONS)
+    assert alone["unsure"] == ["needs_prep"] and alone["answers"]["needs_prep"]["answer"] is True and alone["answers"]["needs_prep"]["guard"]["answer"] is False
+    # The guard only checks answers a tier was confident about; unsure ones already escalate.
+    unsure = Tier({"needs_prep": (True, 0.5), "importance": (3, 0.99), "event_type": ("meeting", 0.99)})
+    watcher = Tier({"needs_prep": (False, 0.99), "importance": (3, 0.99), "event_type": ("meeting", 0.99)})
+    Router(unsure, FakeClaude(), guard=watcher).decide("event", QUESTIONS)
+    assert watcher.asked == [["importance", "event_type"]]
