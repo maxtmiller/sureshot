@@ -21,7 +21,7 @@ def stats(store, since=0.0):
     tier took, and how often System 2 was called (and its mean time when it was).
 
     uncalibrated: the questions whose latest calibration found no threshold, with the reason and the best target
-    their data supports (see hunch.calibrate); until one is found the router trusts that tier at its default threshold.
+    their data supports (see hunch.calibrate); until one is found, a tier whose data could not certify the target is not trusted for that question (it escalates), and a tier with too little data keeps its default threshold.
 
     review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
 
