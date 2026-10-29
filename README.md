@@ -85,7 +85,7 @@ result["escalated"]            # ["urgency"]
   ```
 - `ChatReasoner(model, base_url, api_key)`: any OpenAI-compatible endpoint as System 2, constrained to the
   question schema with structured outputs.
-- No endpoint is assumed: pass `base_url`, or `provider=` one of `hunch.PROVIDERS` (`openai`, `gemini`, `mistral`,
+- No endpoint is assumed: pass `base_url`, or `provider=` one of `hunch.PROVIDERS` (`openai`, `xai`, `mistral`,
   `deepseek`, `groq`, `together`, `fireworks`, `openrouter`, `ollama`, `vllm`), which fills in the URL and reads the key
   from that provider's usual variable (`GROQ_API_KEY`...). It only saves typing. Services differ in whether they return
   the logprobs System 1 needs or support structured outputs for System 2, so run `ChatDecider(...).check()` first.
@@ -97,6 +97,31 @@ result["escalated"]            # ["urgency"]
   SDK is installed and a credential is set), `ClaudeCLI` (if installed), else `None`.
 - A custom System 1 or System 2 can raise `hunch.Outage` when its model is down or overloaded, so the router retries
   and falls back like it does for network errors. Any other exception is treated as a mistake and raised.
+- Vendor classes, so you can write `OpenAIDecider("gpt-4o-mini")` or `GroqReasoner("llama-3.3-70b-versatile")` and get
+  that vendor's endpoint and key variable without a URL. Each is the generic `Chat*` class with those defaults
+  (`api_key=` and `base_url=` override them):
+
+  | Vendor | System 1 | System 2 |
+  | --- | --- | --- |
+  | OpenAI | `OpenAIDecider` | `OpenAIReasoner` |
+  | Gemini (its own API) | `GeminiDecider` | `GeminiReasoner` |
+  | Mistral | `MistralDecider` | `MistralReasoner` |
+  | DeepSeek | `DeepSeekDecider` | `DeepSeekReasoner` (JSON mode, since it has no schemas) |
+  | xAI | `XAIDecider` | `XAIReasoner` |
+  | Groq | none (no logprobs) | `GroqReasoner` |
+  | Together AI | `TogetherDecider` | `TogetherReasoner` |
+  | Fireworks AI | `FireworksDecider` | `FireworksReasoner` |
+  | OpenRouter | `OpenRouterDecider` | `OpenRouterReasoner` |
+  | Ollama (local) | `OllamaDecider` | `OllamaReasoner` |
+  | Claude | none (no logprobs) | `ClaudeAPI`, `ClaudeCLI` |
+
+  What a vendor supports is up to the vendor. A System 1 needs a model that returns logprobs, which not every model or
+  service does (reasoning models such as OpenAI's GPT-5 and o-series are reported not to on chat completions, and
+  models that think first need it turned off, for Gemini `extra={"thinkingConfig": {"thinkingBudget": 0}}`). A System 2
+  needs structured outputs, or `json_mode="object"` for a service with only JSON mode. Run `.check()` on a decider
+  first. The Gemini adapters speak Gemini's own `generateContent` API (the key comes from `GEMINI_API_KEY` or
+  `GOOGLE_API_KEY`); they are tested against that API's documented request and response shapes, not yet against the live
+  service, and the vendor URLs and capabilities come from each vendor's public docs and community reports.
 - `decide(..., escalate=False)` keeps System 1's answers and only lists the unsure keys.
 
 ## Self-hosting System 1 with vLLM
@@ -365,9 +390,10 @@ switches models without code changes.
 
 | Variable | Values |
 | --- | --- |
-| `HUNCH_SYSTEM1` | `chat` (default, a `ChatDecider`) or `vllm` (a `VLLMDecider`, URL defaulting to `http://localhost:8000/v1`) |
+| `HUNCH_SYSTEM1` | `chat` (default, a `ChatDecider`), `vllm` (a `VLLMDecider`, URL defaulting to `http://localhost:8000/v1`) or `gemini` (a `GeminiDecider`) |
 | `HUNCH_SYSTEM1_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 1: model name (required), base URL, a provider name that fills in the URL and key (see below), key (optional for local servers). Give a URL or a provider; no endpoint is assumed |
-| `HUNCH_SYSTEM2` | `auto` (default: `chat` if `HUNCH_SYSTEM2_URL` is set, else the Claude API if installed and keyed, else the CLI), `claude`, `claude-cli`, `chat`, `none` |
+| `HUNCH_SYSTEM2` | `auto` (default: `chat` if `HUNCH_SYSTEM2_URL` or `_PROVIDER` is set, else the Claude API if installed and keyed, else the CLI), `claude`, `claude-cli`, `chat`, `gemini`, `none` |
+| `HUNCH_SYSTEM2_JSON_MODE` | `schema` (default) or `object` for a `chat` System 2 whose service only offers JSON mode |
 | `HUNCH_SYSTEM2_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | model for `claude` or `chat`; URL or provider and key for `chat` |
 | `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON object merged into every request body, e.g. `{"reasoning_effort": "none"}` |
 | `HUNCH_THRESHOLD` | confidence below which a question escalates (default 0.8) |

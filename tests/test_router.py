@@ -968,7 +968,7 @@ def test_providers_fill_in_the_url_and_key_but_nothing_is_assumed(monkeypatch):
         ChatDecider("m")
     with pytest.raises(ValueError, match="unknown provider"):
         ChatDecider("m", provider="nope")
-    assert {"openai", "gemini", "mistral", "deepseek", "groq", "together", "fireworks", "openrouter", "ollama", "vllm"} <= set(PROVIDERS)
+    assert {"openai", "xai", "mistral", "deepseek", "groq", "together", "fireworks", "openrouter", "ollama", "vllm"} <= set(PROVIDERS)
     # The environment can name a provider for either system, and that alone selects a chat System 2 under auto.
     monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
     monkeypatch.setenv("HUNCH_SYSTEM1_PROVIDER", "ollama")
@@ -977,3 +977,119 @@ def test_providers_fill_in_the_url_and_key_but_nothing_is_assumed(monkeypatch):
     router = router_from_env()
     assert router.system1.url.startswith("http://localhost:11434") and isinstance(router.system2, ChatReasoner)
     assert router.system2.url.startswith("https://openrouter.ai")
+
+
+def _gemini_logprobs(url, tops):
+    import httpx
+
+    step = {"candidates": [{"token": t, "logProbability": lp} for t, lp in tops]}
+    body = {"candidates": [{"content": {"parts": [{"text": tops[0][0]}]}, "logprobsResult": {"topCandidates": [step]}}]}
+    return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+
+
+def test_gemini_decider_reads_logprobs_from_its_own_api(monkeypatch):
+    import math
+    from hunch import GeminiDecider
+
+    seen = {}
+
+    def post(url, json, headers, timeout):
+        seen.update(url=url, json=json, headers=headers)
+        return _gemini_logprobs(url, [("yes", math.log(0.9)), ("no", math.log(0.1))])
+
+    monkeypatch.setattr(backends, "post", post)
+    monkeypatch.setenv("GEMINI_API_KEY", "g-key")
+    decider = GeminiDecider("gemini-2.5-flash", extra={"thinkingConfig": {"thinkingBudget": 0}})
+    answer = decider.decide("event", {"needs_prep": QUESTIONS["needs_prep"]}, images=["data:image/png;base64,AAAA"])["needs_prep"]
+    assert answer["answer"] is True and answer["confidence"] == pytest.approx(0.9)
+    assert seen["url"] == "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    assert seen["headers"] == {"x-goog-api-key": "g-key"}
+    config = seen["json"]["generationConfig"]
+    assert config["maxOutputTokens"] == 1 and config["responseLogprobs"] is True and config["logprobs"] == 20 and config["thinkingConfig"] == {"thinkingBudget": 0}
+    assert seen["json"]["contents"][0]["parts"][0] == {"inlineData": {"mimeType": "image/png", "data": "AAAA"}}
+    assert "<state>" in seen["json"]["contents"][0]["parts"][1]["text"]
+    # A model that thinks first puts nothing on the options, and the error says what to try.
+    monkeypatch.setattr(backends, "post", lambda url, json, headers, timeout: _gemini_logprobs(url, [("The", -0.1)]))
+    with pytest.raises(RuntimeError, match="thinkingBudget"):
+        decider.check()
+
+
+def test_gemini_reasoner_uses_a_gemini_schema_and_checks_the_reply(monkeypatch):
+    import json
+    import httpx
+    from hunch import GeminiReasoner
+
+    seen = {}
+    reply = {"needs_prep": {"answer": True, "reason": "r"}, "importance": {"answer": 3, "reason": "r"}, "event_type": {"answer": "interview", "reason": "r"}}
+
+    def respond(payload):
+        def post(url, json, headers, timeout):
+            seen.update(json=json, headers=headers)
+            return httpx.Response(200, json=payload, request=httpx.Request("POST", url))
+        return post
+
+    def candidate(text):
+        return {"candidates": [{"content": {"parts": [{"text": text}]}}]}
+
+    monkeypatch.setattr(backends, "post", respond(candidate(json.dumps(reply))))
+    system2 = GeminiReasoner("gemini-2.5-pro", api_key="k")
+    assert system2.answer("event", QUESTIONS) == reply
+    schema = seen["json"]["generationConfig"]["responseSchema"]
+    assert seen["headers"] == {"x-goog-api-key": "k"} and seen["json"]["generationConfig"]["responseMimeType"] == "application/json"
+    assert "additionalProperties" not in json.dumps(schema)
+    assert schema["properties"]["event_type"]["properties"]["answer"]["enum"] == ["meeting", "interview"]
+    assert schema["properties"]["importance"]["properties"]["answer"]["type"] == "integer"
+    bad = reply | {"importance": {"answer": 9, "reason": "r"}}
+    monkeypatch.setattr(backends, "post", respond(candidate(json.dumps(bad))))
+    with pytest.raises(RuntimeError, match="importance"):
+        system2.answer("event", QUESTIONS)
+    monkeypatch.setattr(backends, "post", respond({"promptFeedback": {"blockReason": "SAFETY"}}))
+    with pytest.raises(RuntimeError, match="SAFETY"):
+        system2.answer("event", QUESTIONS)
+
+
+def test_vendor_classes_carry_their_endpoint_and_quirks(monkeypatch):
+    import hunch
+    from hunch import ChatDecider, ChatReasoner, DeepSeekReasoner, GroqReasoner, OllamaDecider, OpenAIDecider, OpenAIReasoner
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+    decider = OpenAIDecider("gpt-4o-mini")
+    assert isinstance(decider, ChatDecider) and decider.url == "https://api.openai.com/v1/chat/completions"
+    assert decider.headers == {"Authorization": "Bearer sk-env"} and "OpenAI" in OpenAIDecider.__doc__
+    assert OpenAIDecider("m", api_key="k", base_url="http://proxy/v1").headers == {"Authorization": "Bearer k"}
+    assert OpenAIDecider("m", base_url="http://proxy/v1").url == "http://proxy/v1/chat/completions"
+    assert OllamaDecider("llama3.1:8b").url == "http://localhost:11434/v1/chat/completions" and OllamaDecider("m").headers == {}
+    assert isinstance(OpenAIReasoner("m"), ChatReasoner) and GroqReasoner("m", api_key="k").url.startswith("https://api.groq.com")
+    assert not hasattr(hunch, "GroqDecider")
+    assert OpenAIReasoner("m").identity != DeepSeekReasoner("m").identity
+    # DeepSeek only offers JSON mode, so the schema goes in the prompt and the reply is checked here.
+    seen = {}
+
+    def post(url, json, headers, timeout):
+        import httpx
+
+        seen.update(json)
+        content = '{"needs_prep": {"answer": "maybe", "reason": "r"}}'
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(backends, "post", post)
+    with pytest.raises(RuntimeError, match="needs_prep"):
+        DeepSeekReasoner("deepseek-chat", api_key="k").answer("event", {"needs_prep": QUESTIONS["needs_prep"]})
+    assert seen["response_format"] == {"type": "json_object"} and "JSON Schema" in seen["messages"][0]["content"]
+    for name in ("OpenAIDecider", "MistralReasoner", "XAIDecider", "TogetherDecider", "FireworksReasoner", "OpenRouterDecider", "GeminiDecider", "GeminiReasoner"):
+        assert name in hunch.__all__ and hasattr(hunch, name)
+    with pytest.raises(ValueError, match="json_mode"):
+        ChatReasoner("m", "http://x/v1", json_mode="bogus")
+
+
+def test_env_can_select_gemini(monkeypatch):
+    from hunch import GeminiDecider, GeminiReasoner, router_from_env
+
+    monkeypatch.setenv("HUNCH_SYSTEM1", "gemini")
+    monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("HUNCH_SYSTEM1_EXTRA", '{"thinkingConfig": {"thinkingBudget": 0}}')
+    monkeypatch.setenv("HUNCH_SYSTEM2", "gemini")
+    monkeypatch.setenv("HUNCH_SYSTEM2_MODEL", "gemini-2.5-pro")
+    router = router_from_env()
+    assert isinstance(router.system1, GeminiDecider) and router.system1.extra == {"thinkingConfig": {"thinkingBudget": 0}}
+    assert isinstance(router.system2, GeminiReasoner) and router.system2.url.endswith("models/gemini-2.5-pro:generateContent")

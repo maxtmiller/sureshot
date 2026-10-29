@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from hunch.local import LocalDecider
 from hunch.adapters.chat import ChatDecider, VLLMDecider, ChatReasoner
+from hunch.adapters.gemini import GeminiDecider, GeminiReasoner
 from hunch.cache import Cache
 from hunch.router import Router
 from hunch.store import Store
@@ -13,7 +14,13 @@ def _chat(cls, n, default_url=None):
     extra = json.loads(env.get(f"HUNCH_SYSTEM{n}_EXTRA", "{}"))
     url, key = env.get(f"HUNCH_SYSTEM{n}_URL", default_url), env.get(f"HUNCH_SYSTEM{n}_API_KEY")
     provider = env.get(f"HUNCH_SYSTEM{n}_PROVIDER")
-    return cls(env[f"HUNCH_SYSTEM{n}_MODEL"], url, key, extra=extra, **({"provider": provider} if provider else {}))
+    more = ({"provider": provider} if provider else {}) | ({"json_mode": env["HUNCH_SYSTEM2_JSON_MODE"]} if cls is ChatReasoner and env.get("HUNCH_SYSTEM2_JSON_MODE") else {})
+    return cls(env[f"HUNCH_SYSTEM{n}_MODEL"], url, key, extra=extra, **more)
+
+
+def _gemini(cls, n):
+    env = os.environ
+    return cls(env[f"HUNCH_SYSTEM{n}_MODEL"], env.get(f"HUNCH_SYSTEM{n}_API_KEY"), extra=json.loads(env.get(f"HUNCH_SYSTEM{n}_EXTRA", "{}")))
 
 
 def system1_from_env():
@@ -23,8 +30,10 @@ def system1_from_env():
         llm = _chat(ChatDecider, 1)
     elif kind == "vllm":
         llm = _chat(VLLMDecider, 1, "http://localhost:8000/v1")
+    elif kind == "gemini":
+        llm = _gemini(GeminiDecider, 1)
     else:
-        raise ValueError(f"HUNCH_SYSTEM1 must be chat or vllm, not {kind!r}")
+        raise ValueError(f"HUNCH_SYSTEM1 must be chat, vllm or gemini, not {kind!r}")
     return [LocalDecider.load(os.environ["HUNCH_LOCAL_MODEL"]), llm] if os.environ.get("HUNCH_LOCAL_MODEL") else llm
 
 
@@ -60,9 +69,11 @@ def system2_from_env():
         return ClaudeCLI(model)
     if kind == "chat":
         return _chat(ChatReasoner, 2)
+    if kind == "gemini":
+        return _gemini(GeminiReasoner, 2)
     if kind == "none":
         return None
-    raise ValueError(f"HUNCH_SYSTEM2 must be auto, claude, claude-cli, chat or none, not {kind!r}")
+    raise ValueError(f"HUNCH_SYSTEM2 must be auto, claude, claude-cli, chat, gemini or none, not {kind!r}")
 
 
 def router_from_env():

@@ -52,6 +52,8 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 | `hunch/adapters/base.py` | What adapters share: the pooled HTTP client, `Outage`, the prompts, `normalize` (the System 1 answer shape) |
 | `hunch/adapters/chat.py` | Chat-completions (OpenAI-format) endpoints: `ChatDecider`, `VLLMDecider`, `ChatReasoner` |
 | `hunch/adapters/http.py` | Any API you describe with two functions: `HTTPDecider`, `HTTPReasoner` |
+| `hunch/adapters/gemini.py` | Gemini through its own `generateContent` API (logprobs for System 1, `responseSchema` for System 2): `GeminiDecider`, `GeminiReasoner` |
+| `hunch/adapters/vendors.py` | One System 1 and System 2 class per major OpenAI-format vendor (OpenAI, Mistral, DeepSeek, xAI, Groq, Together, Fireworks, OpenRouter, Ollama) with its endpoint and key built in |
 | `hunch/adapters/anthropic.py` | Claude, which has its own protocol and SDK: `ClaudeAPI`, `ClaudeCLI` (optional install) |
 | `hunch/providers.py` | URLs and key variables of common OpenAI-compatible services, so `provider="groq"` replaces a URL |
 | `hunch/local.py` | `LocalDecider`: an in-process classifier (embeddings + logistic regression) used as a System 1 tier or a guard |
