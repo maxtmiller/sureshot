@@ -1,5 +1,5 @@
 # System 1 on your own GPU with vLLM, next to the hunch API. From the repo root:
-#   cp .env.example .env     # set HUNCH_SYSTEM1_MODEL, HUNCH_API_KEY and a System 2 key (e.g. ANTHROPIC_API_KEY)
+#   cp .env.example .env     # set HUNCH_SYSTEM1_MODEL, HUNCH_API_KEY and the System 2 settings (HUNCH_SYSTEM2_*, or a provider key such as ANTHROPIC_API_KEY)
 #   docker compose -f serve/docker-compose.yml up --build
 # Needs Docker with the NVIDIA container toolkit. The hunch API is then at http://localhost:8000/decide.
 services:

@@ -8,13 +8,12 @@ from hunch.cache import Cache
 from hunch.router import Router
 from hunch.store import Store
 
-DEFAULT_URL = "https://api.openai.com/v1"
-
-
-def _chat(cls, n, default_url=DEFAULT_URL):
+def _chat(cls, n, default_url=None):
     env = os.environ
     extra = json.loads(env.get(f"HUNCH_SYSTEM{n}_EXTRA", "{}"))
-    return cls(env[f"HUNCH_SYSTEM{n}_MODEL"], env.get(f"HUNCH_SYSTEM{n}_URL", default_url), env.get(f"HUNCH_SYSTEM{n}_API_KEY"), extra=extra)
+    url, key = env.get(f"HUNCH_SYSTEM{n}_URL", default_url), env.get(f"HUNCH_SYSTEM{n}_API_KEY")
+    provider = env.get(f"HUNCH_SYSTEM{n}_PROVIDER")
+    return cls(env[f"HUNCH_SYSTEM{n}_MODEL"], url, key, extra=extra, **({"provider": provider} if provider else {}))
 
 
 def system1_from_env():
@@ -30,9 +29,9 @@ def system1_from_env():
 
 
 def default_system2():
-    """The first System 2 that is configured: a chat model when HUNCH_SYSTEM2_URL is set, else Claude through the API
+    """The first System 2 that is configured: a chat model when HUNCH_SYSTEM2_URL or HUNCH_SYSTEM2_PROVIDER is set, else Claude through the API
     when the SDK is installed and a credential is set, else the local claude CLI if installed, else None."""
-    if os.environ.get("HUNCH_SYSTEM2_URL"):
+    if os.environ.get("HUNCH_SYSTEM2_URL") or os.environ.get("HUNCH_SYSTEM2_PROVIDER"):
         return _chat(ChatReasoner, 2)
     from importlib.util import find_spec
 

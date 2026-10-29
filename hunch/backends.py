@@ -3,6 +3,7 @@ import json
 import math
 from concurrent.futures import ThreadPoolExecutor
 import httpx
+from hunch.providers import endpoint
 from hunch.questions import answer_schema, describe
 
 # One client for every model call. httpx.post builds a client per call, which costs about 10 ms of CPU that holds the GIL
@@ -80,9 +81,11 @@ class ChatDecider:
     max_tokens=1, and the model's probability for each option's label (A, B... for choices, 0, 1... for score levels,
     yes/no for noul), renormalized over the options, is the calibrated confidence."""
 
-    def __init__(self, model, base_url="https://api.openai.com/v1", api_key=None, timeout=60, extra=None):
-        """extra is merged into every request body, e.g. {"reasoning_effort": "none"} for a model that would otherwise
-        spend its one token starting to think, which leaves no probability on the options."""
+    def __init__(self, model, base_url=None, api_key=None, timeout=60, extra=None, provider=None):
+        """Give base_url, or a provider name from hunch.providers (which fills in the URL and reads the key from its
+        usual environment variable). extra is merged into every request body, e.g. {"reasoning_effort": "none"} for a
+        model that would otherwise spend its one token starting to think, which leaves no probability on the options."""
+        base_url, api_key = endpoint(base_url, api_key, provider)
         self.model, self.url, self.timeout, self.extra = model, base_url.rstrip("/") + "/chat/completions", timeout, extra or {}
         self.identity = f"chat|{self.url}|{model}|{json.dumps(self.extra, sort_keys=True)}|v{PROMPT_VERSION}"
         self.headers = _bearer(api_key)
@@ -182,7 +185,8 @@ class ChatReasoner(HTTPReasoner):
     """Any OpenAI-compatible chat endpoint (OpenAI, vLLM, Ollama...) as System 2, constrained to the question schema
     with structured outputs."""
 
-    def __init__(self, model, base_url="https://api.openai.com/v1", api_key=None, timeout=600, extra=None):
+    def __init__(self, model, base_url=None, api_key=None, timeout=600, extra=None, provider=None):
+        base_url, api_key = endpoint(base_url, api_key, provider)
         super().__init__(
             base_url.rstrip("/") + "/chat/completions",
             lambda state, questions, images: {

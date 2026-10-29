@@ -172,7 +172,7 @@ def test_router_from_env(monkeypatch):
     from hunch import ChatDecider, ChatReasoner, router_from_env
 
     for k, v in {"HUNCH_SYSTEM1_MODEL": "a", "HUNCH_SYSTEM1_URL": "http://one/v1",
-                 "HUNCH_SYSTEM2": "chat", "HUNCH_SYSTEM2_MODEL": "b", "HUNCH_THRESHOLD": "0.9"}.items():
+                 "HUNCH_SYSTEM2": "chat", "HUNCH_SYSTEM2_MODEL": "b", "HUNCH_SYSTEM2_URL": "http://two/v1", "HUNCH_THRESHOLD": "0.9"}.items():
         monkeypatch.setenv(k, v)
     router = router_from_env()
     assert isinstance(router.system1, ChatDecider) and router.system1.url == "http://one/v1/chat/completions"
@@ -369,7 +369,11 @@ def test_vllm_decider_and_env_option(monkeypatch):
     assert local.extra == {"chat_template_kwargs": {"enable_thinking": False}, "top_p": 1}
     monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
     monkeypatch.setenv("HUNCH_SYSTEM2", "none")
+    with pytest.raises(ValueError, match="base_url"):
+        router_from_env()  # no OpenAI (or any) endpoint is assumed
+    monkeypatch.setenv("HUNCH_SYSTEM1_URL", "http://one/v1")
     assert type(router_from_env().system1) is ChatDecider
+    monkeypatch.delenv("HUNCH_SYSTEM1_URL")
     monkeypatch.setenv("HUNCH_SYSTEM1", "vllm")
     assert isinstance(router_from_env().system1, VLLMDecider) and router_from_env().system1.url.startswith("http://localhost:8000")
     monkeypatch.setenv("HUNCH_SYSTEM1_URL", "http://gpu-box:8000/v1")
@@ -808,6 +812,7 @@ def test_cache_hit_rate_in_stats_and_env_config(tmp_path, monkeypatch):
     assert stats(store)["cache"] == {"hits": 3, "misses": 1, "hit_rate": 0.75}
     assert stats(Store(tmp_path / "empty.db"))["cache"] is None
     monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
+    monkeypatch.setenv("HUNCH_SYSTEM1_URL", "http://one/v1")
     monkeypatch.setenv("HUNCH_SYSTEM2", "none")
     assert router_from_env().cache is None
     monkeypatch.setenv("HUNCH_CACHE", str(tmp_path / "env.db"))
@@ -947,3 +952,28 @@ def test_any_adapter_can_mark_an_outage_and_claude_errors_become_one():
 
     with pytest.raises(Outage):
         ClaudeAPI(client=Client()).answer("event", QUESTIONS)
+
+
+def test_providers_fill_in_the_url_and_key_but_nothing_is_assumed(monkeypatch):
+    from hunch import PROVIDERS, ChatDecider, ChatReasoner, router_from_env
+
+    monkeypatch.setenv("GROQ_API_KEY", "from-env")
+    groq = ChatDecider("m", provider="groq")
+    assert groq.url == "https://api.groq.com/openai/v1/chat/completions" and groq.headers == {"Authorization": "Bearer from-env"}
+    # An explicit URL or key wins over the provider's, and a local provider needs no key.
+    assert ChatDecider("m", "http://x/v1", provider="groq", api_key="k").headers == {"Authorization": "Bearer k"}
+    assert ChatDecider("m", "http://x/v1", provider="groq").url == "http://x/v1/chat/completions"
+    assert ChatReasoner("m", provider="ollama").url == "http://localhost:11434/v1/chat/completions"
+    with pytest.raises(ValueError, match="base_url"):
+        ChatDecider("m")
+    with pytest.raises(ValueError, match="unknown provider"):
+        ChatDecider("m", provider="nope")
+    assert {"openai", "gemini", "mistral", "deepseek", "groq", "together", "fireworks", "openrouter", "ollama", "vllm"} <= set(PROVIDERS)
+    # The environment can name a provider for either system, and that alone selects a chat System 2 under auto.
+    monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
+    monkeypatch.setenv("HUNCH_SYSTEM1_PROVIDER", "ollama")
+    monkeypatch.setenv("HUNCH_SYSTEM2_MODEL", "big")
+    monkeypatch.setenv("HUNCH_SYSTEM2_PROVIDER", "openrouter")
+    router = router_from_env()
+    assert router.system1.url.startswith("http://localhost:11434") and isinstance(router.system2, ChatReasoner)
+    assert router.system2.url.startswith("https://openrouter.ai")
