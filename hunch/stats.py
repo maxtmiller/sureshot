@@ -2,7 +2,7 @@
 import math
 import statistics
 from bisect import bisect_right
-from hunch.calibrate import histogram, tier_confidences
+from hunch.calibrate import histogram, tier_confidences, wilson_lower
 from hunch.review import REASONS, pending
 
 
@@ -23,6 +23,49 @@ def _normal_p(z):
 def _chi2_p(statistic, df):
     """The chance a chi-square with df degrees of freedom is at least statistic (the Wilson-Hilferty approximation)."""
     return _normal_p(((statistic / df) ** (1 / 3) - (1 - 2 / (9 * df))) / math.sqrt(2 / (9 * df)))
+
+
+def _sequence(successes, n, alpha):
+    """(low, high): a confidence sequence for a rate seen as `successes` out of n, which contains the true rate at
+    every n at once except alpha of the time, so it stays valid however often it is checked as answers come in.
+    It is Robbins' mixture of the likelihood over a uniform prior, bounded with Ville's inequality; unlike a bound
+    that ignores the spread (Hoeffding's), it is tight for rates near 0 or 1. n may be an effective count."""
+    mix = math.lgamma(1 + successes) + math.lgamma(1 + n - successes) - math.lgamma(2 + n)
+    bound = math.log(1 / alpha)
+
+    def outside(p):
+        return mix - successes * math.log(p) - (n - successes) * math.log(1 - p) >= bound
+
+    def edge(inside, out):
+        for _ in range(60):
+            mid = (inside + out) / 2
+            inside, out = (inside, mid) if outside(mid) else (mid, out)
+        return inside
+
+    best = successes / n
+    low = 0.0 if successes <= 0 or not outside(1e-12) else edge(best, 1e-12)
+    high = 1.0 if successes >= n or not outside(1 - 1e-12) else edge(best, 1 - 1e-12)
+    return low, high
+
+
+def _z(tail):
+    """The z a standard normal exceeds `tail` of the time."""
+    low, high = 0.0, 40.0
+    for _ in range(80):
+        mid = (low + high) / 2
+        low, high = (mid, high) if _normal_p(mid) > tail else (low, mid)
+    return high
+
+
+def _rate_moved(now, n, before, n_before, alpha):
+    """Whether a rate seen over n answers since calibration and one seen over n_before at calibration cannot be the
+    same rate. The calibration's answers are a fixed sample, so a one-off (Wilson) interval holds for them; the
+    answers since keep coming, so theirs is a confidence sequence. Each gets half of alpha, and the rate moved when
+    the two do not overlap."""
+    z = _z(alpha / 4)
+    low_before, high_before = wilson_lower(before, n_before, z), 1 - wilson_lower(1 - before, n_before, z)
+    low, high = _sequence(now * n, n, alpha / 2)
+    return high < low_before or high_before < low
 
 
 def _holm(p_values, alpha):
@@ -55,12 +98,12 @@ def _distribution(histogram, confidences):
     return (_chi2_p(statistic, bins - 1) if bins > 1 else 1.0), change
 
 
-def _checks(c, rows, labels, min_samples, min_escalation_change, min_distribution_change):
-    """The drift checks of one calibration snapshot over some logged decisions: what they measured, the tests that
-    could run as (name, p-value, whether the change is big enough to act on), and the names of those that could not."""
+def _measure(c, rows, labels):
+    """What the drift checks look at in some logged decisions: the tier's confidences, whether each was passed on
+    (below the threshold, or by what the tier did when there is none), and its audited answers' accuracy."""
     confidences = tier_confidences(rows, c["tier"], c["key"])
     weight = right = weight_sq = 0.0
-    graded = 0
+    graded = humans = 0
     for decision_id, _, _, result in rows:
         answer = result["answers"].get(c["key"])
         # Only audited answers: the audit is a random sample of the confident ones, while a label on an unaudited
@@ -70,33 +113,86 @@ def _checks(c, rows, labels, min_samples, min_escalation_change, min_distributio
         human = labels.get((decision_id, c["key"]))
         truth = human if human is not None else answer["audit"]["answer"]
         w = 1 / result["audit_rate"]
+        humans += human is not None
         graded, weight, right, weight_sq = graded + 1, weight + w, right + w * (answer["answer"] == truth), weight_sq + w * w
-    tests, unchecked = [], []
     shares = [x < c["threshold"] for x in confidences] if c["threshold"] is not None else _passed_down(rows, c["tier"], c["key"])
-    now = sum(shares) / len(shares) if shares else None
-    expected, before = c["escalation_rate"], c["answers"]
-    if now is not None and expected is not None and len(confidences) >= min_samples:
-        pooled = (now * len(confidences) + expected * before) / (len(confidences) + before)
-        spread = math.sqrt(pooled * (1 - pooled) * (1 / len(confidences) + 1 / before))
-        p = 2 * _normal_p(abs(now - expected) / spread) if spread else 1.0
-        tests.append(("escalation_rate", p, abs(now - expected) >= min_escalation_change))
+    bins = None
+    if c["histogram"] and confidences:
+        bins = [0] * len(c["histogram"]["counts"])
+        for confidence in confidences:
+            bins[bisect_right(c["histogram"]["edges"], confidence)] += 1
+    return {"confidences": confidences, "shares": shares, "bins": bins, "graded": graded, "humans": humans,
+            "weight": weight, "right": right, "weight_sq": weight_sq}
+
+
+def _summary(m):
+    now = sum(m["shares"]) / len(m["shares"]) if m["shares"] else None
+    accuracy = m["right"] / m["weight"] if m["weight"] else None
+    return now, accuracy, ({"graded": m["graded"], "human": m["humans"], "accuracy": accuracy} if m["graded"] else None)
+
+
+def _change(c, m):
+    counts = c["histogram"]["counts"]
+    n, k = sum(counts), len(m["confidences"])
+    return sum(abs(before / n - after / k) for before, after in zip(counts, m["bins"])) / 2
+
+
+def _cumulative(c, m, min_samples, budget, min_escalation_change, min_distribution_change):
+    """The checks on everything since the calibration: (flags, unchecked). Each gets `budget` and its bound holds at
+    every sample size, so checking often does not add false alarms."""
+    flags, unchecked = [], []
+    now, accuracy, _ = _summary(m)
+    n = len(m["confidences"])
+    if now is not None and c["escalation_rate"] is not None and n >= min_samples:
+        if (abs(now - c["escalation_rate"]) >= min_escalation_change
+                and _rate_moved(now, len(m["shares"]), c["escalation_rate"], c["answers"], budget)):
+            flags.append("escalation_rate")
     else:
         unchecked.append("escalation_rate")
-    change = None
-    if c["histogram"] and len(confidences) >= min_samples:
-        p, change = _distribution(c["histogram"], confidences)
-        tests.append(("distribution", p, change >= min_distribution_change))
+    if m["bins"] is not None and n >= min_samples:
+        counts, total = c["histogram"]["counts"], sum(c["histogram"]["counts"])
+        # Each bin is a rate of its own, and they share the check's budget.
+        moved = any(_rate_moved(after / n, n, before / total, total, budget / len(counts)) for before, after in zip(counts, m["bins"]))
+        if moved and _change(c, m) >= min_distribution_change:
+            flags.append("distribution")
     else:
         unchecked.append("distribution")
-    accuracy = right / weight if weight else None
-    if c["target"] is not None and graded >= min_samples:
-        spread = math.sqrt(c["target"] * (1 - c["target"]) * weight_sq) / weight
-        p = _normal_p((c["target"] - accuracy) / spread) if spread else float(accuracy >= c["target"])
-        tests.append(("accuracy", p, True))  # below the target is already worth acting on, so there is no minimum
+    if c["target"] is not None and m["graded"] >= min_samples:
+        # Below the target is already worth acting on, so there is no minimum change.
+        effective = m["weight"] ** 2 / m["weight_sq"]  # audit weights vary only with the audit rate, so this is close
+        if _sequence(accuracy * effective, effective, budget)[1] < c["target"]:
+            flags.append("accuracy")
     else:
         unchecked.append("accuracy")
-    return {"answers": len(confidences), "escalation_rate": now, "distribution_change": change,
-            "accuracy": {"graded": graded, "accuracy": accuracy} if graded else None, "tests": tests, "unchecked": unchecked}
+    return flags, unchecked
+
+
+def _recent(c, m, min_samples, min_escalation_change, min_distribution_change):
+    """The checks on the latest window: [(name, p-value, whether the change is big enough)] and unchecked. A window
+    drops old answers as new ones come, so these hold per report only (Holm's method shares the report's budget)."""
+    tests, unchecked = [], []
+    now, accuracy, _ = _summary(m)
+    n, before = len(m["confidences"]), c["answers"]
+    if now is not None and c["escalation_rate"] is not None and n >= min_samples:
+        k = len(m["shares"])
+        pooled = (now * k + c["escalation_rate"] * before) / (k + before)
+        spread = math.sqrt(pooled * (1 - pooled) * (1 / k + 1 / before))
+        p = 2 * _normal_p(abs(now - c["escalation_rate"]) / spread) if spread else 1.0
+        tests.append(("escalation_rate", p, abs(now - c["escalation_rate"]) >= min_escalation_change))
+    else:
+        unchecked.append("escalation_rate")
+    if m["bins"] is not None and n >= min_samples:
+        p, _ = _distribution(c["histogram"], m["confidences"])
+        tests.append(("distribution", p, _change(c, m) >= min_distribution_change))
+    else:
+        unchecked.append("distribution")
+    if c["target"] is not None and m["graded"] >= min_samples:
+        spread = math.sqrt(c["target"] * (1 - c["target"]) * m["weight_sq"]) / m["weight"]
+        p = _normal_p((c["target"] - accuracy) / spread) if spread else float(accuracy >= c["target"])
+        tests.append(("accuracy", p, True))
+    else:
+        unchecked.append("accuracy")
+    return tests, unchecked
 
 
 def _passed_down(rows, tier, key):
@@ -138,25 +234,32 @@ def _baselines(store, decisions, min_samples):
 
 
 def _drift(store, decisions, labels, min_samples, window, alpha, min_escalation_change, min_distribution_change):
-    entries, tests = [], []
     snapshots = [(c, _answered(decisions, c["tier"], c["key"], c["ts"])) for c in store.calibrations()] + _baselines(store, decisions, min_samples)
+    # Half the budget for the cumulative checks, split evenly (a split that holds under repeated checking, unlike
+    # Holm's); half for the recent windows, split with Holm's method within this report.
+    budget = alpha / 2 / max(1, 3 * len(snapshots))
+    entries, tests = [], []
     for c, after in snapshots:
-        total = _checks(c, after, labels, min_samples, min_escalation_change, min_distribution_change)
-        # The same checks on the latest answers alone, so a change long after calibrating is not diluted by the
-        # normal traffic before it. Only once there are more answers than the window, or it would repeat the above.
-        recent = _checks(c, after[-window:], labels, min_samples, min_escalation_change, min_distribution_change) if window and len(after) > window else None
+        total = _measure(c, after, labels)
+        now, _, accuracy = _summary(total)
+        flags, unchecked = _cumulative(c, total, min_samples, budget, min_escalation_change, min_distribution_change)
+        # The latest answers alone, so a change long after calibrating is not diluted by the normal traffic before
+        # it. Only once there are more answers than the window, or it would repeat the above.
+        recent = _measure(c, after[-window:], labels) if window and len(after) > window else None
         entry = {"tier": c["tier"], "key": c["key"], "calibrated_at": c["ts"], "threshold": c["threshold"], "target": c["target"],
                  "baseline": {"answers": c["answers"]} if c["ts"] is None else None,
-                 "answers_since": total["answers"], "escalation_rate": {"at_calibration": c["escalation_rate"], "since": total["escalation_rate"]},
-                 "distribution_change": total["distribution_change"], "accuracy_since": total["accuracy"],
-                 "recent": recent and {"window": window, "escalation_rate": recent["escalation_rate"],
-                                       "distribution_change": recent["distribution_change"], "accuracy": recent["accuracy"]},
-                 "flags": [], "unchecked": total["unchecked"] + [f"recent_{name}" for name in (recent or {}).get("unchecked", [])]}
+                 "answers_since": len(total["confidences"]), "escalation_rate": {"at_calibration": c["escalation_rate"], "since": now},
+                 "distribution_change": _change(c, total) if total["bins"] is not None else None, "accuracy_since": accuracy,
+                 "recent": None, "flags": flags, "unchecked": unchecked}
+        if recent:
+            recent_now, _, recent_accuracy = _summary(recent)
+            entry["recent"] = {"window": window, "escalation_rate": recent_now,
+                               "distribution_change": _change(c, recent) if recent["bins"] is not None else None, "accuracy": recent_accuracy}
+            recent_tests, recent_unchecked = _recent(c, recent, min_samples, min_escalation_change, min_distribution_change)
+            entry["unchecked"] = unchecked + [f"recent_{name}" for name in recent_unchecked]
+            tests += [(entry, f"recent_{name}", p, big) for name, p, big in recent_tests]
         entries.append(entry)
-        tests += [(entry, name, p, big) for name, p, big in total["tests"]]
-        tests += [(entry, f"recent_{name}", p, big) for name, p, big in (recent or {}).get("tests", [])]
-    # One false alarm budget for the whole report, however many questions, tiers and checks it covers.
-    for (entry, name, _, big), rejected in zip(tests, _holm([p for _, _, p, _ in tests], alpha)):
+    for (entry, name, _, big), rejected in zip(tests, _holm([p for _, _, p, _ in tests], alpha / 2)):
         if rejected and big:
             entry["flags"].append(name)
     entries.sort(key=lambda entry: (entry["tier"], entry["key"]))
@@ -184,18 +287,24 @@ def stats(store, since=0.0, min_samples=30, window=500, alpha=0.01, min_escalati
     below the threshold), "distribution" (how its confidences spread over five quantile bins, which catches a slide
     that stays above the threshold) and "accuracy" (its audited answers, graded by your label where there is one,
     else by the audit, are below the target). Labels on unaudited answers are left out, since how they were picked
-    is unknown. A flag needs both evidence and size: every check in the report shares one false alarm budget, alpha
-    (split with Holm's method, so the whole report has about that chance of any false flag), the escalation rate
+    is unknown. A flag needs both evidence and size. Half of alpha goes to the checks on everything since the
+    calibration, split evenly, with confidence sequences (and a one-off interval for the calibration's own fixed
+    sample), which hold at every sample size at once: however often you call stats,
+    they raise a false flag at most that often, ever. The other half goes to the recent windows (below), split with
+    Holm's method within each report. The escalation rate
     must move at least min_escalation_change, and the bins must differ by at least min_distribution_change (the
     share of answers that would have to change bins). Each check needs min_samples answers (audited ones, for
     accuracy) since the calibration; "unchecked" names the checks that could not run yet, so no flag is not mistaken
     for no drift. Once a question has more than `window` answers since the calibration, the checks also run on the
     latest `window` alone ("recent", flagged as "recent_escalation_rate" and so on), so a change that starts long
-    after calibrating is not hidden by the normal traffic before it. Snapshots from before the distribution check
+    after calibrating is not hidden by the normal traffic before it. A window keeps taking in new answers, so its
+    budget holds per report: polling often still adds up false "recent_" flags over time, so treat them as an early
+    hint and confirm by grading a sample. Snapshots from before the distribution check
     have no bins, so it is unchecked until the next calibration. A flag means: grade a fresh sample and calibrate
     again. "upstream" lists the earlier tiers of the same question that flagged drift in this report, or were
     recalibrated after this tier was: a tier only sees what they pass down, so its flags may be theirs. Fix those
-    first. A question and tier with no snapshot from calibrate (never calibrated, on a per-call threshold, or reset
+    first. In each accuracy, "human" is how many of the graded answers have your label; the rest are graded by
+    System 2's audit answer, so the accuracy is partly agreement with System 2. A question and tier with no snapshot from calibrate (never calibrated, on a per-call threshold, or reset
     when calibrate failed closed or retrain replaced the classifier) is checked against a baseline of its first
     min_samples answers since then, in this report's range ("baseline" instead of "calibrated_at"): the escalation
     rate is then the share the tier passed on, and accuracy is unchecked, since there is no target.
