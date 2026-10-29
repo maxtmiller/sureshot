@@ -162,11 +162,12 @@ If you install vLLM with pip instead of using the official image, it may need `n
 
 Each call to System 1 or System 2 is retried on network errors and on HTTP 408, 429 and 5xx (`Router(retries=2,
 backoff=0.5)` waits 0.5 s, then 1 s). If it still fails, the result says so in `degraded` (`None` when all is well,
-else a list of `{"system": 1 or 2, "tier", "error"}`):
+else a list of `{"system": 1, 2 or "guard", "tier", "error"}`):
 
 - **A System 1 tier down:** it is skipped and its questions pass to the next tier. If every tier is down, System 2
   answers every question, and each answer has `"hunch": None`.
 - **System 2 down:** the last tier's answers stand, `escalated` is empty, and the unsure keys stay in `unsure`.
+- **The guard down** (say a second LLM used as `guard=`): nothing is vetoed, so the confident answers stand.
 - **Everything down, or no System 2 to fall back to:** the error is raised.
 
 Only outages fall back. A bad key or an unknown model (401, 404...) raises, so a misconfiguration is not hidden by
@@ -233,6 +234,13 @@ local.save("local.joblib")                     # LocalDecider.load("local.joblib
   corrected labels, `gpt-4o-mini` had 9 confident errors (accuracy 0.97, not 0.91), and the guard caught 0 to 2 of
   them while raising 5 to 35 false alarms. Most of what it had "caught" was label noise. The review favors
   `gpt-4o-mini`, since a label changed only when the two models agreed, so treat both sets of numbers as bounds.
+- The guard can be any System 1, including a second LLM: `guard=ChatDecider("gpt-4.1-mini", provider="openai")`.
+  On 1,178 held-out items from three public datasets (ag_news, rotten_tomatoes, enron_spam), with labels reviewed
+  the same way, `gpt-4o-mini` was confident (0.95 or more) on 97% of them and wrong on 56 of those. At about 3% extra
+  escalation, a second LLM disagreeing at 0.9 caught 24 (13 false alarms) and the local guard 14 (20 false alarms).
+  The local guard did well on topics and poorly on sentiment (1 of 16). Asking `gpt-4o-mini` to check its own answer
+  caught 7 to 12 with 28 to 43 false alarms, and per-cluster thresholds caught 4 with 65. A second LLM costs a call
+  for every confident answer, while the local guard runs in-process. A guard that is down vetoes nothing.
 - `threshold` can be a list with one number per tier, and each tier has its own calibrated thresholds, since a
   classifier's 0.9 and an LLM's 0.9 mean different things. Calibrate each tier: `calibrate(store, tier=0)`,
   `calibrate(store, tier=1)`.

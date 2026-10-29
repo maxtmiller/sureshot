@@ -120,11 +120,11 @@ class Router:
         has "source": "hunch" and "tier"; every answer lists what each tier said under "tried". A confident answer the
         guard disagreed with is unsure, and carries the guard's answer under "guard".
 
-        "degraded" is None unless a model was down (after retries): a list of {"system": 1 or 2, "tier", "error"}. A
-        tier that is down is skipped. If every tier is down, System 2 answers every question (each answer has
-        "hunch": None). If System 2 is down, the last tier's answers stand and "escalated" is empty. Only outages fall
-        back this way: a bad key or an unknown model raises, so a misconfiguration is not hidden by silently using
-        another model."""
+        "degraded" is None unless a model was down (after retries): a list of {"system": 1, 2 or "guard", "tier",
+        "error"}. A tier that is down is skipped. If every tier is down, System 2 answers every question (each answer
+        has "hunch": None). If System 2 is down, the last tier's answers stand and "escalated" is empty. If the guard
+        is down, nothing is vetoed. Only outages fall back this way: a bad key or an unknown model raises, so a
+        misconfiguration is not hidden by silently using another model."""
         validate(questions)
         thresholds = thresholds or {}
         start = time.perf_counter()
@@ -157,7 +157,13 @@ class Router:
             remaining = unsure
         vetoed = {}
         if self.guard and answers:
-            checks = self._cached(self.guard, "decide", state, {key: questions[key] for key in answers}, images, tally)
+            try:
+                checks = self._cached(self.guard, "decide", state, {key: questions[key] for key in answers}, images, tally)
+            except Exception as e:
+                if not _transient(e):
+                    raise
+                degraded.append({"system": "guard", "tier": None, "error": repr(e)})
+                checks = {}
             vetoed = {key: check for key, check in checks.items()
                       if check["answer"] != answers[key]["answer"] and check["confidence"] >= self.guard_threshold}
             for key in vetoed:
