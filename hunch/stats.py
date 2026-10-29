@@ -26,15 +26,15 @@ def _drift(store, decisions, labels, min_samples):
         graded = 0
         for decision_id, _, _, result in after:
             answer = result["answers"].get(c["key"])
-            if not answer or answer["source"] == "system2" or answer.get("tier", 0) != c["tier"] or answer["confidence"] < c["threshold"]:
+            # Only audited answers: the audit is a random sample of the confident ones, while a label on an unaudited
+            # answer was picked some other way (often because it looked wrong). A label still overrides the audit's answer.
+            if not answer or answer["source"] == "system2" or answer.get("tier", 0) != c["tier"] or "audit" not in answer:
                 continue
             human = labels.get((decision_id, c["key"]))
-            truth = human if human is not None else answer.get("audit", {}).get("answer")
-            if truth is None:
-                continue
-            w = 1.0 if human is not None else 1 / result["audit_rate"]
+            truth = human if human is not None else answer["audit"]["answer"]
+            w = 1 / result["audit_rate"]
             graded, weight, right, weight_sq = graded + 1, weight + w, right + w * (answer["answer"] == truth), weight_sq + w * w
-        flags = []
+        flags, unchecked = [], []
         now = sum(x < c["threshold"] for x in confidences) / len(confidences) if confidences else None
         expected, before = c["escalation_rate"], c["answers"]
         if now is not None and expected is not None and len(confidences) >= min_samples:
@@ -42,12 +42,17 @@ def _drift(store, decisions, labels, min_samples):
             spread = math.sqrt(pooled * (1 - pooled) * (1 / len(confidences) + 1 / before))
             if spread and abs(now - expected) / spread >= DRIFT_Z:
                 flags.append("escalation_rate")
+        else:
+            unchecked.append("escalation_rate")
         accuracy = right / weight if weight else None
-        if accuracy is not None and graded >= min_samples and 1 - wilson_lower(1 - accuracy, weight * weight / weight_sq) < c["target"]:
-            flags.append("accuracy")
+        if graded >= min_samples:
+            if 1 - wilson_lower(1 - accuracy, weight * weight / weight_sq) < c["target"]:
+                flags.append("accuracy")
+        else:
+            unchecked.append("accuracy")
         report.append({"tier": c["tier"], "key": c["key"], "calibrated_at": c["ts"], "threshold": c["threshold"], "target": c["target"],
                        "answers_since": len(confidences), "escalation_rate": {"at_calibration": expected, "since": now},
-                       "accuracy_since": {"graded": graded, "accuracy": accuracy} if graded else None, "flags": flags})
+                       "accuracy_since": {"graded": graded, "accuracy": accuracy} if graded else None, "flags": flags, "unchecked": unchecked})
     return report
 
 
@@ -64,9 +69,11 @@ def stats(store, since=0.0, min_samples=30):
     drift: for each question and tier with a calibrated threshold, how its answers since that calibration (and since
     `since`) compare with it, and "flags" naming what has moved: "escalation_rate" when the share of the tier's
     answers below the threshold differs from the share at calibration by more than chance would explain (the
-    confidence distribution moved, say the inputs changed), and "accuracy" when the graded answers it kept (your
-    labels, else audits, weighted as below) are below the target even at the optimistic end of a 90% interval.
-    Either needs min_samples answers since the calibration. A flag means: grade a fresh sample and calibrate again.
+    confidence distribution moved, say the inputs changed), and "accuracy" when the audited answers it kept (graded
+    by your label where there is one, else by the audit) are below the target even at the optimistic end of a 90%
+    interval. Labels on unaudited answers are left out, since how they were picked is unknown. Each check needs
+    min_samples answers (audited ones, for accuracy) since the calibration; "unchecked" names the checks that could
+    not run yet, so no flag is not mistaken for no drift. A flag means: grade a fresh sample and calibrate again.
 
     review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
 
