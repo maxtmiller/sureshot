@@ -233,7 +233,7 @@ router.test("golden.jsonl", questions=questions, thresholds={"urgency": 0.7})   
   text and the images. A different model, `extra`, URL, question wording or text is a different key. An API key is
   not part of it. A trained `LocalDecider` has an identity that changes when it is retrained. `ClaudeAPI`, `ChatDecider`,
   `VLLMDecider` and `ChatReasoner` have one; give `HTTPDecider` or `HTTPReasoner` an `identity=` string (change it when
-  you change the model or your functions) or they are not cached. Bump `PROMPT_VERSION` in `hunch/backends.py` when a
+  you change the model or your functions) or they are not cached. Bump `PROMPT_VERSION` in `hunch/adapters/base.py` when a
   prompt changes.
 - System 2 is cached per question too, so a repeat call asks it only about the questions it has not answered.
 - A cached repeat is still a logged decision, so a repeated item counts again in `calibrate` and `LocalDecider.train`.

@@ -162,7 +162,7 @@ def test_http_server_handles_concurrent_clients(tmp_path, monkeypatch):
 def test_model_calls_share_one_connection_pool(monkeypatch):
     # httpx.post builds a client per call, which holds the GIL for ~10 ms and capped a process near 30 model calls a
     # second. Every backend must go through the shared client instead.
-    import hunch.backends as backends
+    import hunch.adapters.base as backends
     from hunch import ChatDecider
 
     seen = []

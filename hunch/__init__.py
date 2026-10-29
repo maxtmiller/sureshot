@@ -1,7 +1,9 @@
-from hunch.backends import HTTPDecider, ChatDecider, VLLMDecider, HTTPReasoner, ChatReasoner, Outage, prompt, SYSTEM_PROMPT
+from hunch.adapters.anthropic import ClaudeAPI, ClaudeCLI
+from hunch.adapters.base import Outage, prompt, SYSTEM_PROMPT
+from hunch.adapters.chat import ChatDecider, VLLMDecider, ChatReasoner
+from hunch.adapters.http import HTTPDecider, HTTPReasoner
 from hunch.cache import Cache
 from hunch.calibrate import calibrate
-from hunch.claude import ClaudeAPI, ClaudeCLI
 from hunch.config import default_system2, router_from_env
 from hunch.evaluate import evaluate
 from hunch.learn import retrain

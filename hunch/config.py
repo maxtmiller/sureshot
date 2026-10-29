@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 from hunch.local import LocalDecider
-from hunch.backends import ChatDecider, VLLMDecider, ChatReasoner
+from hunch.adapters.chat import ChatDecider, VLLMDecider, ChatReasoner
 from hunch.cache import Cache
 from hunch.router import Router
 from hunch.store import Store
@@ -36,10 +36,10 @@ def default_system2():
     from importlib.util import find_spec
 
     if find_spec("anthropic") and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
-        from hunch.claude import ClaudeAPI
+        from hunch.adapters.anthropic import ClaudeAPI
 
         return ClaudeAPI()
-    from hunch.claude import ClaudeCLI
+    from hunch.adapters.anthropic import ClaudeCLI
 
     cli = ClaudeCLI()
     return cli if Path(cli.command).exists() else None
@@ -51,11 +51,11 @@ def system2_from_env():
     if kind == "auto":
         return default_system2()
     if kind == "claude":
-        from hunch.claude import ClaudeAPI
+        from hunch.adapters.anthropic import ClaudeAPI
 
         return ClaudeAPI(**({"model": model} if model else {}))
     if kind == "claude-cli":
-        from hunch.claude import ClaudeCLI
+        from hunch.adapters.anthropic import ClaudeCLI
 
         return ClaudeCLI(model)
     if kind == "chat":

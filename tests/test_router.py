@@ -1,6 +1,6 @@
 import pytest
-import hunch.backends as backends
-from hunch.backends import normalize
+import hunch.adapters.base as backends
+from hunch.adapters.base import normalize
 from hunch.questions import answer_schema, validate
 from hunch.router import Router
 
@@ -43,7 +43,7 @@ def test_normalize_each_type():
 
 def test_http_decider_adapts_any_api(monkeypatch):
     import httpx
-    from hunch.backends import HTTPDecider
+    from hunch import HTTPDecider
 
     seen = {}
 

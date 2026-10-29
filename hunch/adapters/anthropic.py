@@ -3,7 +3,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from hunch.backends import PROMPT_VERSION, SYSTEM_PROMPT, Outage, prompt
+from hunch.adapters.base import PROMPT_VERSION, SYSTEM_PROMPT, Outage, prompt
 from hunch.questions import answer_schema
 
 
