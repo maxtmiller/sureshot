@@ -55,7 +55,7 @@ class GeminiDecider(OptionDecider):
             headers=self.headers,
             timeout=self.timeout,
         )
-        response.raise_for_status()
+        base.ok(response)
         candidates = (response.json().get("candidates") or [{}])[0]
         steps = (candidates.get("logprobsResult") or {}).get("topCandidates") or [{}]
         tops = [{"token": c["token"], "logprob": c["logProbability"]} for c in steps[0].get("candidates", [])]
@@ -92,7 +92,7 @@ class GeminiReasoner:
             headers=self.headers,
             timeout=self.timeout,
         )
-        response.raise_for_status()
+        base.ok(response)
         answers = json.loads(_text(response.json()))
         check_reply(answers, questions)
         return answers

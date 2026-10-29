@@ -120,8 +120,10 @@ result["escalated"]            # ["urgency"]
   models that think first need it turned off, for Gemini `extra={"thinkingConfig": {"thinkingBudget": 0}}`). A System 2
   needs structured outputs, or `json_mode="object"` for a service with only JSON mode. Run `.check()` on a decider
   first. The Gemini adapters speak Gemini's own `generateContent` API (the key comes from `GEMINI_API_KEY` or
-  `GOOGLE_API_KEY`); they are tested against that API's documented request and response shapes, not yet against the live
-  service, and the vendor URLs and capabilities come from each vendor's public docs and community reports.
+  `GOOGLE_API_KEY`); `GeminiReasoner` was checked live on `gemini-3.1-flash-lite` and `gemini-3-flash-preview`. `GeminiDecider` could
+  not be: every model available to a new key (the Gemini 3 family, Gemma 4) answered "Logprobs is not enabled for this
+  model", and the 2.5 family that supported them is closed to new users, so for now Gemini works as System 2 only. The
+  other vendors' URLs and capabilities come from their public docs and community reports, not live checks.
 - `decide(..., escalate=False)` keeps System 1's answers and only lists the unsure keys.
 
 ## Self-hosting System 1 with vLLM

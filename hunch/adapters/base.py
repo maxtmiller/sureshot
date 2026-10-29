@@ -18,6 +18,15 @@ def post(url, **kwargs):
     return _client.post(url, **kwargs)
 
 
+def ok(response):
+    """response.raise_for_status() with the server's explanation in the message: a bare "400 Bad Request" hides the
+    reason (such as "Logprobs is not enabled for this model"). Still an httpx.HTTPStatusError, so retries are unchanged."""
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise httpx.HTTPStatusError(f"{e.args[0]}\n{response.text[:300]}", request=e.request, response=e.response) from None
+
+
 # Bump when a prompt changes, so cached answers made with the old one are not reused.
 PROMPT_VERSION = 1
 SYSTEM_PROMPT = """You answer structured questions about a piece of content for an automated pipeline. A faster model \

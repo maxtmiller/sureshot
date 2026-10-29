@@ -39,7 +39,7 @@ class ChatDecider(OptionDecider):
             headers=self.headers,
             timeout=self.timeout,
         )
-        response.raise_for_status()
+        base.ok(response)
         content = (response.json()["choices"][0].get("logprobs") or {}).get("content") or [{}]
         hint = ("if it thinks before answering, pass extra, e.g. {'reasoning_effort': 'none'} for Ollama or "
                 "{'chat_template_kwargs': {'enable_thinking': False}} for vLLM")

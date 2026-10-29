@@ -24,7 +24,7 @@ class HTTPDecider:
             headers=self.headers,
             timeout=self.timeout,
         )
-        response.raise_for_status()
+        base.ok(response)
         raw = self.parse(response.json(), questions)
         return {key: normalize(questions[key], raw[key]) for key in questions}
 
@@ -45,5 +45,5 @@ class HTTPReasoner:
 
     def answer(self, state, questions, images=()):
         response = base.post(self.url, json=self.request(state, questions, list(images)), headers=self.headers, timeout=self.timeout)
-        response.raise_for_status()
+        base.ok(response)
         return self.parse(response.json(), questions)

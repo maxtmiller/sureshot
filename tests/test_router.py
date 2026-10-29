@@ -1093,3 +1093,16 @@ def test_env_can_select_gemini(monkeypatch):
     router = router_from_env()
     assert isinstance(router.system1, GeminiDecider) and router.system1.extra == {"thinkingConfig": {"thinkingBudget": 0}}
     assert isinstance(router.system2, GeminiReasoner) and router.system2.url.endswith("models/gemini-2.5-pro:generateContent")
+
+
+def test_http_errors_carry_the_servers_explanation(monkeypatch):
+    import httpx
+    from hunch import GeminiDecider
+
+    def post(url, json, headers, timeout):
+        return httpx.Response(400, text='{"error": {"message": "Logprobs is not enabled for this model"}}', request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(backends, "post", post)
+    with pytest.raises(httpx.HTTPStatusError, match="Logprobs is not enabled") as e:
+        GeminiDecider("m", api_key="k").decide("event", {"needs_prep": QUESTIONS["needs_prep"]})
+    assert e.value.response.status_code == 400
