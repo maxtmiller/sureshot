@@ -3,7 +3,8 @@
 Fast, calibrated decisions from a System 1 model, with escalation to a System 2 model when it isn't sure.
 
 System 1 is any fast model that can give a probability for each option, such as a small LLM served with vLLM or
-Ollama, or a hosted API that returns logprobs. System 2 is any stronger model, Claude by default. The router asks
+Ollama, or a hosted API that returns logprobs. System 2 is any stronger model: any chat endpoint with structured outputs (`ChatReasoner`), any HTTP API
+(`HTTPReasoner`), or Claude (`ClaudeAPI`, which needs `pip install "hunch[claude]"`). The router asks
 System 1 first and sends only the questions below their confidence threshold to System 2, so most decisions cost one
 cheap call and the hard ones get reasoning.
 
@@ -66,7 +67,7 @@ result["escalated"]            # ["urgency"]
 
   For a model behind a different protocol, any object with `decide(state, questions, images)` returning
   `{key: {answer, confidence, probabilities}}` works as System 1.
-- `ClaudeAPI(model="claude-haiku-5-5", effort="low")`: Claude through the Anthropic API with structured outputs,
+- `ClaudeAPI(model="claude-haiku-5-5", effort="low")`: Claude through the Anthropic API (`pip install "hunch[claude]"`) with structured outputs,
   constrained to the question schema. Refusals are rerun on a fallback model the API picks (server-side
   fallbacks).
 - `HTTPReasoner(url, request, parse, api_key)`: any System 2 model behind an HTTP API. `request(state, questions,
@@ -88,7 +89,10 @@ result["escalated"]            # ["urgency"]
   spend its one token starting to think (such as Gemma on Ollama) needs `extra={"reasoning_effort": "none"}` to put
   probability on the options.
 - `ClaudeCLI(model=None)`: Claude through your local `claude` CLI login, with no tools. Text only.
-- `default_system2()`: `ClaudeAPI` when an Anthropic credential is set, else `ClaudeCLI` if installed.
+- `default_system2()`: the first configured of a `ChatReasoner` (when `HUNCH_SYSTEM2_URL` is set), `ClaudeAPI` (when the
+  SDK is installed and a credential is set), `ClaudeCLI` (if installed), else `None`.
+- A custom System 1 or System 2 can raise `hunch.Outage` when its model is down or overloaded, so the router retries
+  and falls back like it does for network errors. Any other exception is treated as a mistake and raised.
 - `decide(..., escalate=False)` keeps System 1's answers and only lists the unsure keys.
 
 ## Self-hosting System 1 with vLLM
@@ -359,7 +363,7 @@ switches models without code changes.
 | --- | --- |
 | `HUNCH_SYSTEM1` | `chat` (default, a `ChatDecider`) or `vllm` (a `VLLMDecider`, URL defaulting to `http://localhost:8000/v1`) |
 | `HUNCH_SYSTEM1_MODEL`, `_URL`, `_API_KEY` | System 1: model name (required), base URL (default OpenAI), key (optional for local servers) |
-| `HUNCH_SYSTEM2` | `auto` (default: Claude API, else CLI), `claude`, `claude-cli`, `chat`, `none` |
+| `HUNCH_SYSTEM2` | `auto` (default: `chat` if `HUNCH_SYSTEM2_URL` is set, else the Claude API if installed and keyed, else the CLI), `claude`, `claude-cli`, `chat`, `none` |
 | `HUNCH_SYSTEM2_MODEL`, `_URL`, `_API_KEY` | model for `claude` or `chat`; URL and key for `chat` |
 | `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON object merged into every request body, e.g. `{"reasoning_effort": "none"}` |
 | `HUNCH_THRESHOLD` | confidence below which a question escalates (default 0.8) |
@@ -368,7 +372,7 @@ switches models without code changes.
 | `HUNCH_AUDIT` | share of confident questions also checked by System 2 for calibration (default 0) |
 
 ```bash
-# a self-served model on vLLM as System 1, Claude as System 2
+# a self-served model on vLLM as System 1, whichever System 2 `auto` finds
 HUNCH_SYSTEM1_MODEL=Qwen/Qwen3-8B HUNCH_SYSTEM1_URL=http://localhost:8000/v1 uvicorn hunch.api:app
 ```
 

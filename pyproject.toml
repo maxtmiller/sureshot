@@ -1,14 +1,15 @@
 [project]
 name = "hunch"
 version = "0.1.0"
-description = "Fast, calibrated decisions from a System 1 model, with escalation to Claude when it's unsure"
+description = "Fast, calibrated decisions from a System 1 model, with escalation to a stronger System 2 model when it's unsure"
 requires-python = ">=3.11"
-dependencies = ["httpx", "anthropic"]
+dependencies = ["httpx"]
 
 [project.optional-dependencies]
+claude = ["anthropic"]
 api = ["fastapi", "uvicorn", "python-dotenv"]
 local = ["scikit-learn", "sentence-transformers"]
-dev = ["pytest", "fastapi", "uvicorn", "python-dotenv", "scikit-learn"]
+dev = ["pytest", "anthropic", "fastapi", "uvicorn", "python-dotenv", "scikit-learn"]
 
 [build-system]
 requires = ["setuptools>=69"]

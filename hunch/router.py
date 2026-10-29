@@ -5,8 +5,8 @@ import threading
 from contextlib import contextmanager
 import subprocess
 import time
-import anthropic
 import httpx
+from hunch.backends import Outage
 from hunch.cache import cache_key
 from hunch.questions import validate
 
@@ -20,7 +20,7 @@ def _retriable(error):
 
 def _transient(error):
     """An outage rather than a mistake (bad key, wrong model...), so it is safe to fall back to the other model."""
-    return _retriable(error) or isinstance(error, (subprocess.TimeoutExpired, anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError))
+    return _retriable(error) or isinstance(error, (subprocess.TimeoutExpired, Outage))
 
 
 class Router:
