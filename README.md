@@ -199,9 +199,13 @@ local.save("local.joblib")                     # LocalDecider.load("local.joblib
 - `Router(..., guard=local, guard_threshold=0.9)` catches confident errors, which a model's own confidence cannot:
   when a tier is confident but the guard (a `LocalDecider` trained on your labels, so it runs in-process) disagrees
   with probability at least `guard_threshold`, the answer counts as unsure and escalates; the guard's answer is
-  kept under `"guard"`. On 506 held-out job emails, where `gpt-4o-mini` was wrong 37 times at 0.95 confidence or
-  more, a guard at 0.9 escalated 3.2% of emails and caught 13 of the 37 (3 false alarms); at 0.7 it escalated 6.9%
-  and caught 22 (13 false alarms).
+  kept under `"guard"`. The guard learns whatever your labels say, mistakes included, so measure it against labels
+  you have checked. On 506 held-out job emails with their original labels, `gpt-4o-mini` looked wrong 37 times at
+  0.95 confidence or more, and a guard at 0.9 caught 13 of them. A second model (Claude) then reviewed every email
+  where the label and `gpt-4o-mini` disagreed, and sided with `gpt-4o-mini` on 68% of them. Against those
+  corrected labels, `gpt-4o-mini` had 9 confident errors (accuracy 0.97, not 0.91), and the guard caught 0 to 2 of
+  them while raising 5 to 35 false alarms. Most of what it had "caught" was label noise. The review favors
+  `gpt-4o-mini`, since a label changed only when the two models agreed, so treat both sets of numbers as bounds.
 - `threshold` can be a list with one number per tier, and each tier has its own calibrated thresholds, since a
   classifier's 0.9 and an LLM's 0.9 mean different things. Calibrate each tier: `calibrate(store, tier=0)`,
   `calibrate(store, tier=1)`.
