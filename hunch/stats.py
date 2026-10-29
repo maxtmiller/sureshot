@@ -2,7 +2,7 @@
 import math
 import statistics
 from bisect import bisect_right
-from hunch.calibrate import tier_confidences
+from hunch.calibrate import histogram, tier_confidences
 from hunch.review import REASONS, pending
 
 
@@ -72,7 +72,8 @@ def _checks(c, rows, labels, min_samples, min_escalation_change, min_distributio
         w = 1 / result["audit_rate"]
         graded, weight, right, weight_sq = graded + 1, weight + w, right + w * (answer["answer"] == truth), weight_sq + w * w
     tests, unchecked = [], []
-    now = sum(x < c["threshold"] for x in confidences) / len(confidences) if confidences else None
+    shares = [x < c["threshold"] for x in confidences] if c["threshold"] is not None else _passed_down(rows, c["tier"], c["key"])
+    now = sum(shares) / len(shares) if shares else None
     expected, before = c["escalation_rate"], c["answers"]
     if now is not None and expected is not None and len(confidences) >= min_samples:
         pooled = (now * len(confidences) + expected * before) / (len(confidences) + before)
@@ -88,7 +89,7 @@ def _checks(c, rows, labels, min_samples, min_escalation_change, min_distributio
     else:
         unchecked.append("distribution")
     accuracy = right / weight if weight else None
-    if graded >= min_samples:
+    if c["target"] is not None and graded >= min_samples:
         spread = math.sqrt(c["target"] * (1 - c["target"]) * weight_sq) / weight
         p = _normal_p((c["target"] - accuracy) / spread) if spread else float(accuracy >= c["target"])
         tests.append(("accuracy", p, True))  # below the target is already worth acting on, so there is no minimum
@@ -98,15 +99,54 @@ def _checks(c, rows, labels, min_samples, min_escalation_change, min_distributio
             "accuracy": {"graded": graded, "accuracy": accuracy} if graded else None, "tests": tests, "unchecked": unchecked}
 
 
+def _passed_down(rows, tier, key):
+    """For each decision in rows where `tier` answered `key`: whether it passed the question on (a later tier or
+    System 2 answered, or nobody was sure) instead of its answer being kept."""
+    shares = []
+    for _, _, _, result in rows:
+        answer = result["answers"].get(key)
+        if answer and any(e["tier"] == tier for e in answer.get("tried", [])):
+            shares.append(not (answer["source"] == "hunch" and answer.get("tier", 0) == tier and key not in result["unsure"]))
+    return shares
+
+
+def _answered(decisions, tier, key, after=0.0):
+    """The decisions after a unix time in which `tier` answered `key`."""
+    return [d for d in decisions if d[1] > after and any(e["tier"] == tier for e in d[3]["answers"].get(key, {}).get("tried", []))]
+
+
+def _baselines(store, decisions, min_samples):
+    """A snapshot for each question and tier that calibrate has none for (never calibrated, run on a per-call
+    threshold, or reset when calibrate failed closed or retrain replaced the classifier), learned from its first
+    min_samples answers since the reset: [(snapshot, the answers after the baseline)]. It has no threshold or target,
+    and no escalation rate or bins until it has min_samples answers."""
+    calibrated = {(c["tier"], c["key"]) for c in store.calibrations()}
+    resets = store.resets()
+    pairs = {(e["tier"], key) for _, _, _, result in decisions for key, answer in result["answers"].items() for e in answer.get("tried", [])}
+    out = []
+    for tier, key in sorted(pairs - calibrated):
+        rows = _answered(decisions, tier, key, resets.get((tier, key), 0.0))
+        if not rows:
+            continue
+        base = rows[:min_samples]
+        full = 0 < len(base) == min_samples
+        shares = _passed_down(base, tier, key)
+        out.append(({"tier": tier, "key": key, "ts": None, "threshold": None, "target": None, "answers": len(base),
+                     "escalation_rate": sum(shares) / len(shares) if full else None,
+                     "histogram": histogram(tier_confidences(base, tier, key)) if full else None}, rows[min_samples:]))
+    return out
+
+
 def _drift(store, decisions, labels, min_samples, window, alpha, min_escalation_change, min_distribution_change):
     entries, tests = [], []
-    for c in store.calibrations():
-        after = [d for d in decisions if d[1] > c["ts"] and any(e["tier"] == c["tier"] for e in d[3]["answers"].get(c["key"], {}).get("tried", []))]
+    snapshots = [(c, _answered(decisions, c["tier"], c["key"], c["ts"])) for c in store.calibrations()] + _baselines(store, decisions, min_samples)
+    for c, after in snapshots:
         total = _checks(c, after, labels, min_samples, min_escalation_change, min_distribution_change)
         # The same checks on the latest answers alone, so a change long after calibrating is not diluted by the
         # normal traffic before it. Only once there are more answers than the window, or it would repeat the above.
         recent = _checks(c, after[-window:], labels, min_samples, min_escalation_change, min_distribution_change) if window and len(after) > window else None
         entry = {"tier": c["tier"], "key": c["key"], "calibrated_at": c["ts"], "threshold": c["threshold"], "target": c["target"],
+                 "baseline": {"answers": c["answers"]} if c["ts"] is None else None,
                  "answers_since": total["answers"], "escalation_rate": {"at_calibration": c["escalation_rate"], "since": total["escalation_rate"]},
                  "distribution_change": total["distribution_change"], "accuracy_since": total["accuracy"],
                  "recent": recent and {"window": window, "escalation_rate": recent["escalation_rate"],
@@ -119,11 +159,13 @@ def _drift(store, decisions, labels, min_samples, window, alpha, min_escalation_
     for (entry, name, _, big), rejected in zip(tests, _holm([p for _, _, p, _ in tests], alpha)):
         if rejected and big:
             entry["flags"].append(name)
+    entries.sort(key=lambda entry: (entry["tier"], entry["key"]))
     # A tier only sees what the tiers before it passed down, so drift or a new threshold there changes its inputs.
     for entry in entries:
         before = [other for other in entries if other["key"] == entry["key"] and other["tier"] < entry["tier"]]
         entry["upstream"] = ([{"tier": other["tier"], "reason": "drift"} for other in before if other["flags"]]
-                             + [{"tier": other["tier"], "reason": "recalibrated"} for other in before if other["calibrated_at"] > entry["calibrated_at"]])
+                             + [{"tier": other["tier"], "reason": "recalibrated"} for other in before
+                                if entry["calibrated_at"] is not None and other["calibrated_at"] is not None and other["calibrated_at"] > entry["calibrated_at"]])
     return entries
 
 
@@ -153,7 +195,10 @@ def stats(store, since=0.0, min_samples=30, window=500, alpha=0.01, min_escalati
     have no bins, so it is unchecked until the next calibration. A flag means: grade a fresh sample and calibrate
     again. "upstream" lists the earlier tiers of the same question that flagged drift in this report, or were
     recalibrated after this tier was: a tier only sees what they pass down, so its flags may be theirs. Fix those
-    first.
+    first. A question and tier with no snapshot from calibrate (never calibrated, on a per-call threshold, or reset
+    when calibrate failed closed or retrain replaced the classifier) is checked against a baseline of its first
+    min_samples answers since then, in this report's range ("baseline" instead of "calibrated_at"): the escalation
+    rate is then the share the tier passed on, and accuracy is unchecked, since there is no target.
 
     review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
 
