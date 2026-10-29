@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts REAL, state TEXT, 
 CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, source TEXT, PRIMARY KEY (decision_id, key));
 CREATE TABLE IF NOT EXISTS calibration_issues (tier INTEGER, key TEXT, reason TEXT, best_target REAL, target REAL, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value REAL, PRIMARY KEY (tier, key));
-CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts REAL, threshold REAL, target REAL, escalation_rate REAL, answers INTEGER, PRIMARY KEY (tier, key));
+CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts REAL, threshold REAL, target REAL, escalation_rate REAL, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
 """
 
 
@@ -20,6 +20,12 @@ class Store:
         self.path = str(path)
         with self._db() as db:
             db.executescript(SCHEMA)
+            if "histogram" not in {row[1] for row in db.execute("PRAGMA table_info(calibrations)")}:
+                try:  # a log made before drift compared the whole confidence distribution
+                    db.execute("ALTER TABLE calibrations ADD COLUMN histogram TEXT")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column" not in str(e):  # another process added it first
+                        raise
             db.execute("PRAGMA journal_mode=WAL")  # readers (stats, review) stop blocking the writers that log decisions
 
     @contextmanager
@@ -74,14 +80,17 @@ class Store:
         now = time.time()
         with self._db() as db:
             db.executemany("DELETE FROM calibrations WHERE tier = ? AND key = ?", [(tier, key) for key in calibrated])
-            db.executemany("INSERT INTO calibrations VALUES (?, ?, ?, ?, ?, ?, ?)",
-                           [(tier, key, now, s["threshold"], s["target"], s["escalation_rate"], s["answers"]) for key, s in snapshots.items()])
+            db.executemany("INSERT INTO calibrations VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                           [(tier, key, now, s["threshold"], s["target"], s["escalation_rate"], s["answers"], s["histogram"] and json.dumps(s["histogram"]))
+                            for key, s in snapshots.items()])
 
     def calibrations(self):
-        """[{tier, key, ts, threshold, target, escalation_rate, answers}]: the latest calibration of each question that has a threshold."""
+        """[{tier, key, ts, threshold, target, escalation_rate, answers, histogram}]: the latest calibration of each question
+        that has a threshold. histogram is {edges, counts} of the tier's confidences then, or None for older snapshots."""
         with self._db() as db:
-            rows = db.execute("SELECT tier, key, ts, threshold, target, escalation_rate, answers FROM calibrations ORDER BY tier, key").fetchall()
-        return [dict(zip(("tier", "key", "ts", "threshold", "target", "escalation_rate", "answers"), row)) for row in rows]
+            rows = db.execute("SELECT tier, key, ts, threshold, target, escalation_rate, answers, histogram FROM calibrations ORDER BY tier, key").fetchall()
+        fields = ("tier", "key", "ts", "threshold", "target", "escalation_rate", "answers")
+        return [dict(zip(fields, row[:-1]), histogram=row[-1] and json.loads(row[-1])) for row in rows]
 
     def issues(self):
         """[{tier, key, reason, best_target, target}] for questions whose latest calibration found no threshold."""
