@@ -1118,3 +1118,73 @@ def test_http_errors_carry_the_servers_explanation(monkeypatch):
     with pytest.raises(httpx.HTTPStatusError, match="Logprobs is not enabled") as e:
         GeminiDecider("m", api_key="k").decide("event", {"needs_prep": QUESTIONS["needs_prep"]})
     assert e.value.response.status_code == 400
+
+
+def test_stats_flags_drift_from_the_last_calibration(tmp_path):
+    from hunch import Store, calibrate, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+
+    class Says:
+        """System 2 that always answers needs_prep the same way."""
+
+        def __init__(self, answer):
+            self.value = answer
+
+        def answer(self, state, questions, images=()):
+            return {"needs_prep": {"answer": self.value, "reason": "r"}}
+
+    def calibrated(path):
+        # Right at 0.95, wrong at 0.7, half each: the threshold is 0.95 and half the answers fall below it.
+        store = Store(path)
+        for i in range(100):
+            sure = i % 2 == 0
+            result = Router(Tier({"needs_prep": (sure, 0.95 if sure else 0.7)}), None, log=store).decide("event", q)
+            store.label(result["id"], "needs_prep", True)
+        assert calibrate(store, 0.95, 30)["needs_prep"]["threshold"] == 0.95
+        return store
+
+    store = calibrated(tmp_path / "a.db")
+    drift = stats(store)["drift"]
+    assert drift == [{"tier": 0, "key": "needs_prep", "calibrated_at": drift[0]["calibrated_at"], "threshold": 0.95, "target": 0.95,
+                      "answers_since": 0, "escalation_rate": {"at_calibration": 0.5, "since": None}, "accuracy_since": None,
+                      "flags": [], "unchecked": ["escalation_rate", "accuracy"]}]
+    # The same mix as at calibration is not drift. Labels on unaudited answers are not a random sample, so even all
+    # wrong they do not count toward accuracy.
+    for i in range(60):
+        result = Router(Tier({"needs_prep": (True, 0.95 if i % 2 else 0.7)}), None, log=store).decide("event", q)
+        store.label(result["id"], "needs_prep", False)
+    drift = stats(store)["drift"][0]
+    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["accuracy_since"] is None
+    # Now the tier is unsure about everything: the share escalated moved.
+    for _ in range(60):
+        Router(Tier({"needs_prep": (True, 0.7)}), None, log=store).decide("event", q)
+    drift = stats(store)["drift"][0]
+    assert drift["flags"] == ["escalation_rate"] and drift["answers_since"] == 120 and drift["escalation_rate"]["since"] == pytest.approx(0.75)
+
+    # Audits say the confident answers are wrong: accuracy fell below the target, once there are enough of them.
+    wrong = calibrated(tmp_path / "b.db")
+    audited = Router(Tier({"needs_prep": (True, 0.95)}), Says(False), log=wrong, audit=1.0)
+    unsure = Router(Tier({"needs_prep": (True, 0.7)}), Says(False), log=wrong, audit=1.0)
+    for _ in range(20):
+        audited.decide("event", q), unsure.decide("event", q)
+    drift = stats(wrong)["drift"][0]
+    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["accuracy_since"] == {"graded": 20, "accuracy": 0.0}
+    for _ in range(20):
+        audited.decide("event", q), unsure.decide("event", q)
+    drift = stats(wrong)["drift"][0]
+    assert drift["flags"] == ["accuracy"] and drift["unchecked"] == [] and drift["accuracy_since"]["graded"] == 40
+    # A label overrides the audit's answer: the person says these were right after all.
+    for decision_id, _, _, result in wrong.results(drift["calibrated_at"]):
+        if "audit" in result["answers"]["needs_prep"]:
+            wrong.label(decision_id, "needs_prep", True)
+    assert stats(wrong)["drift"][0]["flags"] == [] and stats(wrong)["drift"][0]["accuracy_since"]["accuracy"] == 1.0
+
+    # A recalibration that fails closed drops the snapshot, since the tier is no longer trusted for the question.
+    for _ in range(200):
+        result = Router(Tier({"needs_prep": (True, 0.95)}), None, log=wrong).decide("event", q)
+        wrong.label(result["id"], "needs_prep", False)
+    assert calibrate(wrong, 0.95, 30)["needs_prep"]["reason"] == "target unreachable" and stats(wrong)["drift"] == []
+    # retrain promoting a new classifier drops the snapshot too: its threshold and confidences are new.
+    store.save_calibrations({}, 0, ["needs_prep"])
+    assert stats(store)["drift"] == []

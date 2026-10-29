@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts REAL, state TEXT, 
 CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, source TEXT, PRIMARY KEY (decision_id, key));
 CREATE TABLE IF NOT EXISTS calibration_issues (tier INTEGER, key TEXT, reason TEXT, best_target REAL, target REAL, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value REAL, PRIMARY KEY (tier, key));
+CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts REAL, threshold REAL, target REAL, escalation_rate REAL, answers INTEGER, PRIMARY KEY (tier, key));
 """
 
 
@@ -66,6 +67,21 @@ class Store:
             db.executemany("DELETE FROM calibration_issues WHERE tier = ? AND key = ?", [(tier, key) for key in calibrated])
             db.executemany("INSERT INTO calibration_issues VALUES (?, ?, ?, ?, ?)",
                            [(tier, key, i["reason"], i["best_target"], i["target"]) for key, i in issues.items()])
+
+    def save_calibrations(self, snapshots, tier, calibrated):
+        """Records what a calibration found ({key: {threshold, target, escalation_rate, answers}}), so stats can tell
+        when later answers drift from it, and drops the snapshots of the questions in `calibrated` left without one."""
+        now = time.time()
+        with self._db() as db:
+            db.executemany("DELETE FROM calibrations WHERE tier = ? AND key = ?", [(tier, key) for key in calibrated])
+            db.executemany("INSERT INTO calibrations VALUES (?, ?, ?, ?, ?, ?, ?)",
+                           [(tier, key, now, s["threshold"], s["target"], s["escalation_rate"], s["answers"]) for key, s in snapshots.items()])
+
+    def calibrations(self):
+        """[{tier, key, ts, threshold, target, escalation_rate, answers}]: the latest calibration of each question that has a threshold."""
+        with self._db() as db:
+            rows = db.execute("SELECT tier, key, ts, threshold, target, escalation_rate, answers FROM calibrations ORDER BY tier, key").fetchall()
+        return [dict(zip(("tier", "key", "ts", "threshold", "target", "escalation_rate", "answers"), row)) for row in rows]
 
     def issues(self):
         """[{tier, key, reason, best_target, target}] for questions whose latest calibration found no threshold."""

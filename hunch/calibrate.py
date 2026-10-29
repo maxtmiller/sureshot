@@ -82,6 +82,12 @@ def summarize(samples, target_accuracy=0.95, min_samples=30):
     return report
 
 
+def tier_confidences(results, tier, key):
+    """Every confidence one tier gave one question in some logged results, whether or not the answer was kept."""
+    return [entry["confidence"] for _, _, _, result in results
+            for entry in result["answers"].get(key, {}).get("tried", []) if entry["tier"] == tier]
+
+
 def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fail_closed=True):
     """Calibrates every question for one tier (the first by default; call it once per tier of a chain) from its graded
     answers in the log and, with save, stores the thresholds so a Router using this store applies them. Returns
@@ -90,7 +96,10 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
     A key with threshold None keeps its current one, except when fail_closed is true and the data could not certify the
     target ("not enough evidence" or "target unreachable"): the tier is then never trusted for that question, which
     always passes to the next tier or System 2, until a later calibration finds a threshold. "not enough data" keeps
-    the default, so a question with few graded answers still works."""
+    the default, so a question with few graded answers still works.
+
+    With save, each threshold found is also recorded with the share of all of this tier's logged answers (graded or
+    not) that fall below it, which is what stats(store)["drift"] compares later answers against."""
     by_key = {}
     for row in store.labeled():
         if row["tier"] != tier:
@@ -103,7 +112,15 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
             log.warning("no threshold for %r at tier %d: %s (target %.2f%s)", key, tier, r["reason"], target_accuracy, best)
     if save:
         closed = {key: float("inf") for key, r in report.items() if fail_closed and r["reason"] in ("not enough evidence", "target unreachable")}
-        store.save_thresholds(closed | {key: r["threshold"] for key, r in report.items() if r["threshold"] is not None}, tier)
+        found = {key: r["threshold"] for key, r in report.items() if r["threshold"] is not None}
+        store.save_thresholds(closed | found, tier)
         store.save_issues({key: {"reason": r["reason"], "best_target": r["best_target"], "target": target_accuracy} for key, r in report.items() if r["threshold"] is None},
                           tier, list(report))
+        results = store.results() if found else []
+        snapshots = {}
+        for key, threshold in found.items():
+            confidences = tier_confidences(results, tier, key)
+            snapshots[key] = {"threshold": threshold, "target": target_accuracy, "answers": len(confidences),
+                              "escalation_rate": sum(c < threshold for c in confidences) / len(confidences) if confidences else None}
+        store.save_calibrations(snapshots, tier, list(found) + list(closed))
     return report

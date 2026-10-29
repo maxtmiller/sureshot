@@ -46,5 +46,6 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
             heads[key], thresholds[key] = candidate.heads[key], r["threshold"]
         report[key] = {"promoted": promoted, "threshold": r["threshold"], "escalation_rate": r["escalation_rate"], "previous_escalation_rate": before}
     store.save_thresholds(thresholds, tier)
+    store.save_calibrations({}, tier, list(thresholds))  # the old snapshot describes the old classifier; calibrate() makes a new one
     decider = LocalDecider(heads, embed or (current and current._embed), embedding) if thresholds else current
     return {"decider": decider, "report": report}
