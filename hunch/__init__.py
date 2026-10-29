@@ -6,6 +6,7 @@ from hunch.config import default_system2, router_from_env
 from hunch.evaluate import evaluate
 from hunch.learn import retrain
 from hunch.local import LocalDecider
+from hunch.providers import PROVIDERS
 from hunch.review import review_queue
 from hunch.router import Router
 from hunch.stats import stats
@@ -13,5 +14,5 @@ from hunch.store import Store
 from hunch.questions import validate, answer_schema
 
 __all__ = ["Router", "Store", "Cache", "calibrate", "evaluate", "stats", "review_queue", "retrain", "LocalDecider", "router_from_env", "HTTPDecider", "ChatDecider", "VLLMDecider",
-           "HTTPReasoner", "ChatReasoner", "Outage", "ClaudeAPI", "ClaudeCLI", "default_system2", "validate", "prompt",
+           "HTTPReasoner", "ChatReasoner", "Outage", "PROVIDERS", "ClaudeAPI", "ClaudeCLI", "default_system2", "validate", "prompt",
            "SYSTEM_PROMPT", "answer_schema"]

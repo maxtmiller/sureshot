@@ -43,7 +43,7 @@ result["answers"]["urgency"]   # {"answer": 0, "reason": "...", "source": "syste
 result["escalated"]            # ["urgency"]
 ```
 
-- `ChatDecider(model, base_url, api_key)`: any OpenAI-compatible endpoint that returns logprobs (OpenAI, vLLM,
+- `ChatDecider(model, base_url, api_key)` or `ChatDecider(model, provider="groq")`: any OpenAI-compatible endpoint that returns logprobs (OpenAI, vLLM,
   Ollama, Together, Fireworks, Groq), hosted or self-served, with no adapter code. Each question is asked with
   `max_tokens=1`, and the model's probability over the option labels is the calibrated confidence. Choices are
   limited to 26 options. Point it at your own server with `base_url="http://localhost:8000/v1"`.
@@ -85,6 +85,10 @@ result["escalated"]            # ["urgency"]
   ```
 - `ChatReasoner(model, base_url, api_key)`: any OpenAI-compatible endpoint as System 2, constrained to the
   question schema with structured outputs.
+- No endpoint is assumed: pass `base_url`, or `provider=` one of `hunch.PROVIDERS` (`openai`, `gemini`, `mistral`,
+  `deepseek`, `groq`, `together`, `fireworks`, `openrouter`, `ollama`, `vllm`), which fills in the URL and reads the key
+  from that provider's usual variable (`GROQ_API_KEY`...). It only saves typing. Services differ in whether they return
+  the logprobs System 1 needs or support structured outputs for System 2, so run `ChatDecider(...).check()` first.
 - `ChatDecider` and `ChatReasoner` also take `extra={...}`, merged into every request body. A model that would
   spend its one token starting to think (such as Gemma on Ollama) needs `extra={"reasoning_effort": "none"}` to put
   probability on the options.
@@ -170,7 +174,7 @@ about it; the rest pass down, and what no tier is sure about goes to System 2.
 from hunch import Router, Store, LocalDecider, ChatDecider, ClaudeAPI, calibrate
 
 store = Store("hunch.db")
-router = Router([LocalDecider.load("local.joblib"), ChatDecider("gpt-4o-mini")], ClaudeAPI(), log=store, audit=0.1)
+router = Router([LocalDecider.load("local.joblib"), ChatDecider("gpt-4o-mini", provider="openai")], ClaudeAPI(), log=store, audit=0.1)
 result = router.decide(email_text, questions)
 result["answers"]["urgency"]["tier"]    # 0 = the classifier, 1 = the LLM; "source" is "system2" if Claude answered
 result["answers"]["urgency"]["tried"]   # what each tier said: [{"tier": 0, "answer": 1, "confidence": 0.62}, ...]
@@ -362,9 +366,9 @@ switches models without code changes.
 | Variable | Values |
 | --- | --- |
 | `HUNCH_SYSTEM1` | `chat` (default, a `ChatDecider`) or `vllm` (a `VLLMDecider`, URL defaulting to `http://localhost:8000/v1`) |
-| `HUNCH_SYSTEM1_MODEL`, `_URL`, `_API_KEY` | System 1: model name (required), base URL (default OpenAI), key (optional for local servers) |
+| `HUNCH_SYSTEM1_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 1: model name (required), base URL, a provider name that fills in the URL and key (see below), key (optional for local servers). Give a URL or a provider; no endpoint is assumed |
 | `HUNCH_SYSTEM2` | `auto` (default: `chat` if `HUNCH_SYSTEM2_URL` is set, else the Claude API if installed and keyed, else the CLI), `claude`, `claude-cli`, `chat`, `none` |
-| `HUNCH_SYSTEM2_MODEL`, `_URL`, `_API_KEY` | model for `claude` or `chat`; URL and key for `chat` |
+| `HUNCH_SYSTEM2_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | model for `claude` or `chat`; URL or provider and key for `chat` |
 | `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON object merged into every request body, e.g. `{"reasoning_effort": "none"}` |
 | `HUNCH_THRESHOLD` | confidence below which a question escalates (default 0.8) |
 | `HUNCH_DB` | path of the SQLite log; set it to enable logging, `/feedback` and `/calibrate` |
