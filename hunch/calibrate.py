@@ -1,5 +1,6 @@
 """Pick, per question, the lowest confidence threshold at which System 1 meets an accuracy target."""
 import logging
+from bisect import bisect_right
 from math import ceil, sqrt
 
 log = logging.getLogger("hunch")
@@ -88,6 +89,16 @@ def tier_confidences(results, tier, key):
             for entry in result["answers"].get(key, {}).get("tried", []) if entry["tier"] == tier]
 
 
+def histogram(confidences, bins=5):
+    """Quantile bin edges of some confidences and how many fall in each bin (fewer bins where values tie)."""
+    ordered = sorted(confidences)
+    edges = sorted({ordered[len(ordered) * i // bins] for i in range(1, bins)})
+    counts = [0] * (len(edges) + 1)
+    for confidence in ordered:
+        counts[bisect_right(edges, confidence)] += 1
+    return {"edges": edges, "counts": counts}
+
+
 def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fail_closed=True):
     """Calibrates every question for one tier (the first by default; call it once per tier of a chain) from its graded
     answers in the log and, with save, stores the thresholds so a Router using this store applies them. Returns
@@ -99,7 +110,8 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
     the default, so a question with few graded answers still works.
 
     With save, each threshold found is also recorded with the share of all of this tier's logged answers (graded or
-    not) that fall below it, which is what stats(store)["drift"] compares later answers against."""
+    not) that fall below it and how their confidences are spread, which is what stats(store)["drift"] compares later
+    answers against."""
     by_key = {}
     for row in store.labeled():
         if row["tier"] != tier:
@@ -121,6 +133,7 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
         for key, threshold in found.items():
             confidences = tier_confidences(results, tier, key)
             snapshots[key] = {"threshold": threshold, "target": target_accuracy, "answers": len(confidences),
-                              "escalation_rate": sum(c < threshold for c in confidences) / len(confidences) if confidences else None}
+                              "escalation_rate": sum(c < threshold for c in confidences) / len(confidences) if confidences else None,
+                              "histogram": histogram(confidences) if confidences else None}
         store.save_calibrations(snapshots, tier, list(found) + list(closed))
     return report

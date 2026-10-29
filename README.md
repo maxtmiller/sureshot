@@ -311,12 +311,24 @@ The output above is from a run of 200 decisions (100 per question) on public dat
 - `accuracy_vs_labels` is the accuracy of the final answers where you gave a label.
 - `system2_called` includes audit calls, so `audit` shows up as System 2 cost.
 - `drift` compares each calibrated question and tier with its last `calibrate` run, and `flags` names what moved:
-  `"escalation_rate"` when the share of the tier's answers below the threshold differs from the share at
-  calibration by more than chance (the inputs or the model changed), and `"accuracy"` when its audited answers since
-  then (graded by your label where there is one, else by the audit) are below the target even at the optimistic end
-  of a 90% interval. Each needs `min_samples` (default 30) answers since the calibration, and `unchecked` names the
-  checks that could not run yet, so an empty `flags` is not read as no drift. A flag means grade a fresh sample and
-  calibrate again.
+  `"escalation_rate"` (the share of the tier's answers below the threshold: the inputs or the model changed),
+  `"distribution"` (how its confidences spread over five quantile bins, which catches a slide that stays above the
+  threshold, such as 0.99 becoming 0.96 with the threshold at 0.95, before it moves the escalation rate or the
+  accuracy) and `"accuracy"` (its audited answers since then, graded by your label where there is one, else by the
+  audit, are below the target). A flag means grade a fresh sample and calibrate again.
+- A flag needs both evidence and size. Every check in one `stats` report shares one false alarm budget, `alpha`
+  (default 0.01, split with Holm's method), so a report has about a 1% chance of any false flag however many
+  questions it covers. The change must also be big enough to act on: the escalation rate must move at least
+  `min_escalation_change` (default 0.05), and the bins must differ by at least `min_distribution_change` (default
+  0.1, the share of answers that would have to change bins), so a large log does not flag a move from 20% to 21%.
+  Accuracy below the target is already worth acting on, so it has no minimum. The budget covers one report:
+  checking every hour still adds up false alarms over time.
+- Each check needs `min_samples` (default 30) answers since the calibration (audited ones, for accuracy), and
+  `unchecked` names the checks that could not run yet, so an empty `flags` is not read as no drift. Once there are
+  more than `window` (default 500) answers since the calibration, the checks also run on the latest `window` alone,
+  under `recent` and as `recent_escalation_rate`, `recent_distribution` and `recent_accuracy`, so a change that
+  starts months after calibrating is not diluted by the normal traffic before it. Snapshots saved before the
+  distribution check have no bins, so it is `unchecked` until you calibrate.
 - The accuracy check uses only audited answers, because `audit` picks them at random. A label on an answer that was
   not audited is left out, since it was picked some other way (often because it looked wrong) and would make drift
   look worse than it is. With `audit=0` the accuracy check never runs, and a model that stays confident while

@@ -1148,7 +1148,7 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     drift = stats(store)["drift"]
     assert drift == [{"tier": 0, "key": "needs_prep", "calibrated_at": drift[0]["calibrated_at"], "threshold": 0.95, "target": 0.95,
                       "answers_since": 0, "escalation_rate": {"at_calibration": 0.5, "since": None}, "accuracy_since": None,
-                      "flags": [], "unchecked": ["escalation_rate", "accuracy"]}]
+                      "distribution_change": None, "recent": None, "flags": [], "unchecked": ["escalation_rate", "distribution", "accuracy"]}]
     # The same mix as at calibration is not drift. Labels on unaudited answers are not a random sample, so even all
     # wrong they do not count toward accuracy.
     for i in range(60):
@@ -1160,7 +1160,7 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     for _ in range(60):
         Router(Tier({"needs_prep": (True, 0.7)}), None, log=store).decide("event", q)
     drift = stats(store)["drift"][0]
-    assert drift["flags"] == ["escalation_rate"] and drift["answers_since"] == 120 and drift["escalation_rate"]["since"] == pytest.approx(0.75)
+    assert drift["flags"] == ["escalation_rate", "distribution"] and drift["answers_since"] == 120 and drift["escalation_rate"]["since"] == pytest.approx(0.75)
 
     # Audits say the confident answers are wrong: accuracy fell below the target, once there are enough of them.
     wrong = calibrated(tmp_path / "b.db")
@@ -1188,3 +1188,87 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     # retrain promoting a new classifier drops the snapshot too: its threshold and confidences are new.
     store.save_calibrations({}, 0, ["needs_prep"])
     assert stats(store)["drift"] == []
+
+
+def test_drift_window_catches_a_late_change_the_cumulative_check_dilutes(tmp_path):
+    from hunch import Store, calibrate, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store = Store(tmp_path / "hunch.db")
+    for i in range(100):
+        sure = i % 2 == 0
+        result = Router(Tier({"needs_prep": (sure, 0.95 if sure else 0.7)}), None, log=store).decide("event", q)
+        store.label(result["id"], "needs_prep", True)
+    calibrate(store, 0.95, 30)
+    # 400 answers like calibration, then the tier turns unsure about the last 100.
+    for i in range(400):
+        Router(Tier({"needs_prep": (True, 0.95 if i % 2 else 0.7)}), None, log=store).decide("event", q)
+    for _ in range(100):
+        Router(Tier({"needs_prep": (True, 0.7)}), None, log=store).decide("event", q)
+    drift = stats(store, window=100)["drift"][0]
+    assert drift["escalation_rate"]["since"] == pytest.approx(0.6) and "escalation_rate" not in drift["flags"]
+    assert drift["recent"]["escalation_rate"] == 1.0 and drift["flags"] == ["recent_escalation_rate", "recent_distribution"]
+    assert drift["unchecked"] == ["accuracy", "recent_accuracy"]
+    # A window as large as the history would only repeat the cumulative check, so it is left out.
+    assert stats(store, window=500)["drift"][0]["recent"] is None and stats(store, window=0)["drift"][0]["recent"] is None
+
+
+def test_drift_sees_confidence_sliding_while_still_above_the_threshold(tmp_path):
+    from hunch import Store, calibrate, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store = Store(tmp_path / "hunch.db")
+    # Right at 0.99 and 0.97, wrong at 0.7, a third each: the threshold is 0.97 and a third falls below it.
+    for i in range(99):
+        confidence = (0.99, 0.97, 0.7)[i % 3]
+        result = Router(Tier({"needs_prep": (confidence > 0.9, confidence)}), None, log=store).decide("event", q)
+        store.label(result["id"], "needs_prep", True)
+    assert calibrate(store, 0.95, 30)["needs_prep"]["threshold"] == 0.97
+    # The tier is less sure: what was 0.99 is now 0.97. Still above the threshold, so the share escalated holds.
+    for i in range(90):
+        Router(Tier({"needs_prep": (True, (0.97, 0.97, 0.7)[i % 3])}), None, log=store).decide("event", q)
+    drift = stats(store)["drift"][0]
+    assert drift["escalation_rate"] == {"at_calibration": pytest.approx(1 / 3), "since": pytest.approx(1 / 3)}
+    assert drift["flags"] == ["distribution"]
+
+
+def test_a_log_saved_before_the_distribution_check_still_opens(tmp_path):
+    import sqlite3
+    from hunch import Store, stats
+
+    path = tmp_path / "old.db"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE calibrations (tier INTEGER, key TEXT, ts REAL, threshold REAL, target REAL, escalation_rate REAL, answers INTEGER, PRIMARY KEY (tier, key))")
+    db.execute("INSERT INTO calibrations VALUES (0, 'needs_prep', 0, 0.9, 0.95, 0.5, 100)")
+    db.commit()
+    db.close()
+    store = Store(path)
+    assert store.calibrations()[0]["histogram"] is None and Store(path).calibrations() == store.calibrations()
+    for _ in range(40):
+        Router(Tier({"needs_prep": (True, 0.95)}), None, log=store).decide("event", {"needs_prep": QUESTIONS["needs_prep"]})
+    assert "distribution" in stats(store)["drift"][0]["unchecked"]
+
+
+def test_drift_needs_a_change_big_enough_to_act_on(tmp_path):
+    from hunch import Store, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store = Store(tmp_path / "hunch.db")
+    # A calibration on a large log: half the answers at 0.7, below the threshold of 0.95.
+    store.save_calibrations({"needs_prep": {"threshold": 0.95, "target": 0.95, "escalation_rate": 0.5, "answers": 100000,
+                                            "histogram": {"edges": [0.7, 0.95], "counts": [0, 50000, 50000]}}}, 0, ["needs_prep"])
+    # Now 54% fall below it: too many answers for that to be chance, too small a change to act on.
+    for i in range(2000):
+        Router(Tier({"needs_prep": (True, 0.7 if i % 50 < 27 else 0.95)}), None, log=store).decide("event", q)
+    drift = stats(store)["drift"][0]
+    assert drift["escalation_rate"]["since"] == pytest.approx(0.54) and drift["distribution_change"] == pytest.approx(0.04)
+    assert drift["flags"] == []
+    assert stats(store, min_escalation_change=0, min_distribution_change=0)["drift"][0]["flags"] == ["escalation_rate", "distribution"]
+
+
+def test_holm_shares_one_false_alarm_budget():
+    from hunch.stats import _holm
+
+    assert _holm([0.004, 0.001, 0.02], 0.01) == [True, True, False]
+    assert _holm([0.006, 0.006], 0.01) == [False, False]  # each would pass alone at 0.01
+    assert _holm([], 0.01) == []
