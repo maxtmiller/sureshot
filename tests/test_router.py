@@ -913,3 +913,37 @@ def test_guard_vetoes_a_confident_answer_it_confidently_disagrees_with(tmp_path)
     watcher = Tier({"needs_prep": (False, 0.99), "importance": (3, 0.99), "event_type": ("meeting", 0.99)})
     Router(unsure, FakeClaude(), guard=watcher).decide("event", QUESTIONS)
     assert watcher.asked == [["importance", "event_type"]]
+
+
+def test_the_core_needs_no_anthropic_sdk():
+    import subprocess
+    import sys
+
+    code = ("import sys; sys.modules['anthropic'] = None\n"
+            "import hunch\n"
+            "from hunch import Router, ChatReasoner\n"
+            "try:\n    hunch.ClaudeAPI()\nexcept ImportError as e:\n    assert 'hunch[claude]' in str(e)\nelse:\n    raise SystemExit('ClaudeAPI built without the SDK')\n")
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_any_adapter_can_mark_an_outage_and_claude_errors_become_one():
+    import anthropic
+    import httpx
+    from hunch import ClaudeAPI, Outage
+
+    # An Outage from any System 2 falls back like a network error; a mistake still raises.
+    down = Router(FakeDecider(), Flaky(FakeClaude(), [Outage("overloaded")] * 9), retries=0, backoff=0).decide("event", QUESTIONS)
+    assert down["degraded"][-1]["system"] == 2 and down["escalated"] == []
+    with pytest.raises(RuntimeError, match="bad key"):
+        Router(FakeDecider(), Flaky(FakeClaude(), [RuntimeError("bad key")] * 9), retries=0, backoff=0).decide("event", QUESTIONS)
+
+    class Client:
+        class beta:
+            class messages:
+                @staticmethod
+                def create(**kwargs):
+                    raise anthropic.APIConnectionError(request=httpx.Request("POST", "http://x"))
+
+    with pytest.raises(Outage):
+        ClaudeAPI(client=Client()).answer("event", QUESTIONS)

@@ -1,8 +1,9 @@
 """Build a Router from environment variables, so a deployment can swap models without code changes."""
 import json
 import os
+from pathlib import Path
 from hunch.local import LocalDecider
-from hunch.backends import ChatDecider, VLLMDecider, ClaudeAPI, ClaudeCLI, ChatReasoner, default_system2
+from hunch.backends import ChatDecider, VLLMDecider, ChatReasoner
 from hunch.cache import Cache
 from hunch.router import Router
 from hunch.store import Store
@@ -28,14 +29,35 @@ def system1_from_env():
     return [LocalDecider.load(os.environ["HUNCH_LOCAL_MODEL"]), llm] if os.environ.get("HUNCH_LOCAL_MODEL") else llm
 
 
+def default_system2():
+    """The first System 2 that is configured: a chat model when HUNCH_SYSTEM2_URL is set, else Claude through the API
+    when the SDK is installed and a credential is set, else the local claude CLI if installed, else None."""
+    if os.environ.get("HUNCH_SYSTEM2_URL"):
+        return _chat(ChatReasoner, 2)
+    from importlib.util import find_spec
+
+    if find_spec("anthropic") and (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        from hunch.claude import ClaudeAPI
+
+        return ClaudeAPI()
+    from hunch.claude import ClaudeCLI
+
+    cli = ClaudeCLI()
+    return cli if Path(cli.command).exists() else None
+
+
 def system2_from_env():
     kind = os.environ.get("HUNCH_SYSTEM2", "auto")
     model = os.environ.get("HUNCH_SYSTEM2_MODEL")
     if kind == "auto":
         return default_system2()
     if kind == "claude":
+        from hunch.claude import ClaudeAPI
+
         return ClaudeAPI(**({"model": model} if model else {}))
     if kind == "claude-cli":
+        from hunch.claude import ClaudeCLI
+
         return ClaudeCLI(model)
     if kind == "chat":
         return _chat(ChatReasoner, 2)
