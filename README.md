@@ -188,6 +188,12 @@ local.save("local.joblib")                     # LocalDecider.load("local.joblib
   question, only if on held-out decisions it reaches the accuracy target and passes on fewer questions than `current`.
   It saves the promoted questions' thresholds to the store and returns `{"decider", "report"}`, so the escalation rate
   falls as labels and System 2 answers accumulate.
+- `Router(..., guard=local, guard_threshold=0.9)` catches confident errors, which a model's own confidence cannot:
+  when a tier is confident but the guard (a `LocalDecider` trained on your labels, so it runs in-process) disagrees
+  with probability at least `guard_threshold`, the answer counts as unsure and escalates; the guard's answer is
+  kept under `"guard"`. On 506 held-out job emails, where `gpt-4o-mini` was wrong 37 times at 0.95 confidence or
+  more, a guard at 0.9 escalated 3.2% of emails and caught 13 of the 37 (3 false alarms); at 0.7 it escalated 6.9%
+  and caught 22 (13 false alarms).
 - `threshold` can be a list with one number per tier, and each tier has its own calibrated thresholds, since a
   classifier's 0.9 and an LLM's 0.9 mean different things. Calibrate each tier: `calibrate(store, tier=0)`,
   `calibrate(store, tier=1)`.
