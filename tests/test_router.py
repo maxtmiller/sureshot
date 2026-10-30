@@ -1566,3 +1566,27 @@ def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_
     assert checked["reason"] == "below target on labels" and checked["threshold"] is None and store.thresholds() == {"needs_prep": float("inf")}
     assert checked["sample_check"]["graded"] == len(sample) and checked["sample_check"]["high"] < 0.9
     assert checked["graded_by"] == {"human": len(sample), "system2": 300 - len(sample)}
+
+
+def test_prune_stops_asking_a_tier_that_costs_more_than_it_saves(tmp_path):
+    from hunch import prune
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store.save_thresholds({"needs_prep": 0.9}, 0)
+    # The tier is sure about one question in ten, so it keeps a tenth of its answers.
+    for i in range(200):
+        Router(Tier({"needs_prep": (True, 0.95 if i % 10 == 0 else 0.5)}), FakeClaude(), log=store).decide("event", q)
+    # In money alone it pays (a tenth of 10 saved for 0.5); counting its latency it does not (2 a question).
+    report = prune(store, {"tier 0": 0.5, "system2": 10})["needs_prep"]
+    assert report == {"answers": 200, "keep_rate": 0.1, "net": pytest.approx(0.5), "skipped": False} and store.skipped(0) == set()
+    assert prune(store, {"tier 0": 2.0, "system2": 10})["needs_prep"]["skipped"] and store.skipped(0) == {"needs_prep"}
+    # A skipped tier is only probed; with probe=0 it is not asked, and System 2 answers.
+    idle = Tier({"needs_prep": (True, 0.95)})
+    result = Router(idle, FakeClaude(), log=store, probe=0.0).decide("event", q)
+    assert idle.asked == [] and result["escalated"] == ["needs_prep"]
+    # Once it pays again it is asked again; too few answers leaves it as it is.
+    assert not prune(store, {"tier 0": 0.5, "system2": 10})["needs_prep"]["skipped"] and store.skipped(0) == set()
+    assert prune(store, {"tier 0": 2.0, "system2": 10}, min_answers=1000) == {} and store.skipped(0) == set()
+    with pytest.raises(ValueError, match="system2"):
+        prune(store, {"tier 0": 1.0})

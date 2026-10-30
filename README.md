@@ -333,6 +333,11 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   more than it saves: drop it, or lower its threshold. Add `"ms"`, a cost per millisecond, to price waiting too.
   Answers served from the cache are counted as asked, so with a cache it is an upper bound. hunch has no price list,
   since prices change and differ by account: pass yours.
+- `prune(store, costs, tier=1)` acts on it: a tier is only probed (`Router(probe=)`) on the questions where the share
+  of answers it keeps, times what a System 2 question costs, is less than what asking it costs; it is asked again
+  once its probe answers show it paying. To count waiting, add its price to each stage's cost. In the banking77 case
+  study `gpt-4o-mini` kept about 13% of its answers: in money alone that pays (13% of $0.0034 against $0.00008), but
+  it added 0.57 s to every message to save 0.95 s on one in eight, which made hunch slower than `gpt-4.1` alone.
 - `drift` compares each calibrated question and tier with its last `calibrate` run, and `flags` names what moved:
   `"escalation_rate"` (the share of the tier's answers below the threshold: the inputs or the model changed),
   `"distribution"` (how its confidences spread over five quantile bins, which catches a slide that stays above the

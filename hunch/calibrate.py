@@ -181,3 +181,35 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
                               "histogram": histogram(confidences) if confidences else None}
         store.save_calibrations(snapshots, tier, list(found) + list(closed))
     return report
+
+
+def prune(store, costs, tier=0, min_answers=100):
+    """Stops asking a tier the questions it does not pay for, apart from the Router's probe sample, and asks it again
+    the ones it does. costs is {"tier 0": ..., "system2": ...}, what one question costs at each stage (as for stats); to
+    count waiting, add its price to each stage's cost (say $0.01 a second: 0.0057 more for a tier that takes 570 ms).
+
+    A tier pays for a question when keep_rate * costs["system2"] > costs[f"tier {tier}"], where keep_rate is the share of
+    its logged answers at or above its saved threshold: each answer it keeps saves a System 2 question, and each one
+    it is asked costs its own. Comparing with System 2 overstates what an earlier tier saves when a later tier would
+    have answered instead, so this errs toward asking. Questions with fewer than min_answers logged answers from the
+    tier, or no saved threshold, are left as they are. While a tier is skipped its probe answers keep keep_rate up to
+    date, so it is asked again if it starts paying. Returns {key: {answers, keep_rate, net, skipped}}, net being what
+    asking it saves per question."""
+    if "system2" not in costs:
+        raise ValueError('costs needs a "system2" cost per question')
+    thresholds = store.thresholds(tier)
+    confidences = {}
+    for _, _, _, result in store.results():
+        for key, answer in result["answers"].items():
+            if key in thresholds:
+                confidences.setdefault(key, []).extend(e["confidence"] for e in answer.get("tried", []) if e["tier"] == tier)
+    report, skip, ask = {}, [], []
+    for key, seen in confidences.items():
+        if len(seen) < min_answers:
+            continue
+        keep_rate = sum(c >= thresholds[key] for c in seen) / len(seen)
+        net = keep_rate * costs["system2"] - costs.get(f"tier {tier}", 0.0)
+        (skip if net < 0 else ask).append(key)
+        report[key] = {"answers": len(seen), "keep_rate": keep_rate, "net": net, "skipped": net < 0}
+    store.save_skips(tier, skip, ask)
+    return report
