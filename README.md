@@ -359,7 +359,7 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   pass down, so when tier 0 starts passing harder questions, tier 1 drifts too. Look at the earliest tier first, and
   recalibrate the later tiers after recalibrating an earlier one.
 - Questions with no calibration snapshot are watched too: never calibrated, run on a per-call `thresholds=`, or
-  reset because `calibrate` failed closed or `retrain` replaced the classifier. Drift learns a baseline from their
+  reset because `calibrate` failed closed. Drift learns a baseline from their
   first `min_samples` answers (since the reset, and within the report's `since`) and checks later ones against it;
   the entry has `baseline` instead of `calibrated_at`. With no threshold, the escalation rate is the share the tier
   passed on, and accuracy is `unchecked`, since there is no target. A question that was already drifting during
@@ -368,7 +368,8 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   not audited is left out, since it was picked some other way (often because it looked wrong) and would make drift
   look worse than it is. With `audit=0` the accuracy check never runs, and a model that stays confident while
   getting worse goes unseen: set `audit` to watch for that.
-  `retrain` clears the snapshot of the questions it promotes until the next `calibrate`.
+  `retrain` saves a snapshot for each question it promotes, from the new classifier's confidences on the logged
+  decisions, so its accuracy is checked too.
 - `latency_ms` times the whole decision, the mean time each tier took, and how often System 2 was called. The report also has
   `degraded` (how many decisions had a model down) and `decisions` at the top level.
 
@@ -430,6 +431,12 @@ evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/
                  "llama-8b": ChatDecider("llama3.1:8b", "http://localhost:11434/v1")})
 ```
 
+- Until a question is calibrated, a tier is trusted at the router's default `threshold`, which may be far from the
+  target: in the banking77 case study (`examples/case_study_banking77.md`), `gpt-4o-mini` kept 93% of answers on
+  day 1 at 71% accuracy. `Router(..., log=store, trust_uncalibrated=False)` trusts a tier on a question only once
+  there is a threshold for it (from `calibrate`, `retrain`, or passed per call). Until then everything escalates,
+  which costs System 2 calls but gives calibration a complete, unbiased sample to start from.
+
 - Truth is a human label when there is one, else System 2's answer. Escalated questions always have System 2's
   answer, but they are all low confidence. `audit=0.1` also sends a random 10% of confident questions to System 2
   (their answers still come from System 1), and calibration weights those 10x, so the estimate covers every
@@ -448,7 +455,10 @@ evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/
     a tenth of the answers. Lower the target, or change or drop this tier.
 
   The last two fail closed: `calibrate` saves a threshold nothing can reach, so that tier is not trusted for the
-  question and everything passes to the next tier or System 2 until a later calibration finds a threshold. Pass
+  question and everything passes to the next tier or System 2 until a later calibration finds a threshold. The tier
+  is then only asked about a random `probe` share of those questions (`Router(probe=0.05)`), so you stop paying for
+  answers that are thrown away while the sample keeps data coming. Calibrate a failed tier again on a schedule: with
+  more data it may pass. Pass
   `fail_closed=False` to keep the current threshold instead. Each failure is logged at warning level (logger
   `hunch`), `calibrate` returns the reason, and `stats(store)["uncalibrated"]` lists the questions whose latest
   calibration found nothing, until a later one does.

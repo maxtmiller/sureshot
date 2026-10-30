@@ -1387,7 +1387,7 @@ def test_drift_watches_questions_without_a_calibration(tmp_path):
     assert drift["flags"] == [] and drift["escalation_rate"] == {"at_calibration": 1.0, "since": 1.0} and drift["answers_since"] == 40
 
 
-def test_retrain_resets_the_drift_snapshot_of_what_it_promotes(tmp_path):
+def test_retrain_saves_a_drift_snapshot_for_what_it_promotes(tmp_path):
     from hunch import calibrate, retrain, stats
 
     store = _calibration_store(tmp_path)
@@ -1398,12 +1398,13 @@ def test_retrain_resets_the_drift_snapshot_of_what_it_promotes(tmp_path):
     calibrate(store, 0.4, 30)
     assert [d["calibrated_at"] is not None for d in stats(store)["drift"]] == [True]
     assert retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]["needs_prep"]["promoted"]
-    # The promoted classifier has a new threshold, so drift relearns a baseline instead of using the old snapshot.
-    assert store.calibrations() == [] and (0, "needs_prep") in store.resets()
-    for _ in range(5):
-        Router(FakeDecider(), None, log=store).decide("server meeting", q)
+    # The promoted classifier replaces the old snapshot with its own: its threshold, the target, and its confidences
+    # on the 160 logged decisions, so drift checks its accuracy too.
+    (snapshot,) = store.calibrations()
+    assert snapshot["target"] == 0.8 and snapshot["threshold"] == store.thresholds(0)["needs_prep"] and snapshot["answers"] == 160
+    assert store.resets() == {} and sum(snapshot["histogram"]["counts"]) == 160
     drift = stats(store)["drift"]
-    assert len(drift) == 1 and drift[0]["calibrated_at"] is None and drift[0]["baseline"] == {"answers": 5}
+    assert len(drift) == 1 and drift[0]["calibrated_at"] == snapshot["ts"] and drift[0]["baseline"] is None
 
 
 def test_stats_prices_each_stage_and_what_it_saves(tmp_path):
@@ -1451,3 +1452,40 @@ def test_a_random_labeling_sample_measures_the_router_against_its_target(tmp_pat
     assert on_sample["graded"] == len(queue) and on_sample["accuracy"] == pytest.approx(sum(n % 10 == 0 for n in range(len(queue))) / len(queue))
     assert on_sample["low"] < on_sample["accuracy"] < on_sample["high"] < 0.95 and on_sample["target"] == 0.95 and on_sample["below_target"] is True
     assert stats(store)["questions"]["needs_prep"]["accuracy_on_sample"] is None
+
+
+def test_trust_uncalibrated_false_escalates_until_there_is_a_threshold(tmp_path):
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    sure = Tier({"needs_prep": (True, 0.99)})
+    cautious = Router(sure, FakeClaude(), log=store, trust_uncalibrated=False)
+    result = cautious.decide("event", q)
+    assert result["escalated"] == ["needs_prep"] and result["answers"]["needs_prep"]["hunch"]["confidence"] == 0.99
+    # A threshold passed per call, or saved by calibrate or retrain, counts as calibrated.
+    assert cautious.decide("event", q, thresholds={"needs_prep": 0.9})["escalated"] == []
+    store.save_thresholds({"needs_prep": 0.9}, 0)
+    assert cautious.decide("event", q)["escalated"] == []
+    # The default keeps trusting the router's threshold, and without a log there is nothing to calibrate with.
+    (tmp_path / "b").mkdir()
+    assert Router(sure, FakeClaude(), log=_calibration_store(tmp_path / "b")).decide("event", q)["escalated"] == []
+    assert Router(sure, FakeClaude(), trust_uncalibrated=False).decide("event", q)["escalated"] == []
+
+
+def test_a_tier_that_failed_closed_is_only_probed(tmp_path):
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"], "importance": QUESTIONS["importance"]}
+    store.save_thresholds({"needs_prep": float("inf")}, 0)
+    fast = Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99)})
+    result = Router(fast, FakeClaude(), log=store, probe=0.0).decide("event", q)
+    # needs_prep skips the tier and goes to System 2; importance is still asked.
+    assert fast.asked == [["importance"]] and result["escalated"] == ["needs_prep"] and result["answers"]["needs_prep"]["tried"] == []
+    probed = Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99)})
+    assert Router(probed, FakeClaude(), log=store, probe=1.0).decide("event", q)["answers"]["needs_prep"]["tried"][0]["tier"] == 0
+    # With nowhere to pass it on, the tier is asked and its answer stands as unsure.
+    alone = Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99)})
+    result = Router(alone, None, log=store, probe=0.0).decide("event", q)
+    assert alone.asked == [["needs_prep", "importance"]] and result["unsure"] == ["needs_prep"]
+    # A tier asked about nothing is not called at all.
+    idle = Tier({"needs_prep": (True, 0.99)})
+    Router([idle, Tier({"needs_prep": (True, 0.5)})], FakeClaude(), log=store, probe=0.0).decide("event", {"needs_prep": QUESTIONS["needs_prep"]})
+    assert idle.asked == []

@@ -207,7 +207,7 @@ def _answered(decisions, tier, key, after=0.0):
 
 def _baselines(store, decisions, min_samples):
     """A snapshot for each question and tier that calibrate has none for (never calibrated, run on a per-call
-    threshold, or reset when calibrate failed closed or retrain replaced the classifier), learned from its first
+    threshold, or reset when calibrate failed closed), learned from its first
     min_samples answers since the reset: [(snapshot, the answers after the baseline)]. It has no threshold or target,
     and no escalation rate or bins until it has min_samples answers."""
     calibrated = {(c["tier"], c["key"]) for c in store.calibrations()}
@@ -328,7 +328,7 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     recalibrated after this tier was: a tier only sees what they pass down, so its flags may be theirs. Fix those
     first. In each accuracy, "human" is how many of the graded answers have your label; the rest are graded by
     System 2's audit answer, so the accuracy is partly agreement with System 2. A question and tier with no snapshot from calibrate (never calibrated, on a per-call threshold, or reset
-    when calibrate failed closed or retrain replaced the classifier) is checked against a baseline of its first
+    when calibrate failed closed) is checked against a baseline of its first
     min_samples answers since then, in this report's range ("baseline" instead of "calibrated_at"): the escalation
     rate is then the share the tier passed on, and accuracy is unchecked, since there is no target.
 

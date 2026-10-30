@@ -77,7 +77,8 @@ class Store:
     def save_calibrations(self, snapshots, tier, calibrated):
         """Records what a calibration found ({key: {threshold, target, escalation_rate, answers, histogram}}), so stats
         can tell when later answers drift from it. The questions in `calibrated` left without one (it failed closed,
-        or retrain replaced the classifier) get a reset instead: drift learns a new baseline from their answers after it."""
+        or retrain had no logged answers to take one from) get a reset instead: drift learns a new baseline from their
+        answers after it."""
         now = time.time()
         with self._db() as db:
             db.executemany("DELETE FROM calibrations WHERE tier = ? AND key = ?", [(tier, key) for key in calibrated])

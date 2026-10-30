@@ -24,7 +24,8 @@ def _transient(error):
 
 
 class Router:
-    def __init__(self, system1, system2=None, threshold=0.8, log=None, audit=0.0, retries=2, backoff=0.5, cache=None, guard=None, guard_threshold=0.9):
+    def __init__(self, system1, system2=None, threshold=0.8, log=None, audit=0.0, retries=2, backoff=0.5, cache=None, guard=None, guard_threshold=0.9,
+                 trust_uncalibrated=True, probe=0.05):
         """system1 is one decider, or a list of them tried in order (say a trained classifier, then an LLM): a question
         stops at the first tier that is confident about it. A tier may answer only some of the questions it is given;
         the rest pass down. threshold is a number, or a list with one number per tier, since a classifier's 0.9 and
@@ -41,7 +42,17 @@ class Router:
         guard is a second System 1 (say a LocalDecider trained on your labels) that checks the answers the tiers were
         confident about: where it disagrees with probability at least guard_threshold, the answer is treated as unsure
         and escalates. A model's confidence says nothing about errors it is confidently wrong about; a model trained
-        on your own labels often knows them. It runs in-process with the router, and its errors are not caught."""
+        on your own labels often knows them. It runs in-process with the router, and its errors are not caught.
+
+        trust_uncalibrated=False (with a log) trusts a tier on a question only once there is a threshold for it, saved
+        by calibrate or retrain or passed per call; until then its answers are logged and the question passes on, so
+        a new deployment escalates everything and collects unbiased data to calibrate with, instead of trusting the
+        default threshold.
+
+        probe is the share of questions still asked of a tier that failed closed on them (calibrate could not certify
+        the target, so nothing it says is kept). The rest skip it and go straight to the next tier or System 2, which
+        saves its cost and latency; the sample keeps data coming for a later calibration to try again. A tier with
+        nowhere to pass its questions to is always asked."""
         self.system1, self.system2, self.threshold, self.log, self.audit = system1, system2, threshold, log, audit
         self.guard, self.guard_threshold = guard, guard_threshold
         self.tiers = list(system1) if isinstance(system1, (list, tuple)) else [system1]
@@ -49,6 +60,7 @@ class Router:
         if len(self.tier_thresholds) != len(self.tiers):
             raise ValueError(f"{len(self.tiers)} tiers but {len(self.tier_thresholds)} thresholds")
         self.retries, self.backoff, self.record, self.cache = retries, backoff, True, cache
+        self.trust_uncalibrated, self.probe = trust_uncalibrated, probe
         self._flights, self._flights_lock = {}, threading.Lock()
 
     def _call(self, fn, *args):
@@ -134,15 +146,19 @@ class Router:
             if not remaining:
                 break
             tier_start = time.perf_counter()
+            saved = self.log.thresholds(i) if self.log else {}
+            limit = {key: thresholds.get(key, saved.get(key, self.tier_thresholds[i])) for key in remaining}
+            onward = i + 1 < len(self.tiers) or (escalate and self.system2)
+            # A tier that failed closed on a question is only asked on a sample, when the question has somewhere to go.
+            asked = [key for key in remaining if limit[key] != float("inf") or not onward or random.random() < self.probe]
             try:
-                fast = self._cached(tier, "decide", state, {key: questions[key] for key in remaining}, images, tally)
+                fast = self._cached(tier, "decide", state, {key: questions[key] for key in asked}, images, tally) if asked else {}
             except Exception as e:
-                if not (_transient(e) and (i + 1 < len(self.tiers) or (escalate and self.system2))):
+                if not (_transient(e) and onward):
                     raise
                 degraded.append({"system": 1, "tier": i, "error": repr(e)})
                 fast = {}
             tier_ms.append((time.perf_counter() - tier_start) * 1000)
-            saved = self.log.thresholds(i) if self.log else {}
             unsure = []
             for key in remaining:
                 if key not in fast:
@@ -150,7 +166,8 @@ class Router:
                     continue
                 tried[key].append({"tier": i, "answer": fast[key]["answer"], "confidence": fast[key]["confidence"]})
                 latest[key] = fast[key] | {"tier": i}
-                if fast[key]["confidence"] < thresholds.get(key, saved.get(key, self.tier_thresholds[i])):
+                calibrated = key in thresholds or key in saved
+                if fast[key]["confidence"] < limit[key] or (self.log and not self.trust_uncalibrated and not calibrated):
                     unsure.append(key)
                 else:
                     answers[key] = fast[key] | {"source": "hunch", "tier": i}
