@@ -2,7 +2,7 @@
 import math
 import statistics
 from bisect import bisect_right
-from hunch.calibrate import histogram, tier_confidences, wilson_lower
+from hunch.calibrate import confidence_sequence as _sequence, histogram, tier_confidences, wilson_lower
 from hunch.review import REASONS, in_sample, pending
 
 
@@ -18,29 +18,6 @@ def _timing(values):
 def _normal_p(z):
     """The chance a standard normal is at least z."""
     return 0.5 * math.erfc(z / math.sqrt(2))
-
-
-def _sequence(successes, n, alpha):
-    """(low, high): a confidence sequence for a rate seen as `successes` out of n, which contains the true rate at
-    every n at once except alpha of the time, so it stays valid however often it is checked as answers come in.
-    It is Robbins' mixture of the likelihood over a uniform prior, bounded with Ville's inequality; unlike a bound
-    that ignores the spread (Hoeffding's), it is tight for rates near 0 or 1. n may be an effective count."""
-    mix = math.lgamma(1 + successes) + math.lgamma(1 + n - successes) - math.lgamma(2 + n)
-    bound = math.log(1 / alpha)
-
-    def outside(p):
-        return mix - successes * math.log(p) - (n - successes) * math.log(1 - p) >= bound
-
-    def edge(inside, out):
-        for _ in range(60):
-            mid = (inside + out) / 2
-            inside, out = (inside, mid) if outside(mid) else (mid, out)
-        return inside
-
-    best = successes / n
-    low = 0.0 if successes <= 0 or not outside(1e-12) else edge(best, 1e-12)
-    high = 1.0 if successes >= n or not outside(1 - 1e-12) else edge(best, 1 - 1e-12)
-    return low, high
 
 
 def _z(tail):
