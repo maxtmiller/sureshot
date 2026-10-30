@@ -268,6 +268,10 @@ router.test("golden.jsonl", questions=questions, thresholds={"urgency": 0.7})   
 
 - It caches what the models said, not the decision, so changing `threshold`, recalibrating, or editing the thresholds
   you pass needs no clearing. Only a question that newly becomes unsure calls System 2.
+- A vendor can update a model behind the same name (an alias like `gpt-4o-mini` rather than a dated snapshot). The
+  key cannot see that, so cached answers keep the old model's behavior, and drift only sees the change on texts
+  that miss the cache. Pin a dated model name where the vendor offers one, set a `ttl`, or `clear()` the cache
+  when you change models.
 - It is per question and per model. The key is the model's `identity`, the question's name and definition, the
   text and the images. A different model, `extra`, URL, question wording or text is a different key. An API key is
   not part of it. A trained `LocalDecider` has an identity that changes when it is retrained. `ClaudeAPI`, `ChatDecider`,
@@ -337,6 +341,8 @@ The output above is from a run of 200 decisions (100 per question) on public dat
 - Each check needs `min_samples` (default 30) answers since the calibration (audited ones, for accuracy), and
   `unchecked` names the checks that could not run yet, so an empty `flags` is not read as no drift. Snapshots saved
   before the distribution check have no bins, so it is `unchecked` until you calibrate.
+- Drift only shows when `stats` is called. To be told, run `examples/drift_alert.py hunch.db` on a schedule: it
+  prints what moved and exits with status 1 when anything is flagged.
 - `upstream` lists the earlier tiers of the same question that flagged drift in the same report (`"reason":
   "drift"`) or were recalibrated after this tier (`"recalibrated"`). A later tier only sees what the earlier ones
   pass down, so when tier 0 starts passing harder questions, tier 1 drifts too. Look at the earliest tier first, and
