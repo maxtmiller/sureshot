@@ -315,26 +315,28 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   `"distribution"` (how its confidences spread over five quantile bins, which catches a slide that stays above the
   threshold, such as 0.99 becoming 0.96 with the threshold at 0.95, before it moves the escalation rate or the
   accuracy) and `"accuracy"` (its audited answers since then, graded by your label where there is one, else by the
-  audit, are below the target). A flag means grade a fresh sample and calibrate again. `accuracy_since` (and
-  `recent["accuracy"]`) also gives `human`, how many of the graded answers have your label: the others are graded
+  audit, are below the target). A flag means grade a fresh sample and calibrate again. `accuracy_since` also
+  gives `human`, how many of the graded answers have your label: the others are graded
   by System 2's audit answer, so with few labels the accuracy mostly measures agreement with System 2.
-- A flag needs both evidence and size. Half of `alpha` (default 0.01) goes to the checks on everything since the
-  calibration, split evenly across them, and they use confidence sequences (with a one-off interval for the
-  calibration's own fixed sample), which hold at every sample size at once: however often you
-  call `stats`, they raise a false flag at most that often, ever. The price is that they need more answers to flag
-  the same change than a one-off test would. The other half goes to the `recent_` checks, split with Holm's method
-  within each report. A window keeps taking in new answers, so polling it often still adds up false `recent_` flags
-  over weeks: treat them as an early hint and confirm by grading a sample. The change must also be big enough to
-  act on: the escalation rate must move at least `min_escalation_change` (default 0.05), and the bins must differ by
-  at least `min_distribution_change` (default 0.1, the share of answers that would have to change bins), so a large
-  log does not flag a move from 20% to 21%. Accuracy below the target is already worth acting on, so it has no
-  minimum.
+- A flag needs both evidence and size. The checks on everything since the calibration share `alpha` (default 0.01),
+  split evenly, and use confidence sequences (with a one-off interval for the calibration's own fixed sample), which
+  hold at every sample size at once: however often you call `stats`, they raise a false flag at most that often,
+  ever. The price is that they need several times more answers to flag a change than a one-off test would. The
+  change must also be big enough to act on: the escalation rate must move at least `min_escalation_change` (default
+  0.05), and the bins must differ by at least `min_distribution_change` (default 0.1, the share of answers that
+  would have to change bins), so a large log does not flag a move from 20% to 21%. Accuracy below the target is
+  already worth acting on, so it has no minimum.
+- Those checks pool everything since the calibration, so a change that starts months later is diluted by the
+  normal traffic before it. The change detectors catch that: `"change_escalation_rate"`, `"change_distribution"`
+  and `"change_accuracy"`. Each keeps a running score (a CUSUM) that normal answers keep near zero and a change
+  makes climb, watching for the same minimum changes (and for accuracy, the error rate doubling). Each starts from
+  the edge of the calibration's interval, so noise in the calibration's own answers is not taken for a change.
+  Together they raise a false flag within n answers at most n / `false_alarm_every` (default 100,000) of the time,
+  however often you call `stats`. `change` gives when each change started and when it was flagged, and a flag
+  stays until the next calibration.
 - Each check needs `min_samples` (default 30) answers since the calibration (audited ones, for accuracy), and
-  `unchecked` names the checks that could not run yet, so an empty `flags` is not read as no drift. Once there are
-  more than `window` (default 500) answers since the calibration, the checks also run on the latest `window` alone,
-  under `recent` and as `recent_escalation_rate`, `recent_distribution` and `recent_accuracy`, so a change that
-  starts months after calibrating is not diluted by the normal traffic before it. Snapshots saved before the
-  distribution check have no bins, so it is `unchecked` until you calibrate.
+  `unchecked` names the checks that could not run yet, so an empty `flags` is not read as no drift. Snapshots saved
+  before the distribution check have no bins, so it is `unchecked` until you calibrate.
 - `upstream` lists the earlier tiers of the same question that flagged drift in the same report (`"reason":
   "drift"`) or were recalibrated after this tier (`"recalibrated"`). A later tier only sees what the earlier ones
   pass down, so when tier 0 starts passing harder questions, tier 1 drifts too. Look at the earliest tier first, and
