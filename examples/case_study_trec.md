@@ -1,0 +1,85 @@
+# Case study: what kind of answer does a question want? (TREC)
+
+The second end-to-end test of hunch, on a different kind of task from [banking77](case_study_banking77.md): six
+options instead of 77, short questions, and labels that follow the dataset's own conventions. The script is
+`case_study.py --dataset trec`; every run's numbers are in `case_study_trec_results.json`.
+
+## Setup
+
+The same as banking77 apart from the data:
+
+- **Data:** [TREC](https://huggingface.co/datasets/SetFit/TREC-QC) question classification, about 5,900 unique
+  questions, each labeled by a person with the kind of answer it asks for: an abbreviation, an entity, a
+  description, a person, a location or a number. The options are described with the dataset's own names
+  ("Entities", "Numeric values"...). 300 questions a day for ten days; from day 6, half of them ask for a number or a
+  location.
+- **Router:** a local classifier (untrained at first), then `gpt-4o-mini`, then `gpt-4.1` as System 2. Target 95%,
+  5% of confident answers audited, nothing trusted until calibrated, 5% probes.
+- **Each night:** 30 labels from the review queue (a random 2% of messages first, then a random 10% of the answers a
+  tier kept), `retrain`, `calibrate` for `gpt-4o-mini` when it has no threshold or drift flags it, `recheck`,
+  `prune`.
+- **Cost:** asking both models about all 3,000 questions once cost $2.26 ($0.04 for `gpt-4o-mini`, $2.22 for
+  `gpt-4.1`). The six runs read those answers from the cache. Latency uses each model's mean time in that run
+  (0.53 s and 0.85 s) and 60 ms for the classifier.
+- **Runs:** seeds 0, 1 and 2, each with money only and with waiting priced at $0.01 a second. Runs are repeatable:
+  the same seed gives the same results.
+
+## Results
+
+| | Accuracy | Cost | Mean latency |
+|---|---|---|---|
+| hunch, money only (three runs) | 85.9% to 86.0% | $1.93 to $2.07 | 1.17 to 1.32 s |
+| hunch, waiting at $0.01 a second (three runs) | 85.8% to 86.0% | $1.98 to $2.17 | 0.88 to 0.93 s |
+| `gpt-4.1` alone | 86.0% | $2.22 | 0.85 s |
+| `gpt-4o-mini` alone | 72.8% | $0.04 | 0.53 s |
+
+hunch matches `gpt-4.1`'s accuracy for 2% to 13% less, and only from days 7 to 10 does it beat `gpt-4.1` on speed
+(0.77 to 0.87 s with waiting priced). The savings are smaller than on banking77, because here the cheap model is
+rarely trustworthy. As on banking77 the 95% target is out of reach (`gpt-4.1` itself is 86% right), and the labeled
+random sample says so in every run, from day 2 in two and for good from day 6 in the third.
+
+By run, waiting priced:
+
+| Run | Local classifier | Its accuracy | `gpt-4o-mini` | Drift flags |
+|---|---|---|---|---|
+| 1 | from day 7, 11% to 34% of questions | 91% to 99% | skipped from night 1 | none |
+| 2 | from day 9, 8% to 12% | 92% to 100% | skipped from night 1 | none |
+| 3 | from day 4, 12% to 19% | 84% to 96% | skipped from night 1 | classifier's escalation rate, day 10 |
+
+With money only, `gpt-4o-mini` was asked about every question, since keeping 2% to 12% of them for $0.000014 each
+paid against $0.00074 for `gpt-4.1`. That made hunch slower than `gpt-4.1` alone.
+
+## What worked
+
+- **The local classifier** again carried the savings: 96%, 99% and 91% right on the answers it kept (money-only
+  runs), close to the target that `gpt-4.1` can't reach. In one run `retrain` failed it closed on day 7, after the
+  shift, and no new one met the target by day 10.
+- **`prune`** skipped `gpt-4o-mini` from night 1 when waiting was priced, which is what kept hunch near `gpt-4.1`'s
+  speed.
+- **The labeled random sample** showed the router below target in every run, and `stats` put it at 79% to 89% on day
+  10 (63 to 76 labels) against a true 86%.
+
+## What this found
+
+1. **Calibration certified `gpt-4o-mini` on System 2's word alone.** On night 1 (two runs) or 2 (one run),
+   `calibrate` set a threshold of 0.999999999998 from 32 to 35 graded answers, of which 0 to 2 had a person's label:
+   the rest were graded by `gpt-4.1`. They all agreed, and 35 of 35 clears 95% on the one-sided 90% bound. Across
+   all 3,000 questions, the 184 at or above that threshold agree with `gpt-4.1` every time, yet only 87.5% are right:
+   both models make the same mistakes there, which grading by System 2 can never see. Its kept answers in the runs
+   were 81% to 87% right. hunch reported it (`graded_by` says `{"human": 0, "system2": 35}`), but nothing acted on
+   it. On banking77 the same thing happened more mildly (certified at 95%, 89% to 94% right). A
+   threshold should probably need some human labels above it before it is trusted, or a target judged by System 2
+   should be discounted by how often System 2 itself is wrong on the labeled sample.
+2. **`recheck` still had too few labels.** With `kept=0.1` it had 14 to 23 labels on `gpt-4o-mini`'s kept answers by
+   day 10, 84% to 88% right, which leaves the upper bound at 99%. It never failed the tier.
+3. **The drift was benign, and drift monitoring mostly stayed quiet.** Shifting half the traffic to numbers and
+   locations did not change either model's accuracy, so no flag was the right answer, and the one flag (the
+   classifier's escalation rate in one run) reflected a real change in what it saw. But the accuracy checks were
+   `unchecked` in every run on day 10: neither tier had 30 randomly graded answers since its calibration, so a real
+   drop in accuracy would have gone unseen too.
+
+## Caveats
+
+One dataset with its own label conventions ("Who is Stephen Hawking?" asks for a description, not a person), which
+both models often miss; better option descriptions or examples would likely raise both. The labeler is the
+dataset, always right by definition. Latency comes from typical times, since the runs read answers from a cache.
