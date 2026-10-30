@@ -364,10 +364,12 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   the entry has `baseline` instead of `calibrated_at`. With no threshold, the escalation rate is the share the tier
   passed on, and accuracy is `unchecked`, since there is no target. A question that was already drifting during
   those first answers takes that as normal, so calibrate when you can.
-- The accuracy check uses only audited answers, because `audit` picks them at random. A label on an answer that was
-  not audited is left out, since it was picked some other way (often because it looked wrong) and would make drift
-  look worse than it is. With `audit=0` the accuracy check never runs, and a model that stays confident while
-  getting worse goes unseen: set `audit` to watch for that.
+- The accuracy check uses only answers picked at random: audited ones, and with `stats(store, sample=0.02)` labeled
+  ones in the random labeling sample, each weighted by its chance of being picked either way. Any other label is left
+  out, since it was picked some other way (often because it looked wrong) and would make drift look worse than it
+  is. With neither the check never runs, and a model that stays confident while getting worse goes unseen. A cheap
+  tier keeping a few dozen answers a day needs both: in the banking77 case study, 5% audits gave its classifier two
+  or three graded answers a day, against the 30 a check needs.
   `retrain` saves a snapshot for each question it promotes, from the new classifier's confidences on the logged
   decisions, so its accuracy is checked too.
 - `latency_ms` times the whole decision, the mean time each tier took, and how often System 2 was called. The report also has
