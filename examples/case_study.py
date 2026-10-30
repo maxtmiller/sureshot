@@ -1,6 +1,11 @@
-"""Case study: hunch routing a bank's support messages for ten simulated days.
+"""Case study: hunch answering one multiple-choice question about a stream of texts for ten simulated days.
 
-banking77 (PolyAI/banking77) is about 13,000 real customer messages, each labeled by a person with one of 77 intents.
+Two datasets, each labeled by people:
+- banking77 (PolyAI/banking77): about 13,000 bank customer messages, each with one of 77 intents. From day 6 half the
+  messages come from eight card-security intents.
+- trec (SetFit/TREC-QC): about 6,000 questions, each with the kind of answer it asks for (one of 6: a number, a
+  location, a person...). From day 6 half the questions ask for a number or a location.
+
 The router is a local classifier (untrained at first), then gpt-4o-mini, then gpt-4.1 as System 2, with a 95%
 accuracy target. Nothing is trusted until it is calibrated, and a tier that failed closed is only asked about 5% of
 messages. Each day 300 messages arrive. Each night a person labels 30 items from the review queue, a random 2% of
@@ -8,14 +13,13 @@ messages first (here the dataset's own labels stand in for them), the classifier
 recalibrated whenever it has no certified threshold or drift flags it, checking its threshold against the labeled
 random sample. The nightly retrain rechecks the classifier, recheck tests gpt-4o-mini's threshold against the
 labeled sample, and prune stops asking gpt-4o-mini when it costs more than it saves (with --per-second, waiting is
-priced in: that many dollars per second of latency). From day 6 half the messages come from eight
-card-security intents, a shift drift monitoring should notice.
+priced in: that many dollars per second of latency). The shift from day 6 is one drift monitoring should notice.
 
-    python examples/case_study_banking77.py baseline   # asks both models about every message (the paid part)
-    python examples/case_study_banking77.py simulate   # runs the ten days, reusing those answers from the cache
+    python examples/case_study.py baseline --dataset trec   # asks both models about every message (the paid part)
+    python examples/case_study.py simulate --dataset trec   # runs the ten days, reusing those answers from the cache
 
-Add --smoke to run 20 messages a day for 2 days first, and --seed N to pick another repeatable run (which answers get audited and probed, and which go in the labeling sample). Needs an OpenAI key in OPENAI_API_KEY. Working files go to
-data/case_study_banking77/ (or data/case_study_banking77_smoke/); the results are summary_<seed>.json and days_<seed>.jsonl there.
+--dataset defaults to banking77. Add --smoke to run 20 messages a day for 2 days first, and --seed N to pick another repeatable run (which answers get audited and probed, and which go in the labeling sample). Needs an OpenAI key in OPENAI_API_KEY. Working files go to
+data/case_study_<dataset>/ (or data/case_study_<dataset>_smoke/); the results are summary_<seed>.json and days_<seed>.jsonl there.
 """
 import argparse
 import json
@@ -35,24 +39,45 @@ from hunch.review import REASONS
 PRICES = {"gpt-4o-mini": (0.15, 0.60), "gpt-4.1": (2.00, 8.00)}  # $ per million input and output tokens; check yours
 TARGET, AUDIT, PROBE, SAMPLE, KEPT, LABELS_PER_NIGHT, WORKERS = 0.95, 0.05, 0.05, 0.02, 0.1, 30, 8
 LOCAL_MS = 60  # the classifier's typical time per message on one laptop; measuring it live breaks when runs share a CPU
-SHIFTED = ["compromised_card", "lost_or_stolen_card", "card_payment_not_recognised", "cash_withdrawal_not_recognised",
-           "direct_debit_payment_not_recognised", "transaction_charged_twice", "card_swallowed", "lost_or_stolen_phone"]
 
 
-def traffic(days, per_day, shift_day):
-    """The messages for each day: a random mix, then from shift_day on, half from the SHIFTED intents."""
+def banking77():
     data = load_dataset("PolyAI/banking77")
     names = data["train"].features["label"].names
+    rows = [(row["text"], names[row["label"]]) for split in ("train", "test") for row in data[split]]
+    return rows, {n: n.replace("_", " ").strip("?").capitalize() for n in names}
+
+
+def trec():
+    data = load_dataset("SetFit/TREC-QC")
+    rows = [(row["text"], row["label_coarse_original"]) for split in ("train", "test") for row in data[split]]
+    names = {row["label_coarse_original"]: row["label_coarse_text"].capitalize() for split in ("train", "test") for row in data[split]}
+    return rows, dict(sorted(names.items()))
+
+
+# load() gives (text, label) rows and {label: description}; shifted are the labels half the messages come from after
+# the shift.
+DATASETS = {
+    "banking77": {"load": banking77, "key": "intent", "instructions": "What is this bank customer asking about?",
+                  "shifted": ["compromised_card", "lost_or_stolen_card", "card_payment_not_recognised", "cash_withdrawal_not_recognised",
+                              "direct_debit_payment_not_recognised", "transaction_charged_twice", "card_swallowed", "lost_or_stolen_phone"]},
+    "trec": {"load": trec, "key": "answer_type", "instructions": "What kind of answer is this question asking for?",
+             "shifted": ["NUM", "LOC"]},
+}
+
+
+def traffic(dataset, days, per_day, shift_day):
+    """The messages for each day: a random mix, then from shift_day on, half from the shifted labels."""
+    rows, criteria = dataset["load"]()
     pool, seen = [], set()
-    for split in ("train", "test"):
-        for row in data[split]:
-            if row["text"] not in seen:  # a repeated message would be served from the cache
-                seen.add(row["text"])
-                pool.append({"text": row["text"], "gold": names[row["label"]]})
+    for text, gold in rows:
+        if text not in seen:  # a repeated message would be served from the cache
+            seen.add(text)
+            pool.append({"text": text, "gold": gold})
     rng = random.Random(0)
     rng.shuffle(pool)
-    shifted = [m for m in pool if m["gold"] in SHIFTED]
-    rest = [m for m in pool if m["gold"] not in SHIFTED]
+    shifted = [m for m in pool if m["gold"] in dataset["shifted"]]
+    rest = [m for m in pool if m["gold"] not in dataset["shifted"]]
     out = []
     for day in range(1, days + 1):
         if day < shift_day:
@@ -61,12 +86,11 @@ def traffic(days, per_day, shift_day):
             today = [shifted.pop() for _ in range(per_day // 2)] + [rest.pop() for _ in range(per_day - per_day // 2)]
             rng.shuffle(today)
         out.append(today)
-    return names, out
+    return criteria, out
 
 
-def question(names):
-    return {"intent": {"type": "choice", "instructions": "What is this bank customer asking about?",
-                       "criteria": {n: n.replace("_", " ").strip("?").capitalize() for n in names}}}
+def question(dataset, criteria):
+    return {dataset["key"]: {"type": "choice", "instructions": dataset["instructions"], "criteria": criteria}}
 
 
 def models():
@@ -74,11 +98,12 @@ def models():
     return ChatDecider("gpt-4o-mini", provider="openai", api_key=key), ChatReasoner("gpt-4.1", provider="openai", api_key=key)
 
 
-def baseline(work, days):
+def baseline(work, dataset, days):
     """Asks gpt-4o-mini and gpt-4.1 about every message once, through the cache the simulation reads, and records
     their answers, latency and token use."""
-    names, schedule = days
-    q = question(names)
+    criteria, schedule = days
+    key = dataset["key"]
+    q = question(dataset, criteria)
     mini, big = models()
     # Every message escalates (no confidence reaches 1.01), so both models answer it.
     router = Router([mini], big, threshold=[1.01], cache=Cache(work / "cache.db"), retries=4, backoff=2.0)
@@ -100,7 +125,7 @@ def baseline(work, days):
 
     def one(m):
         result = router.decide(m["text"], q)
-        a = result["answers"]["intent"]
+        a = result["answers"][key]
         return {"text": m["text"], "gold": m["gold"], "mini": a["hunch"]["answer"], "mini_confidence": a["hunch"]["confidence"],
                 "big": a["answer"], "mini_ms": result["latency_ms"]["tiers"][0], "big_ms": result["latency_ms"]["system2"],
                 "cached": result["cache"]["hits"] > 0}
@@ -132,13 +157,14 @@ def per_call(work):
     return cost, ms, rows
 
 
-def simulate(work, days, seed=0, per_second=0.0):
-    names, schedule = days
+def simulate(work, dataset, days, seed=0, per_second=0.0):
+    criteria, schedule = days
+    key = dataset["key"]
     # The router picks audits and probes at random, and the store's ids pick the labeling sample. Decisions run one
     # at a time (every answer comes from the cache) so both draw in the same order each run, and the log's
     # timestamps, which order the review queue, come in the same order too.
     random.seed(seed)
-    q = question(names)
+    q = question(dataset, criteria)
     mini, big = models()
     cost, ms, rows = per_call(work)
     costs = {"tier 0": 0.0, "tier 1": cost["gpt-4o-mini"], "system2": cost["gpt-4.1"]}
@@ -161,7 +187,7 @@ def simulate(work, days, seed=0, per_second=0.0):
         latency = []
         for m, result in decided:
             gold[result["id"]] = m["gold"]
-            a = result["answers"]["intent"]
+            a = result["answers"][key]
             who = "system2" if a["source"] == "system2" else f"tier {a.get('tier', 0)}"
             right[who][0] += 1
             right[who][1] += a["answer"] == m["gold"]
@@ -179,13 +205,13 @@ def simulate(work, days, seed=0, per_second=0.0):
         whole = stats(store, sample=SAMPLE)  # drift compares everything since each calibration, not just today
         drift = {d["tier"]: d for d in whole["drift"]}
         # retrain rechecks the classifier every night; calibrate grades only its answers since promotion, too few.
-        due = {d["tier"] for d in whole["drift"] if d["flags"] and d["tier"] == 1} | ({1} if store.thresholds(1).get("intent") in (None, float("inf")) else set())
-        cals = {t: calibrate(store, TARGET, 30, tier=t, sample=SAMPLE)["intent"] for t in sorted(due)}
+        due = {d["tier"] for d in whole["drift"] if d["flags"] and d["tier"] == 1} | ({1} if store.thresholds(1).get(key) in (None, float("inf")) else set())
+        cals = {t: calibrate(store, TARGET, 30, tier=t, sample=SAMPLE)[key] for t in sorted(due)}
         cal = cals.get(1)
         if due:
             recalibrated.append([day, sorted(due)])
-        rechecked = recheck(store, tier=1, sample=SAMPLE, kept=KEPT).get("intent")
-        pruned = prune(store, worth, tier=1).get("intent")
+        rechecked = recheck(store, tier=1, sample=SAMPLE, kept=KEPT).get(key)
+        pruned = prune(store, worth, tier=1).get(key)
         n = len(messages)
         day_report = {
             "day": day, "messages": n,
@@ -195,10 +221,10 @@ def simulate(work, days, seed=0, per_second=0.0):
             "cost": s["cost"]["total"], "always_system2_cost": s["cost"]["always_system2"], "savings": s["cost"]["savings"],
             "latency_ms_mean": statistics.mean(latency),
             "labels_tonight": len(queue), "review_reasons": {r: sum(i["reason"] == r for i in queue) for r in REASONS},
-            "accuracy_on_sample": whole["questions"]["intent"]["accuracy_on_sample"],
-            "retrain": trained["report"].get("intent"), "recheck": rechecked, "prune": pruned, "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "sample_check")}
+            "accuracy_on_sample": whole["questions"][key]["accuracy_on_sample"],
+            "retrain": trained["report"].get(key), "recheck": rechecked, "prune": pruned, "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "sample_check")}
                            for t, c in cals.items()},
-            "tier1_threshold": store.thresholds(1).get("intent"), "tier0_threshold": store.thresholds(0).get("intent"),
+            "tier1_threshold": store.thresholds(1).get(key), "tier0_threshold": store.thresholds(0).get(key),
             "drift": {t: {"flags": d["flags"], "unchecked": d["unchecked"], "escalation_rate": d["escalation_rate"], "baseline": d["baseline"]} for t, d in drift.items()},
         }
         report.append(day_report)
@@ -226,11 +252,13 @@ def simulate(work, days, seed=0, per_second=0.0):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("phase", choices=["baseline", "simulate"])
+    parser.add_argument("--dataset", choices=sorted(DATASETS), default="banking77")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--per-second", type=float, default=0.0)
     args = parser.parse_args()
-    work = Path("data/case_study_banking77" + ("_smoke" if args.smoke else ""))
+    dataset = DATASETS[args.dataset]
+    work = Path(f"data/case_study_{args.dataset}" + ("_smoke" if args.smoke else ""))
     work.mkdir(parents=True, exist_ok=True)
-    days = traffic(2, 20, 2) if args.smoke else traffic(10, 300, 6)
-    baseline(work, days) if args.phase == "baseline" else simulate(work, days, args.seed, args.per_second)
+    days = traffic(dataset, 2, 20, 2) if args.smoke else traffic(dataset, 10, 300, 6)
+    baseline(work, dataset, days) if args.phase == "baseline" else simulate(work, dataset, days, args.seed, args.per_second)
