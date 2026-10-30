@@ -37,7 +37,8 @@ def _snapshots(store, decider, thresholds, target, trained):
 
 
 def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, holdout=0.3, embed=None):
-    """Trains a LocalDecider on the log's graded decisions and promotes it, question by question, only if on held-out
+    """Trains a LocalDecider on the log's graded decisions (all of them, including the ones System 2 answered with no
+    tier asked, as when every tier before it is skipped) and promotes it, question by question, only if on held-out
     decisions it reaches target_accuracy and passes on fewer questions than `current` (a LocalDecider, or None) does.
     Returns {"decider": current with the promoted questions replaced (current itself if none was), "report": {key:
     {"promoted", "threshold", "escalation_rate", "previous_escalation_rate", "kept"}}}. The thresholds are saved to
@@ -60,7 +61,7 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
     the logged decisions it was not trained on, with the threshold and target, so stats(store)["drift"] checks its
     later answers (accuracy included) against them."""
     pairs = {}
-    for row in store.labeled():
+    for row in store.graded():
         pairs.setdefault((row["id"], row["key"]), row)
     train, held = [], []
     for row in pairs.values():

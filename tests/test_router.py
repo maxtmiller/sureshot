@@ -1566,3 +1566,16 @@ def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_
     assert checked["reason"] == "below target on labels" and checked["threshold"] is None and store.thresholds() == {"needs_prep": float("inf")}
     assert checked["sample_check"]["graded"] == len(sample) and checked["sample_check"]["high"] < 0.9
     assert checked["graded_by"] == {"human": len(sample), "system2": 300 - len(sample)}
+
+
+def test_retrain_learns_from_questions_no_tier_answered(tmp_path):
+    from hunch import LocalDecider, retrain
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # Every tier is skipped (a classifier with no heads answers nothing), so System 2 answers every question.
+    router = Router(LocalDecider({}, _bag), FakeClaude(), log=store)
+    for text, prep in [("server meeting", True), ("meeting about server", True), ("invoice sale", False), ("sale invoice due", False)] * 40:
+        store.label(router.decide(text, q)["id"], "needs_prep", prep)
+    assert store.labeled() == [] and len(store.graded()) == 160
+    assert retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]["needs_prep"]["promoted"]
