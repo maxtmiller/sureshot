@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts REAL, state TEXT, 
 CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, source TEXT, PRIMARY KEY (decision_id, key));
 CREATE TABLE IF NOT EXISTS calibration_issues (tier INTEGER, key TEXT, reason TEXT, best_target REAL, target REAL, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value REAL, PRIMARY KEY (tier, key));
+CREATE TABLE IF NOT EXISTS skips (tier INTEGER, key TEXT, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts REAL, threshold REAL, target REAL, escalation_rate REAL, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
 """
 
@@ -61,6 +62,17 @@ class Store:
         """The calibrated thresholds of one tier, {key: value}."""
         with self._db() as db:
             return dict(db.execute("SELECT key, value FROM tier_thresholds WHERE tier = ?", (tier,)).fetchall())
+
+    def skipped(self, tier=0):
+        """The questions a tier is only probed on, since asking it costs more than it saves (see hunch.prune)."""
+        with self._db() as db:
+            return {key for (key,) in db.execute("SELECT key FROM skips WHERE tier = ?", (tier,))}
+
+    def save_skips(self, tier, skip, ask):
+        """Marks the questions in `skip` as skipped by a tier and the ones in `ask` as asked again."""
+        with self._db() as db:
+            db.executemany("INSERT OR IGNORE INTO skips VALUES (?, ?)", [(tier, key) for key in skip])
+            db.executemany("DELETE FROM skips WHERE tier = ? AND key = ?", [(tier, key) for key in ask])
 
     def save_thresholds(self, thresholds, tier=0):
         with self._db() as db:

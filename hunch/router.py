@@ -50,7 +50,7 @@ class Router:
         default threshold.
 
         probe is the share of questions still asked of a tier that failed closed on them (calibrate could not certify
-        the target, so nothing it says is kept). The rest skip it and go straight to the next tier or System 2, which
+        the target, so nothing it says is kept), or that hunch.prune found costs more than it saves. The rest skip it and go straight to the next tier or System 2, which
         saves its cost and latency; the sample keeps data coming for a later calibration to try again. A tier with
         nowhere to pass its questions to is always asked."""
         self.system1, self.system2, self.threshold, self.log, self.audit = system1, system2, threshold, log, audit
@@ -147,10 +147,13 @@ class Router:
                 break
             tier_start = time.perf_counter()
             saved = self.log.thresholds(i) if self.log else {}
+            skipped = self.log.skipped(i) if self.log else set()
             limit = {key: thresholds.get(key, saved.get(key, self.tier_thresholds[i])) for key in remaining}
             onward = i + 1 < len(self.tiers) or (escalate and self.system2)
-            # A tier that failed closed on a question is only asked on a sample, when the question has somewhere to go.
-            asked = [key for key in remaining if limit[key] != float("inf") or not onward or random.random() < self.probe]
+            # A tier that failed closed on a question, or does not pay for it, is only asked on a sample, when the
+            # question has somewhere to go.
+            asked = [key for key in remaining
+                     if (limit[key] != float("inf") and key not in skipped) or not onward or random.random() < self.probe]
             try:
                 fast = self._cached(tier, "decide", state, {key: questions[key] for key in asked}, images, tally) if asked else {}
             except Exception as e:
