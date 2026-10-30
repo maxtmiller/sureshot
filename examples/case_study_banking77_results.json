@@ -1,5 +1,5 @@
 {
- "before_fixes": {
+ "first_run": {
   "days": [
    {
     "day": 1,
@@ -646,7 +646,7 @@
    }
   }
  },
- "after_fixes": {
+ "after_first_fixes": {
   "days": [
    {
     "day": 1,
@@ -1433,6 +1433,2162 @@
    "latency_ms": {
     "gpt-4o-mini": 567.3157666666667,
     "gpt-4.1": 954.4512
+   }
+  }
+ },
+ "final": {
+  "seed_0": {
+   "days": [
+    {
+     "day": 1,
+     "messages": 300,
+     "accuracy": 0.7833333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.0,
+      "system2": 1.0
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": null,
+      "system2": 0.7833333333333333
+     },
+     "cost": 1.03888342,
+     "always_system2_cost": 1.0136128,
+     "savings": -0.024931236069631213,
+     "latency_ms_mean": 1527.4136333333333,
+     "local_ms_mean": 5.6466666666666665,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 8,
+      "accuracy": 0.875,
+      "low": 0.5888281744971086,
+      "high": 0.9716039186467054,
+      "target": null,
+      "below_target": false
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {
+      "1": {
+       "threshold": 0.9999999989429422,
+       "trusted_accuracy": 1.0,
+       "escalation_rate": 0.8233333333333334,
+       "reason": null,
+       "best_target": 0.969921875,
+       "graded_by": {
+        "human": 1,
+        "system2": 52
+       },
+       "sample_check": {
+        "graded": 1,
+        "accuracy": 1.0,
+        "high": 1.0
+       }
+      }
+     },
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 1.0,
+        "since": 1.0
+       },
+       "baseline": {
+        "answers": 30
+       }
+      }
+     }
+    },
+    {
+     "day": 2,
+     "messages": 300,
+     "accuracy": 0.7833333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.17333333333333334,
+      "system2": 0.8266666666666667
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.9423076923076923,
+      "system2": 0.75
+     },
+     "cost": 0.8699479533333333,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.1417354305970353,
+     "latency_ms_mean": 1370.8854333333334,
+     "local_ms_mean": 8.193666666666667,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 16,
+      "accuracy": 0.875,
+      "low": 0.6837666133634829,
+      "high": 0.9577379286223212,
+      "target": 0.95,
+      "below_target": false
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.8266666666666667
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 3,
+     "messages": 300,
+     "accuracy": 0.7633333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.14,
+      "system2": 0.86
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.8809523809523809,
+      "system2": 0.7441860465116279
+     },
+     "cost": 0.896977628,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.11506876393036858,
+     "latency_ms_mean": 1392.2824653333334,
+     "local_ms_mean": 4.1386666666666665,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 24,
+      "accuracy": 0.8333333333333334,
+      "low": 0.6762132686091572,
+      "high": 0.9229024739994864,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": true,
+      "threshold": 0.6689605116844177,
+      "escalation_rate": 0.767175572519084,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": 0.6689605116844177,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "escalation_rate",
+        "distribution",
+        "accuracy",
+        "change_escalation_rate",
+        "change_distribution",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.7401812688821753,
+        "since": null
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.8433333333333334
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 4,
+     "messages": 300,
+     "accuracy": 0.78,
+     "answered_by": {
+      "tier 0": 0.21666666666666667,
+      "tier 1": 0.13333333333333333,
+      "system2": 0.65
+     },
+     "accuracy_by": {
+      "tier 0": 0.9076923076923077,
+      "tier 1": 0.9,
+      "system2": 0.7128205128205128
+     },
+     "cost": 0.7090520229999999,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.30047053174545557,
+     "latency_ms_mean": 1173.1901665555556,
+     "local_ms_mean": 79.766,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 4,
+      "disagreement": 26,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 28,
+      "accuracy": 0.8571428571428571,
+      "low": 0.7171256922246346,
+      "high": 0.9342122780922656,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": 0.6689605116844177,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.7401812688821753,
+        "since": 0.7833333333333333
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.8395209580838323
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 5,
+     "messages": 300,
+     "accuracy": 0.8,
+     "answered_by": {
+      "tier 0": 0.21333333333333335,
+      "tier 1": 0.10333333333333333,
+      "system2": 0.6833333333333333
+     },
+     "accuracy_by": {
+      "tier 0": 0.890625,
+      "tier 1": 0.9032258064516129,
+      "system2": 0.7560975609756098
+     },
+     "cost": 0.7395446424,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.2703874276252234,
+     "latency_ms_mean": 1177.6390884444445,
+     "local_ms_mean": 53.690333333333335,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 36,
+      "accuracy": 0.8888888888888888,
+      "low": 0.7742702205128689,
+      "high": 0.9491313687745868,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": 0.6689605116844177,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.7401812688821753,
+        "since": 0.785
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.84593837535014
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 6,
+     "messages": 300,
+     "accuracy": 0.8533333333333334,
+     "answered_by": {
+      "tier 0": 0.23666666666666666,
+      "tier 1": 0.09333333333333334,
+      "system2": 0.67
+     },
+     "accuracy_by": {
+      "tier 0": 0.971830985915493,
+      "tier 1": 0.9285714285714286,
+      "system2": 0.8009950248756219
+     },
+     "cost": 0.7186827386,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.29096915646684807,
+     "latency_ms_mean": 1153.9876965555557,
+     "local_ms_mean": 62.36533333333333,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 5,
+      "disagreement": 25,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 41,
+      "accuracy": 0.9024390243902439,
+      "low": 0.7995996255381219,
+      "high": 0.9554450164763374,
+      "target": 0.95,
+      "below_target": false
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": 0.6689605116844177,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.7401812688821753,
+        "since": 0.7777777777777778
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.8515384615384616
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 7,
+     "messages": 300,
+     "accuracy": 0.7866666666666666,
+     "answered_by": {
+      "tier 0": 0.18,
+      "tier 1": 0.09666666666666666,
+      "system2": 0.7233333333333334
+     },
+     "accuracy_by": {
+      "tier 0": 1.0,
+      "tier 1": 0.8275862068965517,
+      "system2": 0.728110599078341
+     },
+     "cost": 0.7707953804,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.23955638642290233,
+     "latency_ms_mean": 1233.1041500000001,
+     "local_ms_mean": 61.611333333333334,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 49,
+      "accuracy": 0.8571428571428571,
+      "low": 0.7562466364751543,
+      "high": 0.9206570705879973,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": 0.6689605116844177,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.7401812688821753,
+        "since": 0.7883333333333333
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.8564036222509702
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 8,
+     "messages": 300,
+     "accuracy": 0.7766666666666666,
+     "answered_by": {
+      "tier 0": 0.20666666666666667,
+      "tier 1": 0.07666666666666666,
+      "system2": 0.7166666666666667
+     },
+     "accuracy_by": {
+      "tier 0": 0.9516129032258065,
+      "tier 1": 0.8260869565217391,
+      "system2": 0.7209302325581395
+     },
+     "cost": 0.7735002065333334,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.23688788605142574,
+     "latency_ms_mean": 1242.0409002222223,
+     "local_ms_mean": 82.495,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 6,
+      "disagreement": 24,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 55,
+      "accuracy": 0.8545454545454545,
+      "low": 0.7597842833558552,
+      "high": 0.9160550245846933,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": 0.6689605116844177,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.7401812688821753,
+        "since": 0.7893333333333333
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.8626681614349776
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 9,
+     "messages": 300,
+     "accuracy": 0.8166666666666667,
+     "answered_by": {
+      "tier 0": 0.17666666666666667,
+      "tier 1": 0.11333333333333333,
+      "system2": 0.71
+     },
+     "accuracy_by": {
+      "tier 0": 0.9622641509433962,
+      "tier 1": 0.9117647058823529,
+      "system2": 0.7652582159624414
+     },
+     "cost": 0.7539860691333333,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.2561399489693369,
+     "latency_ms_mean": 1214.6256825555556,
+     "local_ms_mean": 57.14933333333333,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 4,
+      "disagreement": 26,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 59,
+      "accuracy": 0.864406779661017,
+      "low": 0.7749732607665429,
+      "high": 0.9218792751081956,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": 0.6689605116844177,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [],
+       "escalation_rate": {
+        "at_calibration": 0.7401812688821753,
+        "since": 0.795
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.8626292466765141
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 10,
+     "messages": 300,
+     "accuracy": 0.8033333333333333,
+     "answered_by": {
+      "tier 0": 0.21333333333333335,
+      "tier 1": 0.07666666666666666,
+      "system2": 0.71
+     },
+     "accuracy_by": {
+      "tier 0": 0.953125,
+      "tier 1": 0.8695652173913043,
+      "system2": 0.7511737089201878
+     },
+     "cost": 0.7631956077333333,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.24705409429189007,
+     "latency_ms_mean": 1196.7366164444445,
+     "local_ms_mean": 50.51733333333333,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 6,
+      "disagreement": 24,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 65,
+      "accuracy": 0.8615384615384616,
+      "low": 0.7765445338916314,
+      "high": 0.9176329783755562,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999989429422,
+     "tier0_threshold": 0.6689605116844177,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [],
+       "escalation_rate": {
+        "at_calibration": 0.7401812688821753,
+        "since": 0.7938095238095239
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8233333333333334,
+        "since": 0.8667842964269961
+       },
+       "baseline": null
+      }
+     }
+    }
+   ],
+   "router": {
+    "accuracy": 0.7946666666666666,
+    "cost": 8.034565669133332,
+    "latency_ms_mean": 1268.190583277778,
+    "labels": 300,
+    "recalibrated_on": [
+     [
+      1,
+      [
+       1
+      ]
+     ]
+    ]
+   },
+   "always_gpt-4o-mini": {
+    "accuracy": 0.69,
+    "cost": 0.2527062,
+    "latency_ms_mean": 567.3157666666667
+   },
+   "always_gpt-4.1": {
+    "accuracy": 0.7933333333333333,
+    "cost": 10.136128,
+    "latency_ms_mean": 954.4512
+   },
+   "per_call": {
+    "cost": {
+     "gpt-4o-mini": 8.42354e-05,
+     "gpt-4.1": 0.0033787093333333333
+    },
+    "latency_ms": {
+     "gpt-4o-mini": 567.3157666666667,
+     "gpt-4.1": 954.4512
+    }
+   }
+  },
+  "seed_1": {
+   "days": [
+    {
+     "day": 1,
+     "messages": 300,
+     "accuracy": 0.7833333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.0,
+      "system2": 1.0
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": null,
+      "system2": 0.7833333333333333
+     },
+     "cost": 1.03888342,
+     "always_system2_cost": 1.0136128,
+     "savings": -0.024931236069631213,
+     "latency_ms_mean": 1527.3759666666667,
+     "local_ms_mean": 5.609,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 5,
+      "disagreement": 25,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 5,
+      "accuracy": 0.8,
+      "low": 0.4352629423793784,
+      "high": 0.9540428281054047,
+      "target": null,
+      "below_target": false
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {
+      "1": {
+       "threshold": 0.9999999987682839,
+       "trusted_accuracy": 1.0,
+       "escalation_rate": 0.8166666666666667,
+       "reason": null,
+       "best_target": 0.9709960937500001,
+       "graded_by": {
+        "human": 0,
+        "system2": 55
+       },
+       "sample_check": {
+        "graded": 0,
+        "accuracy": null,
+        "high": null
+       }
+      }
+     },
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 1.0,
+        "since": 1.0
+       },
+       "baseline": {
+        "answers": 30
+       }
+      }
+     }
+    },
+    {
+     "day": 2,
+     "messages": 300,
+     "accuracy": 0.7833333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.17666666666666667,
+      "system2": 0.8233333333333334
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.9433962264150944,
+      "system2": 0.7489878542510121
+     },
+     "cost": 0.8800840813333334,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.1317354305970353,
+     "latency_ms_mean": 1380.740612,
+     "local_ms_mean": 8.504333333333333,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 13,
+      "accuracy": 0.7692307692307693,
+      "low": 0.5419132128393065,
+      "high": 0.9037756231328763,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8233333333333334
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 3,
+     "messages": 300,
+     "accuracy": 0.7633333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.15333333333333332,
+      "system2": 0.8466666666666667
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.8913043478260869,
+      "system2": 0.7401574803149606
+     },
+     "cost": 0.896977628,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.11506876393036858,
+     "latency_ms_mean": 1391.219132,
+     "local_ms_mean": 3.0753333333333335,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 6,
+      "disagreement": 24,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 19,
+      "accuracy": 0.7368421052631579,
+      "low": 0.5490581222327588,
+      "high": 0.8655732992274117,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.835
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 4,
+     "messages": 300,
+     "accuracy": 0.77,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.16666666666666666,
+      "system2": 0.8333333333333334
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.92,
+      "system2": 0.74
+     },
+     "cost": 0.8834627906666667,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.128402097263702,
+     "latency_ms_mean": 1379.6654493333333,
+     "local_ms_mean": 4.2476666666666665,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 7,
+      "disagreement": 23,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 26,
+      "accuracy": 0.6923076923076923,
+      "low": 0.5313189232471516,
+      "high": 0.8170400014036839,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8344444444444444
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 5,
+     "messages": 300,
+     "accuracy": 0.7933333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.14333333333333334,
+      "system2": 0.8566666666666667
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.9069767441860465,
+      "system2": 0.77431906614786
+     },
+     "cost": 0.907113756,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.10506876393036868,
+     "latency_ms_mean": 1400.8653106666668,
+     "local_ms_mean": 3.177,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 7,
+      "disagreement": 23,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 33,
+      "accuracy": 0.7272727272727273,
+      "low": 0.5862396569363685,
+      "high": 0.8338575115386999,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.84
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 6,
+     "messages": 300,
+     "accuracy": 0.8466666666666667,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.14333333333333334,
+      "system2": 0.8566666666666667
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.9302325581395349,
+      "system2": 0.8326848249027238
+     },
+     "cost": 0.896977628,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.11506876393036858,
+     "latency_ms_mean": 1391.637132,
+     "local_ms_mean": 3.493333333333333,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 9,
+      "disagreement": 21,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 42,
+      "accuracy": 0.7619047619047619,
+      "low": 0.6400721821651126,
+      "high": 0.8520315107934986,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8433333333333334
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 7,
+     "messages": 300,
+     "accuracy": 0.7866666666666666,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.14,
+      "system2": 0.86
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.8809523809523809,
+      "system2": 0.7713178294573644
+     },
+     "cost": 0.907113756,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.10506876393036868,
+     "latency_ms_mean": 1401.443644,
+     "local_ms_mean": 3.755333333333333,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 4,
+      "disagreement": 26,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 46,
+      "accuracy": 0.782608695652174,
+      "low": 0.6684249646604146,
+      "high": 0.8653898970533057,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8461111111111111
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 8,
+     "messages": 300,
+     "accuracy": 0.7766666666666666,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.13,
+      "system2": 0.87
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.8717948717948718,
+      "system2": 0.7624521072796935
+     },
+     "cost": 0.9138711746666667,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.09840209726370197,
+     "latency_ms_mean": 1407.2359853333335,
+     "local_ms_mean": 3.1846666666666668,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 54,
+      "accuracy": 0.7777777777777778,
+      "low": 0.6727416906551745,
+      "high": 0.8563026216555544,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8495238095238096
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 9,
+     "messages": 300,
+     "accuracy": 0.8133333333333334,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.13333333333333333,
+      "system2": 0.8666666666666667
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.925,
+      "system2": 0.7961538461538461
+     },
+     "cost": 0.9104924653333334,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.10173543059703527,
+     "latency_ms_mean": 1403.9654813333334,
+     "local_ms_mean": 3.095666666666667,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 7,
+      "disagreement": 23,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 61,
+      "accuracy": 0.7704918032786885,
+      "low": 0.6715759187128947,
+      "high": 0.8464284615635391,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": true,
+      "threshold": 0.9395048022270203,
+      "escalation_rate": 0.9112487100103199,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.9395048022270203,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "escalation_rate",
+        "distribution",
+        "accuracy",
+        "change_escalation_rate",
+        "change_distribution",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.9037927844588344,
+        "since": null
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8516666666666667
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 10,
+     "messages": 300,
+     "accuracy": 0.8066666666666666,
+     "answered_by": {
+      "tier 0": 0.19,
+      "tier 1": 0.11333333333333333,
+      "system2": 0.6966666666666667
+     },
+     "accuracy_by": {
+      "tier 0": 1.0,
+      "tier 1": 0.8823529411764706,
+      "system2": 0.7416267942583732
+     },
+     "cost": 0.7401342902,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.2698056987835986,
+     "latency_ms_mean": 1245.5657896666667,
+     "local_ms_mean": 108.37966666666667,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 6,
+      "disagreement": 24,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 67,
+      "accuracy": 0.7761194029850746,
+      "low": 0.6825734926678438,
+      "high": 0.8482271088583514,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": true,
+      "threshold": 0.9473614692687988,
+      "escalation_rate": 0.9188458070333634,
+      "previous_escalation_rate": 0.9215509467989179,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.9473614692687988,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "escalation_rate",
+        "distribution",
+        "accuracy",
+        "change_escalation_rate",
+        "change_distribution",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8716490658001624,
+        "since": null
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8524404086265607
+       },
+       "baseline": null
+      }
+     }
+    }
+   ],
+   "router": {
+    "accuracy": 0.7923333333333333,
+    "cost": 8.9751109902,
+    "latency_ms_mean": 1392.9714503,
+    "labels": 300,
+    "recalibrated_on": [
+     [
+      1,
+      [
+       1
+      ]
+     ]
+    ]
+   },
+   "always_gpt-4o-mini": {
+    "accuracy": 0.69,
+    "cost": 0.2527062,
+    "latency_ms_mean": 567.3157666666667
+   },
+   "always_gpt-4.1": {
+    "accuracy": 0.7933333333333333,
+    "cost": 10.136128,
+    "latency_ms_mean": 954.4512
+   },
+   "per_call": {
+    "cost": {
+     "gpt-4o-mini": 8.42354e-05,
+     "gpt-4.1": 0.0033787093333333333
+    },
+    "latency_ms": {
+     "gpt-4o-mini": 567.3157666666667,
+     "gpt-4.1": 954.4512
+    }
+   }
+  },
+  "seed_2": {
+   "days": [
+    {
+     "day": 1,
+     "messages": 300,
+     "accuracy": 0.7833333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.0,
+      "system2": 1.0
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": null,
+      "system2": 0.7833333333333333
+     },
+     "cost": 1.03888342,
+     "always_system2_cost": 1.0136128,
+     "savings": -0.024931236069631213,
+     "latency_ms_mean": 1527.6196333333335,
+     "local_ms_mean": 5.852666666666667,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 10,
+      "disagreement": 20,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 10,
+      "accuracy": 0.9,
+      "low": 0.6522548907904218,
+      "high": 0.9773676701599937,
+      "target": null,
+      "below_target": false
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {
+      "1": {
+       "threshold": 0.9999999987682839,
+       "trusted_accuracy": 1.0,
+       "escalation_rate": 0.8166666666666667,
+       "reason": null,
+       "best_target": 0.9709960937500001,
+       "graded_by": {
+        "human": 1,
+        "system2": 54
+       },
+       "sample_check": {
+        "graded": 1,
+        "accuracy": 1.0,
+        "high": 1.0
+       }
+      }
+     },
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 1.0,
+        "since": 1.0
+       },
+       "baseline": {
+        "answers": 30
+       }
+      }
+     }
+    },
+    {
+     "day": 2,
+     "messages": 300,
+     "accuracy": 0.7833333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.17666666666666667,
+      "system2": 0.8233333333333334
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.9433962264150944,
+      "system2": 0.7489878542510121
+     },
+     "cost": 0.8699479533333333,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.1417354305970353,
+     "latency_ms_mean": 1370.0857666666668,
+     "local_ms_mean": 7.394,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 7,
+      "disagreement": 23,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 17,
+      "accuracy": 0.9411764705882353,
+      "low": 0.774421392554377,
+      "high": 0.986767127200368,
+      "target": 0.95,
+      "below_target": false
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8233333333333334
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 3,
+     "messages": 300,
+     "accuracy": 0.7633333333333333,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.15333333333333332,
+      "system2": 0.8466666666666667
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.8913043478260869,
+      "system2": 0.7401574803149606
+     },
+     "cost": 0.8834627906666667,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.128402097263702,
+     "latency_ms_mean": 1379.1777826666666,
+     "local_ms_mean": 3.76,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 25,
+      "accuracy": 0.92,
+      "low": 0.7847920005699203,
+      "high": 0.9731658804324972,
+      "target": 0.95,
+      "below_target": false
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": null,
+     "drift": {
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.835
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 4,
+     "messages": 300,
+     "accuracy": 0.77,
+     "answered_by": {
+      "tier 0": 0.0,
+      "tier 1": 0.16666666666666666,
+      "system2": 0.8333333333333334
+     },
+     "accuracy_by": {
+      "tier 0": null,
+      "tier 1": 0.92,
+      "system2": 0.74
+     },
+     "cost": 0.8935989186666666,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.11840209726370199,
+     "latency_ms_mean": 1389.4762946666667,
+     "local_ms_mean": 4.514,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 5,
+      "disagreement": 25,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 30,
+      "accuracy": 0.9,
+      "low": 0.7744836077886771,
+      "high": 0.9593261413324712,
+      "target": 0.95,
+      "below_target": false
+     },
+     "retrain": {
+      "promoted": true,
+      "threshold": 0.762903094291687,
+      "escalation_rate": 0.8482587064676617,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.762903094291687,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "escalation_rate",
+        "distribution",
+        "accuracy",
+        "change_escalation_rate",
+        "change_distribution",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8009049773755657,
+        "since": null
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8344444444444444
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 5,
+     "messages": 300,
+     "accuracy": 0.7933333333333333,
+     "answered_by": {
+      "tier 0": 0.19,
+      "tier 1": 0.12,
+      "system2": 0.69
+     },
+     "accuracy_by": {
+      "tier 0": 0.9122807017543859,
+      "tier 1": 0.9166666666666666,
+      "system2": 0.7391304347826086
+     },
+     "cost": 0.7401342902,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.2698056987835986,
+     "latency_ms_mean": 1208.7687896666666,
+     "local_ms_mean": 71.58266666666667,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 4,
+      "disagreement": 26,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 34,
+      "accuracy": 0.8823529411764706,
+      "low": 0.7622560984072303,
+      "high": 0.946074482199087,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": 0.8352355360984802,
+      "escalation_rate": 0.91,
+      "previous_escalation_rate": 0.878,
+      "kept": "rechecked"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.762903094291687,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "escalation_rate",
+        "distribution",
+        "accuracy",
+        "change_escalation_rate",
+        "change_distribution",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.7664473684210527,
+        "since": null
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8381452318460193
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 6,
+     "messages": 300,
+     "accuracy": 0.85,
+     "answered_by": {
+      "tier 0": 0.20666666666666667,
+      "tier 1": 0.11333333333333333,
+      "system2": 0.68
+     },
+     "accuracy_by": {
+      "tier 0": 0.9838709677419355,
+      "tier 1": 0.9117647058823529,
+      "system2": 0.7990196078431373
+     },
+     "cost": 0.7194408572000001,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.2902212193847591,
+     "latency_ms_mean": 1166.2031695555556,
+     "local_ms_mean": 57.56133333333333,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 3,
+      "disagreement": 27,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 37,
+      "accuracy": 0.8648648648648649,
+      "low": 0.7473519491538753,
+      "high": 0.9326456078919385,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": true,
+      "threshold": 0.8467622995376587,
+      "escalation_rate": 0.9036144578313253,
+      "previous_escalation_rate": null,
+      "kept": null
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.8467622995376587,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "escalation_rate",
+        "distribution",
+        "accuracy",
+        "change_escalation_rate",
+        "change_distribution",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8034076015727392,
+        "since": null
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8414192614047792
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 7,
+     "messages": 300,
+     "accuracy": 0.79,
+     "answered_by": {
+      "tier 0": 0.21333333333333335,
+      "tier 1": 0.11333333333333333,
+      "system2": 0.6733333333333333
+     },
+     "accuracy_by": {
+      "tier 0": 0.984375,
+      "tier 1": 0.8529411764705882,
+      "system2": 0.7178217821782178
+     },
+     "cost": 0.7125149677333333,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.29705409429189,
+     "latency_ms_mean": 1165.641723111111,
+     "local_ms_mean": 67.145,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 7,
+      "disagreement": 23,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 44,
+      "accuracy": 0.8409090909090909,
+      "low": 0.7309300082664276,
+      "high": 0.9113854103546175,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.8467622995376587,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8034076015727392,
+        "since": 0.7866666666666666
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8435374149659864
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 8,
+     "messages": 300,
+     "accuracy": 0.78,
+     "answered_by": {
+      "tier 0": 0.21666666666666667,
+      "tier 1": 0.1,
+      "system2": 0.6833333333333333
+     },
+     "accuracy_by": {
+      "tier 0": 0.9846153846153847,
+      "tier 1": 0.8333333333333334,
+      "system2": 0.7073170731707317
+     },
+     "cost": 0.7225668603333333,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.28713719841212215,
+     "latency_ms_mean": 1188.3951825555555,
+     "local_ms_mean": 82.245,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 4,
+      "disagreement": 26,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 48,
+      "accuracy": 0.8541666666666666,
+      "low": 0.7515703370431714,
+      "high": 0.9189614192915047,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.8467622995376587,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8034076015727392,
+        "since": 0.785
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8471922246220303
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 9,
+     "messages": 300,
+     "accuracy": 0.8133333333333334,
+     "answered_by": {
+      "tier 0": 0.20666666666666667,
+      "tier 1": 0.11666666666666667,
+      "system2": 0.6766666666666666
+     },
+     "accuracy_by": {
+      "tier 0": 0.9838709677419355,
+      "tier 1": 0.9142857142857143,
+      "system2": 0.7438423645320197
+     },
+     "cost": 0.7194408572000001,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.2902212193847591,
+     "latency_ms_mean": 1195.448502888889,
+     "local_ms_mean": 86.80666666666667,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 8,
+      "disagreement": 22,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 56,
+      "accuracy": 0.8571428571428571,
+      "low": 0.7637699841786729,
+      "high": 0.9175910856604108,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.8467622995376587,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8034076015727392,
+        "since": 0.7877777777777778
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8478468899521531
+       },
+       "baseline": null
+      }
+     }
+    },
+    {
+     "day": 10,
+     "messages": 300,
+     "accuracy": 0.81,
+     "answered_by": {
+      "tier 0": 0.2833333333333333,
+      "tier 1": 0.11,
+      "system2": 0.6066666666666667
+     },
+     "accuracy_by": {
+      "tier 0": 1.0,
+      "tier 1": 0.8787878787878788,
+      "system2": 0.7087912087912088
+     },
+     "cost": 0.6431718376666666,
+     "always_system2_cost": 1.0136128,
+     "savings": 0.36546594748343086,
+     "latency_ms_mean": 1050.7938727777778,
+     "local_ms_mean": 55.63933333333333,
+     "labels_tonight": 30,
+     "review_reasons": {
+      "sample": 6,
+      "disagreement": 24,
+      "audit_disagreement": 0,
+      "unresolved": 0
+     },
+     "accuracy_on_sample": {
+      "graded": 62,
+      "accuracy": 0.8709677419354839,
+      "low": 0.7851645666796673,
+      "high": 0.9257429570014737,
+      "target": 0.95,
+      "below_target": true
+     },
+     "retrain": {
+      "promoted": false,
+      "threshold": null,
+      "escalation_rate": null,
+      "previous_escalation_rate": null,
+      "kept": "unproven"
+     },
+     "calibrated": {},
+     "tier1_threshold": 0.9999999987682839,
+     "tier0_threshold": 0.8467622995376587,
+     "drift": {
+      "0": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8034076015727392,
+        "since": 0.77
+       },
+       "baseline": null
+      },
+      "1": {
+       "flags": [],
+       "unchecked": [
+        "accuracy",
+        "change_accuracy"
+       ],
+       "escalation_rate": {
+        "at_calibration": 0.8166666666666667,
+        "since": 0.8477223427331887
+       },
+       "baseline": null
+      }
+     }
+    }
+   ],
+   "router": {
+    "accuracy": 0.7936666666666666,
+    "cost": 7.943162753,
+    "latency_ms_mean": 1264.1610717888889,
+    "labels": 300,
+    "recalibrated_on": [
+     [
+      1,
+      [
+       1
+      ]
+     ]
+    ]
+   },
+   "always_gpt-4o-mini": {
+    "accuracy": 0.69,
+    "cost": 0.2527062,
+    "latency_ms_mean": 567.3157666666667
+   },
+   "always_gpt-4.1": {
+    "accuracy": 0.7933333333333333,
+    "cost": 10.136128,
+    "latency_ms_mean": 954.4512
+   },
+   "per_call": {
+    "cost": {
+     "gpt-4o-mini": 8.42354e-05,
+     "gpt-4.1": 0.0033787093333333333
+    },
+    "latency_ms": {
+     "gpt-4o-mini": 567.3157666666667,
+     "gpt-4.1": 954.4512
+    }
    }
   }
  }

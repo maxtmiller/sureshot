@@ -4,15 +4,16 @@ banking77 (PolyAI/banking77) is about 13,000 real customer messages, each labele
 The router is a local classifier (untrained at first), then gpt-4o-mini, then gpt-4.1 as System 2, with a 95%
 accuracy target. Nothing is trusted until it is calibrated, and a tier that failed closed is only asked about 5% of
 messages. Each day 300 messages arrive. Each night a person labels 30 items from the review queue, a random 2% of
-messages first (here the dataset's own labels stand in for them), the classifier is retrained, and gpt-4o-mini is
-recalibrated whenever it has no certified threshold or drift is flagged. From day 6 half the messages come from eight
+messages first (here the dataset's own labels stand in for them), the classifier is retrained, gpt-4o-mini is
+recalibrated whenever it has no certified threshold or drift flags it, checking its threshold against the labeled
+random sample. The nightly retrain rechecks the classifier. From day 6 half the messages come from eight
 card-security intents, a shift drift monitoring should notice.
 
     python examples/case_study_banking77.py baseline   # asks both models about every message (the paid part)
     python examples/case_study_banking77.py simulate   # runs the ten days, reusing those answers from the cache
 
-Add --smoke to run 20 messages a day for 2 days first. Needs an OpenAI key in OPENAI_API_KEY. Working files go to
-data/case_study_banking77/ (or data/case_study_banking77_smoke/); the results are summary.json and days.jsonl there.
+Add --smoke to run 20 messages a day for 2 days first, and --seed N to fix which answers get audited and probed. Needs an OpenAI key in OPENAI_API_KEY. Working files go to
+data/case_study_banking77/ (or data/case_study_banking77_smoke/); the results are summary_<seed>.json and days_<seed>.jsonl there.
 """
 import argparse
 import json
@@ -127,13 +128,14 @@ def per_call(work):
     return cost, ms, rows
 
 
-def simulate(work, days):
+def simulate(work, days, seed=0):
     names, schedule = days
+    random.seed(seed)  # the router picks audits and probes at random
     q = question(names)
     mini, big = models()
     cost, ms, rows = per_call(work)
     costs = {"tier 0": 0.0, "tier 1": cost["gpt-4o-mini"], "system2": cost["gpt-4.1"]}
-    sim = work / "sim.db"
+    sim = work / f"sim_{seed}.db"
     for suffix in ("", "-wal", "-shm"):
         Path(f"{sim}{suffix}").unlink(missing_ok=True)
     store, cache = Store(sim), Cache(work / "cache.db")
@@ -173,12 +175,12 @@ def simulate(work, days):
         s = stats(store, since=start, costs=costs)  # today's cost
         whole = stats(store, sample=SAMPLE)  # drift compares everything since each calibration, not just today
         drift = {d["tier"]: d for d in whole["drift"]}
-        flagged = any(d["flags"] for d in whole["drift"])
-        if store.thresholds(1).get("intent") in (None, float("inf")) or flagged:
-            cal = calibrate(store, TARGET, 30, tier=1)["intent"]
-            recalibrated.append(day)
-        else:
-            cal = None
+        # retrain rechecks the classifier every night; calibrate grades only its answers since promotion, too few.
+        due = {d["tier"] for d in whole["drift"] if d["flags"] and d["tier"] == 1} | ({1} if store.thresholds(1).get("intent") in (None, float("inf")) else set())
+        cals = {t: calibrate(store, TARGET, 30, tier=t, sample=SAMPLE)["intent"] for t in sorted(due)}
+        cal = cals.get(1)
+        if due:
+            recalibrated.append([day, sorted(due)])
         n = len(messages)
         day_report = {
             "day": day, "messages": n,
@@ -189,7 +191,8 @@ def simulate(work, days):
             "latency_ms_mean": statistics.mean(latency), "local_ms_mean": statistics.mean(local_ms),
             "labels_tonight": len(queue), "review_reasons": {r: sum(i["reason"] == r for i in queue) for r in ("sample", "disagreement", "audit_disagreement", "unresolved")},
             "accuracy_on_sample": whole["questions"]["intent"]["accuracy_on_sample"],
-            "retrain": trained["report"].get("intent"), "calibrated": cal and {k: cal[k] for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target")},
+            "retrain": trained["report"].get("intent"), "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "sample_check")}
+                           for t, c in cals.items()},
             "tier1_threshold": store.thresholds(1).get("intent"), "tier0_threshold": store.thresholds(0).get("intent"),
             "drift": {t: {"flags": d["flags"], "unchecked": d["unchecked"], "escalation_rate": d["escalation_rate"], "baseline": d["baseline"]} for t, d in drift.items()},
         }
@@ -210,8 +213,8 @@ def simulate(work, days):
                            "cost": cost["gpt-4.1"] * len(everyone), "latency_ms_mean": ms["gpt-4.1"]},
         "per_call": {"cost": cost, "latency_ms": ms},
     }
-    (work / "days.jsonl").write_text("".join(json.dumps(d) + "\n" for d in report))
-    (work / "summary.json").write_text(json.dumps(summary, indent=1))
+    (work / f"days_{seed}.jsonl").write_text("".join(json.dumps(d) + "\n" for d in report))
+    (work / f"summary_{seed}.json").write_text(json.dumps(summary, indent=1))
     print(json.dumps({k: v for k, v in summary.items() if k != "days"}, indent=1))
 
 
@@ -219,8 +222,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("phase", choices=["baseline", "simulate"])
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
     work = Path("data/case_study_banking77" + ("_smoke" if args.smoke else ""))
     work.mkdir(parents=True, exist_ok=True)
     days = traffic(2, 20, 2) if args.smoke else traffic(10, 300, 6)
-    (baseline if args.phase == "baseline" else simulate)(work, days)
+    baseline(work, days) if args.phase == "baseline" else simulate(work, days, args.seed)
