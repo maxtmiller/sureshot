@@ -1361,3 +1361,22 @@ def test_drift_watches_questions_without_a_calibration(tmp_path):
         Router(Tier({"needs_prep": (True, 0.95)}), None, log=store).decide("event", q)
     drift = stats(store)["drift"][0]
     assert drift["flags"] == [] and drift["escalation_rate"] == {"at_calibration": 1.0, "since": 1.0} and drift["answers_since"] == 40
+
+
+def test_retrain_resets_the_drift_snapshot_of_what_it_promotes(tmp_path):
+    from hunch import calibrate, retrain, stats
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    for text, prep in [("server meeting", True), ("meeting about server", True), ("invoice sale", False), ("sale invoice due", False)] * 40:
+        store.label(Router(FakeDecider(), None, log=store).decide(text, q)["id"], "needs_prep", prep)
+    # The fake model is right half the time, so 0.4 is a target this data can certify.
+    calibrate(store, 0.4, 30)
+    assert [d["calibrated_at"] is not None for d in stats(store)["drift"]] == [True]
+    assert retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]["needs_prep"]["promoted"]
+    # The promoted classifier has a new threshold, so drift relearns a baseline instead of using the old snapshot.
+    assert store.calibrations() == [] and (0, "needs_prep") in store.resets()
+    for _ in range(5):
+        Router(FakeDecider(), None, log=store).decide("server meeting", q)
+    drift = stats(store)["drift"]
+    assert len(drift) == 1 and drift[0]["calibrated_at"] is None and drift[0]["baseline"] == {"answers": 5}
