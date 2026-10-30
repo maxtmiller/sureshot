@@ -1522,3 +1522,47 @@ def test_retrain_rechecks_the_classifier_it_keeps(tmp_path):
     third = retrain(store, current=first["decider"], target_accuracy=0.99, min_samples=5, embed=_bag)
     assert third["report"]["needs_prep"]["kept"] == "failed" and store.thresholds(0)["needs_prep"] == float("inf")
     assert (0, "needs_prep") in store.resets() and not third["report"]["needs_prep"]["promoted"] and stats(store)["drift"] == []
+
+
+def test_drift_accuracy_counts_labels_on_the_random_sample(tmp_path):
+    from hunch import Store, calibrate, review_queue, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store = Store(tmp_path / "hunch.db")
+    for i in range(100):
+        sure = i % 2 == 0
+        store.label(Router(Tier({"needs_prep": (sure, 0.95 if sure else 0.7)}), None, log=store).decide("event", q)["id"], "needs_prep", True)
+    calibrate(store, 0.95, 30)
+    # No audits, so without the sample the accuracy check has nothing to go on.
+    for _ in range(400):
+        Router(Tier({"needs_prep": (True, 0.95)}), FakeClaude(), log=store).decide("event", q)
+    assert "accuracy" in stats(store)["drift"][0]["unchecked"]
+    # People label the sample and find the kept answers mostly wrong.
+    for n, item in enumerate(review_queue(store, limit=None, sample=0.2)):
+        store.label(item["id"], "needs_prep", n % 5 == 0)
+    drift = stats(store, sample=0.2)["drift"][0]
+    assert drift["accuracy_since"]["graded"] >= 30 and drift["accuracy_since"]["human"] == drift["accuracy_since"]["graded"]
+    assert "accuracy" in drift["flags"] and "accuracy" not in drift["unchecked"]
+
+
+def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_path):
+    from hunch import calibrate, review_queue
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # The tier always agrees with System 2 (the audits), so graded by System 2 it looks perfect.
+    router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store, audit=1.0)
+    for _ in range(300):
+        router.decide("event", q)
+    report = calibrate(store, 0.9, 30, save=False)["needs_prep"]
+    assert report["threshold"] == 0.99 and report["graded_by"] == {"human": 0, "system2": 300}
+    # People label the random sample, and say a third of it was wrong. The rest is still graded by System 2, so
+    # without the sample check the threshold passes; with it, calibration fails closed.
+    sample = review_queue(store, limit=None, sample=0.1)
+    for n, item in enumerate(sample):
+        store.label(item["id"], "needs_prep", n % 3 != 0)
+    assert calibrate(store, 0.9, 30, save=False)["needs_prep"]["threshold"] == 0.99
+    checked = calibrate(store, 0.9, 30, sample=0.1)["needs_prep"]
+    assert checked["reason"] == "below target on labels" and checked["threshold"] is None and store.thresholds() == {"needs_prep": float("inf")}
+    assert checked["sample_check"]["graded"] == len(sample) and checked["sample_check"]["high"] < 0.9
+    assert checked["graded_by"] == {"human": len(sample), "system2": 300 - len(sample)}

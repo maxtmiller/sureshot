@@ -2,7 +2,7 @@
 import math
 import statistics
 from bisect import bisect_right
-from hunch.calibrate import histogram, tier_confidences, wilson_lower
+from hunch.calibrate import confidence_sequence as _sequence, histogram, tier_confidences, wilson_lower
 from hunch.review import REASONS, in_sample, pending
 
 
@@ -18,29 +18,6 @@ def _timing(values):
 def _normal_p(z):
     """The chance a standard normal is at least z."""
     return 0.5 * math.erfc(z / math.sqrt(2))
-
-
-def _sequence(successes, n, alpha):
-    """(low, high): a confidence sequence for a rate seen as `successes` out of n, which contains the true rate at
-    every n at once except alpha of the time, so it stays valid however often it is checked as answers come in.
-    It is Robbins' mixture of the likelihood over a uniform prior, bounded with Ville's inequality; unlike a bound
-    that ignores the spread (Hoeffding's), it is tight for rates near 0 or 1. n may be an effective count."""
-    mix = math.lgamma(1 + successes) + math.lgamma(1 + n - successes) - math.lgamma(2 + n)
-    bound = math.log(1 / alpha)
-
-    def outside(p):
-        return mix - successes * math.log(p) - (n - successes) * math.log(1 - p) >= bound
-
-    def edge(inside, out):
-        for _ in range(60):
-            mid = (inside + out) / 2
-            inside, out = (inside, mid) if outside(mid) else (mid, out)
-        return inside
-
-    best = successes / n
-    low = 0.0 if successes <= 0 or not outside(1e-12) else edge(best, 1e-12)
-    high = 1.0 if successes >= n or not outside(1 - 1e-12) else edge(best, 1 - 1e-12)
-    return low, high
 
 
 def _z(tail):
@@ -82,9 +59,10 @@ def _cusum(xs, p0, p1, h):
     return None
 
 
-def _measure(c, rows, labels):
+def _measure(c, rows, labels, sample=0.0):
     """What the drift checks look at in some logged decisions: the tier's confidences, whether each was passed on
-    (below the threshold, or by what the tier did when there is none), and its audited answers' accuracy."""
+    (below the threshold, or by what the tier did when there is none), and the accuracy of its kept answers that were
+    audited or, labeled, in the random `sample`."""
     confidences = tier_confidences(rows, c["tier"], c["key"])
     answered_at = [ts for _, ts, _, result in rows for e in result["answers"].get(c["key"], {}).get("tried", []) if e["tier"] == c["tier"]]
     weight = right = weight_sq = 0.0
@@ -92,13 +70,17 @@ def _measure(c, rows, labels):
     correct, graded_at = [], []
     for decision_id, ts, _, result in rows:
         answer = result["answers"].get(c["key"])
-        # Only audited answers: the audit is a random sample of the confident ones, while a label on an unaudited
+        # Only answers picked at random: audited ones, and labeled ones in the labeling sample. A label on any other
         # answer was picked some other way (often because it looked wrong). A label still overrides the audit's answer.
-        if not answer or answer["source"] == "system2" or answer.get("tier", 0) != c["tier"] or "audit" not in answer:
+        if not answer or answer["source"] == "system2" or answer.get("tier", 0) != c["tier"]:
             continue
         human = labels.get((decision_id, c["key"]))
+        sampled = human is not None and in_sample(decision_id, sample)
+        if "audit" not in answer and not sampled:
+            continue
         truth = human if human is not None else answer["audit"]["answer"]
-        w = 1 / result["audit_rate"]
+        # Each stands for the answers it was picked from: either way of being picked counts.
+        w = 1 / (1 - (1 - result["audit_rate"]) * (1 - sample))
         humans += human is not None
         correct.append(answer["answer"] == truth)
         graded_at.append(ts)
@@ -227,13 +209,13 @@ def _baselines(store, decisions, min_samples):
     return out
 
 
-def _drift(store, decisions, labels, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change):
+def _drift(store, decisions, labels, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change, sample=0.0):
     snapshots = [(c, _answered(decisions, c["tier"], c["key"], c["ts"])) for c in store.calibrations()] + _baselines(store, decisions, min_samples)
     budget = alpha / max(1, 3 * len(snapshots))
     z = _z(alpha / 4)
     entries, watched = [], []
     for c, after in snapshots:
-        m = _measure(c, after, labels)
+        m = _measure(c, after, labels, sample)
         now, _, accuracy = _summary(m)
         flags, unchecked = _cumulative(c, m, min_samples, budget, min_escalation_change, min_distribution_change)
         specs, not_run = _detectors(c, m, min_samples, z, min_escalation_change, min_distribution_change)
@@ -412,4 +394,4 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
             "latency_ms": {"total": _timing(latency["total"]), "tier_mean": {f"tier {i}": statistics.mean(ms) for i, ms in sorted(latency["tiers"].items())},
                            "system2_called": len(latency["system2"]) / len(decisions) if decisions else None,
                            "system2_mean": statistics.mean(latency["system2"]) if latency["system2"] else None},
-            "uncalibrated": store.issues(), "drift": _drift(store, decisions, labels, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change), "review_queue": {reason: sum(item["reason"] == reason for item in queue) for reason in REASONS}, "questions": questions}
+            "uncalibrated": store.issues(), "drift": _drift(store, decisions, labels, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change, sample), "review_queue": {reason: sum(item["reason"] == reason for item in queue) for reason in REASONS}, "questions": questions}
