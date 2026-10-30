@@ -181,3 +181,37 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
                               "histogram": histogram(confidences) if confidences else None}
         store.save_calibrations(snapshots, tier, list(found) + list(closed))
     return report
+
+
+def recheck(store, tier=0, sample=0.02, target_accuracy=None):
+    """Checks each saved threshold of one tier against your labels on the random labeling sample (the rate given to
+    review_queue), without recalibrating. Where nobody labeled, calibrate grades a tier by System 2's answers, so a
+    threshold can certify agreement with System 2 rather than accuracy; this is the check that catches it, run on a
+    schedule. A question whose labeled answers at or above its threshold rule the target out (a confidence sequence
+    at 5%, so checking every night adds no false rejections) fails closed, as in calibrate, with the reason
+    "below target on labels"; anything else is left as it is, drift snapshot included.
+
+    The target is the one the threshold was calibrated for, else target_accuracy. Returns {key: {threshold, target,
+    graded, accuracy, high, failed}} for the questions with a finite threshold."""
+    targets = {c["key"]: c["target"] for c in store.calibrations() if c["tier"] == tier}
+    thresholds = {key: t for key, t in store.thresholds(tier).items() if t != float("inf")}
+    graded = {key: [] for key in thresholds}
+    for row in store.labeled():
+        if (row["tier"] == tier and row["key"] in thresholds and row["kind"] == "human" and in_sample(row["id"], sample)
+                and row["confidence"] >= thresholds[row["key"]]):
+            graded[row["key"]].append(row["answer"] == row["truth"])
+    report, failed = {}, {}
+    for key, threshold in thresholds.items():
+        target = targets.get(key, target_accuracy)
+        right, n = sum(graded[key]), len(graded[key])
+        high = confidence_sequence(right, n, 0.05)[1] if n else None
+        failed_now = target is not None and high is not None and high < target
+        report[key] = {"threshold": threshold, "target": target, "graded": n, "accuracy": right / n if n else None, "high": high, "failed": failed_now}
+        if failed_now:
+            failed[key] = target
+            log.warning("tier %d no longer trusted for %r: %d of %d labeled answers right (target %.2f)", tier, key, right, n, target)
+    if failed:
+        store.save_thresholds({key: float("inf") for key in failed}, tier)
+        store.save_issues({key: {"reason": "below target on labels", "best_target": None, "target": target} for key, target in failed.items()}, tier, list(failed))
+        store.save_calibrations({}, tier, list(failed))
+    return report
