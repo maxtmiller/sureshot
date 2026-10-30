@@ -640,8 +640,14 @@ def test_api_stats(tmp_path, monkeypatch):
     client = TestClient(api.app)
     api._router.decide("event", QUESTIONS)
     assert client.get("/stats").status_code == 401
-    body = client.get("/stats", headers={"Authorization": "Bearer secret"}).json()
-    assert body["decisions"] == 1 and body["questions"]["importance"]["answered_by"] == {"system2": 1.0}
+    auth = {"Authorization": "Bearer secret"}
+    body = client.get("/stats", headers=auth).json()
+    assert body["decisions"] == 1 and body["questions"]["importance"]["answered_by"] == {"system2": 1.0} and body["cost"] is None
+    # The stats options are query parameters; costs is JSON.
+    priced = client.get("/stats", headers=auth, params={"costs": '{"tier 0": 0, "system2": 10}', "alpha": 0.05, "min_samples": 5}).json()
+    assert priced["cost"]["always_system2"] == 30 and priced["cost"]["total"] == 10
+    for params in ({"costs": "not json"}, {"costs": '{"tier 0": 1}'}, {"costs": '{"system2": "cheap"}'}, {"costs": "[1]"}, {"alpha": 2}):
+        assert client.get("/stats", headers=auth, params=params).status_code == 422, params
 
 
 def test_review_queue_lists_disagreements_and_clears_when_graded(tmp_path):

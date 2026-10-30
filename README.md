@@ -286,7 +286,9 @@ router.test("golden.jsonl", questions=questions, thresholds={"urgency": 0.7})   
 ## Usage report
 
 `stats(store)` (or `GET /stats?since=<unix time>` on the API) summarizes the log, so you can see whether each tier is
-earning its place:
+earning its place. Its other options are query parameters too (`min_samples`, `alpha`, `false_alarm_every`,
+`min_escalation_change`, `min_distribution_change`), with `costs` as JSON, e.g.
+`costs={"tier 0": 0, "system2": 0.004}`:
 
 ```python
 from hunch import stats
