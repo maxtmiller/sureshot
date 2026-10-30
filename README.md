@@ -1,23 +1,86 @@
 # hunch
 
-Fast, calibrated decisions from a System 1 model, with escalation to a System 2 model when it isn't sure.
+Fast, calibrated answers from a cheap model, with escalation to a stronger model only when the cheap one isn't sure.
 
-System 1 is any fast model that can give a probability for each option, such as a small LLM served with vLLM or
-Ollama, or a hosted API that returns logprobs. System 2 is any stronger model: any chat endpoint with structured outputs (`ChatReasoner`), any HTTP API
-(`HTTPReasoner`), or Claude (`ClaudeAPI`, which needs `pip install "hunch[claude]"`). The router asks
-System 1 first and sends only the questions below their confidence threshold to System 2, so most decisions cost one
-cheap call and the hard ones get reasoning.
+You ask structured questions about a piece of content (an email, a ticket, an image). **System 1** is a fast model
+that gives a probability for each option: a small LLM with logprobs, or a classifier trained on your own labels.
+**System 2** is a stronger model that answers with a reason. The router asks System 1 first and sends only the
+questions it is unsure about to System 2, so most decisions cost one cheap call.
 
 ```
-state + questions ─▶ System 1 ─▶ confident? ── yes ──▶ answer (source: hunch)
-                                    │
-                                    no ──▶ System 2 ──▶ answer + reason (source: system2)
+content + questions ─▶ System 1 ─▶ confident? ── yes ──▶ answer (source: hunch)
+                                      │
+                                      no ──▶ System 2 ──▶ answer + reason (source: system2)
 ```
+
+Around that handoff, hunch logs every decision and uses your labels to learn how far to trust System 1, to train
+a cheaper tier, and to warn you when things change. [ARCHITECTURE.md](ARCHITECTURE.md) explains how each part works
+and why. [The banking77 case study](examples/case_study_banking77.md) runs the whole loop on real data.
+
+- [Install](#install)
+- [Quick start](#quick-start)
+- [The pieces](#the-pieces)
+- [Questions](#questions)
+- [Models](#models)
+- [The router](#the-router)
+- [The feedback loop](#the-feedback-loop): log, label, calibrate, retrain, recheck, prune, monitor
+- [HTTP API and configuration](#http-api-and-configuration)
+- [Performance](#performance)
+- [Tests](#tests)
+
+## Install
+
+```bash
+pip install -e .                 # core: any OpenAI-compatible or HTTP model
+pip install -e ".[claude]"       # Claude as System 2 through the Anthropic API
+pip install -e ".[local]"        # LocalDecider, the in-process classifier
+pip install -e ".[api]"          # the HTTP API
+pip install -e ".[dev]"          # tests
+```
+
+## Quick start
+
+```python
+from hunch import Router, OpenAIDecider, ClaudeAPI
+
+questions = {
+    "category": {"type": "choice", "instructions": "What kind of email is this?",
+                 "criteria": {"work": "From a real person", "promo": "Marketing"}},
+    "needs_reply": {"type": "noul", "instructions": "Does this email need a personal reply?"},
+}
+
+router = Router(OpenAIDecider("gpt-4o-mini"), ClaudeAPI(), threshold=0.8)
+result = router.decide(email_text, questions)
+
+result["answers"]["category"]   # {"answer": "work", "confidence": 0.97, "source": "hunch", ...}
+result["escalated"]             # the questions System 2 answered, e.g. ["needs_reply"]
+```
+
+A fixed threshold of 0.8 is only a starting point: a confidence of 0.8 rarely means 80% right. To learn real
+thresholds from your data, add a log and [calibrate](#calibrate-learn-each-questions-threshold).
+
+## The pieces
+
+| Piece | What it does |
+| --- | --- |
+| [Questions](#questions) | What you ask: `choice`, `score` or `noul` (yes/no) |
+| [System 1 deciders](#system-1) | Fast models with a confidence: `ChatDecider`, vendor classes, `VLLMDecider`, `HTTPDecider`, `LocalDecider` |
+| [System 2 reasoners](#system-2) | Stronger models that answer with a reason: `ClaudeAPI`, `ChatReasoner`, vendor classes, `HTTPReasoner` |
+| [`Router`](#the-router) | Tries the tiers in order, escalates what nobody is sure about, retries, and falls back when a model is down |
+| [`Store`](#log-and-label) | SQLite log of decisions, your labels, and the thresholds hunch learns |
+| [`Cache`](#cache) | Reuses a model's answer to the same question about the same text |
+| [`review_queue`](#review-queue-what-to-label-next) | The questions where a person's label helps most |
+| [`calibrate`](#calibrate-learn-each-questions-threshold) | Learns per-question thresholds that meet an accuracy target |
+| [`retrain`](#retrain-a-cheaper-first-tier) | Trains a `LocalDecider` from the log and promotes it only if it helps |
+| [`recheck`](#recheck-and-prune) | Tests a trusted tier against your labels on a schedule |
+| [`prune`](#recheck-and-prune) | Stops asking a tier the questions it doesn't pay for |
+| [`stats`](#stats-and-drift) | Usage, accuracy, cost, latency and drift report |
+| [`router.test`, `evaluate`](#testing-and-comparing-models) | Score a golden dataset; compare candidate models on your log |
+| [HTTP API](#http-api-and-configuration) | `/decide`, `/feedback`, `/calibrate`, `/stats`, `/review`, configured from env vars |
 
 ## Questions
 
-An object of named questions, each `choice` (named options), `score` (an
-ordered list of levels) or `noul` (yes/no).
+An object of named questions, each one of three types:
 
 ```json
 {
@@ -29,508 +92,322 @@ ordered list of levels) or `noul` (yes/no).
 }
 ```
 
-Every answer comes back in one shape: `answer` (an option key, a level index, or a boolean), `confidence`
-(0 to 1; for `noul`, the distance from a coin flip), `probabilities`, and `source`.
+- `choice`: one of named options. `score`: a level from an ordered list. `noul`: yes or no.
+- Every answer has the same shape: `answer` (an option key, a level index, or a boolean), `confidence` (0 to 1;
+  for `noul`, the distance from a coin flip), `probabilities` and `source` (`hunch` or `system2`).
 
-## Library
+## Models
+
+### System 1
+
+A System 1 must return a probability for each option. Each question is asked on its own with `max_tokens=1`, and
+the probability on the option labels is the confidence.
+
+| Class | Use it for |
+| --- | --- |
+| `ChatDecider(model, base_url, api_key)` | Any OpenAI-compatible endpoint that returns logprobs. `provider="groq"` (one of `hunch.PROVIDERS`) fills in the URL and key variable |
+| `OpenAIDecider`, `MistralDecider`, ... | The same with a vendor's endpoint built in (table below) |
+| `VLLMDecider(model)` | A model you serve with vLLM, at `http://localhost:8000/v1` by default (see [self-hosting](#self-hosting-system-1-with-vllm)) |
+| `HTTPDecider(url, request, parse)` | Any other HTTP API: you write the request body and parse the probabilities |
+| `LocalDecider` | An in-process classifier trained on your labels, about 10 ms (see [retrain](#retrain-a-cheaper-first-tier)) |
+
+Run `.check()` on a decider before using it: it asks one yes/no question and says what is wrong (unreachable,
+unknown model, no logprobs, or a model that starts thinking). A model that thinks before answering needs thinking
+turned off through `extra=`, e.g. `extra={"reasoning_effort": "none"}`.
+
+### System 2
+
+| Class | Use it for |
+| --- | --- |
+| `ClaudeAPI(model="claude-haiku-5-5", effort="low")` | Claude through the Anthropic API, constrained to the question schema |
+| `ClaudeCLI()` | Claude through your local `claude` CLI login. Text only |
+| `ChatReasoner(model, base_url, api_key)` | Any OpenAI-compatible endpoint with structured outputs (`json_mode="object"` for JSON mode only) |
+| `OpenAIReasoner`, `GroqReasoner`, ... | The same with a vendor's endpoint built in |
+| `HTTPReasoner(url, request, parse)` | Any other HTTP API. Build prompts with `prompt`, `SYSTEM_PROMPT` and `answer_schema` |
+
+`default_system2()` picks the first one configured: a `ChatReasoner` if `HUNCH_SYSTEM2_URL` is set, else `ClaudeAPI`
+if keyed, else `ClaudeCLI` if installed.
+
+### Vendors
+
+| Vendor | System 1 | System 2 |
+| --- | --- | --- |
+| OpenAI | `OpenAIDecider` | `OpenAIReasoner` |
+| Gemini | `GeminiDecider` (no current model returns logprobs) | `GeminiReasoner` |
+| Mistral | `MistralDecider` | `MistralReasoner` |
+| DeepSeek | `DeepSeekDecider` | `DeepSeekReasoner` (JSON mode) |
+| xAI | `XAIDecider` | `XAIReasoner` |
+| Groq | none (no logprobs) | `GroqReasoner` |
+| Together AI | `TogetherDecider` | `TogetherReasoner` |
+| Fireworks AI | `FireworksDecider` | `FireworksReasoner` |
+| OpenRouter | `OpenRouterDecider` | `OpenRouterReasoner` |
+| Ollama (local) | `OllamaDecider` | `OllamaReasoner` |
+| Claude | none (no logprobs) | `ClaudeAPI`, `ClaudeCLI` |
+
+Each vendor class is the generic `Chat*` class with that vendor's URL and key variable; `api_key=` and `base_url=`
+override them. What each model supports is up to the vendor, so `.check()` first. Which of these were checked live
+is in [ARCHITECTURE.md](ARCHITECTURE.md#vendors).
+
+### Your own models
+
+Any object with `decide(state, questions, images)` returning `{key: {answer, confidence, probabilities}}` works as
+System 1, and any object with `answer(state, questions, images)` returning `{key: {answer, reason}}` as System 2.
+For an HTTP API, `HTTPDecider` and `HTTPReasoner` take two functions:
 
 ```python
-from hunch import Router, ChatDecider, ClaudeAPI
-
-router = Router(ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/v1"), ClaudeAPI(), threshold=0.8)
-result = router.decide(email_text, questions, thresholds={"urgency": 0.6})
-result["answers"]["urgency"]   # {"answer": 0, "reason": "...", "source": "system2", "hunch": {...}}
-result["escalated"]            # ["urgency"]
+system1 = HTTPDecider(
+    "https://my-model.example.com/classify",
+    request=lambda state, questions, images: {"text": state, "questions": questions},
+    parse=lambda data, questions: {k: {"probabilities": v} for k, v in data["scores"].items()},
+    api_key="...",
+    identity="my-classifier-v1",   # enables caching; change it when the model changes
+)
 ```
 
-- `ChatDecider(model, base_url, api_key)` or `ChatDecider(model, provider="groq")`: any OpenAI-compatible endpoint that returns logprobs (OpenAI, vLLM,
-  Ollama, Together, Fireworks, Groq), hosted or self-served, with no adapter code. Each question is asked with
-  `max_tokens=1`, and the model's probability over the option labels is the calibrated confidence. Options are
-  labeled A to Z, or 1, 2... past 26, which needs a tokenizer that keeps those numbers as one token (checked on
-  `gpt-4o-mini` with 77 options). Only the top 20 tokens come back with a probability, so with many options the
-  rest count as 0. Point it at your own server with `base_url="http://localhost:8000/v1"`.
-- `VLLMDecider(model, base_url="http://localhost:8000/v1")`: a model you serve yourself with vLLM. It is a
-  `ChatDecider` with a local default URL that turns off thinking for models that support it (see
-  [Self-hosting System 1](#self-hosting-system-1-with-vllm)).
-- `ChatDecider(...).check()` asks one yes/no question and raises an error saying what is wrong (unreachable, unknown
-  model, no logprobs, or a model that starts thinking and needs `extra`). The HTTP API runs it before its first request.
-- `HTTPDecider(url, request, parse, api_key)`: any System 1 model behind a non-OpenAI HTTP API. `request(state, questions,
-  images)` returns the JSON body to POST, and `parse(response, questions)` returns `{key: raw}` where raw is
-  `{"noul": p}` or `{"probabilities": {option: p}}`. hunch normalizes the rest.
+Raise `hunch.Outage` when your model is down or overloaded, so the router retries and falls back. Any other
+exception is treated as a bug and raised.
 
-  ```python
-  system1 = HTTPDecider(
-      "https://my-model.example.com/classify",
-      request=lambda state, questions, images: {"text": state, "questions": questions},
-      parse=lambda data, questions: {k: {"probabilities": v} for k, v in data["scores"].items()},
-      api_key="...",
-  )
-  ```
+### Self-hosting System 1 with vLLM
 
-  For a model behind a different protocol, any object with `decide(state, questions, images)` returning
-  `{key: {answer, confidence, probabilities}}` works as System 1.
-- `ClaudeAPI(model="claude-haiku-5-5", effort="low")`: Claude through the Anthropic API (`pip install "hunch[claude]"`) with structured outputs,
-  constrained to the question schema. Refusals are rerun on a fallback model the API picks (server-side
-  fallbacks).
-- `HTTPReasoner(url, request, parse, api_key)`: any System 2 model behind an HTTP API. `request(state, questions,
-  images)` returns the JSON body, and `parse(response, questions)` returns `{key: {"answer", "reason"}}`. Build
-  prompts with `prompt(state, questions)`, `SYSTEM_PROMPT` and `answer_schema(questions)`.
-
-  ```python
-  system2 = HTTPReasoner(
-      "https://llm.example.com/v1/answer",
-      request=lambda state, questions, images: {"system": SYSTEM_PROMPT, "input": prompt(state, questions),
-                                                "schema": answer_schema(questions)},
-      parse=lambda data, questions: data["answers"],
-      api_key="...",
-  )
-  ```
-- `ChatReasoner(model, base_url, api_key)`: any OpenAI-compatible endpoint as System 2, constrained to the
-  question schema with structured outputs.
-- No endpoint is assumed: pass `base_url`, or `provider=` one of `hunch.PROVIDERS` (`openai`, `xai`, `mistral`,
-  `deepseek`, `groq`, `together`, `fireworks`, `openrouter`, `ollama`, `vllm`), which fills in the URL and reads the key
-  from that provider's usual variable (`GROQ_API_KEY`...). It only saves typing. Services differ in whether they return
-  the logprobs System 1 needs or support structured outputs for System 2, so run `ChatDecider(...).check()` first.
-- `ChatDecider` and `ChatReasoner` also take `extra={...}`, merged into every request body. A model that would
-  spend its one token starting to think (such as Gemma on Ollama) needs `extra={"reasoning_effort": "none"}` to put
-  probability on the options.
-- `ClaudeCLI(model=None)`: Claude through your local `claude` CLI login, with no tools. Text only.
-- `default_system2()`: the first configured of a `ChatReasoner` (when `HUNCH_SYSTEM2_URL` is set), `ClaudeAPI` (when the
-  SDK is installed and a credential is set), `ClaudeCLI` (if installed), else `None`.
-- A custom System 1 or System 2 can raise `hunch.Outage` when its model is down or overloaded, so the router retries
-  and falls back like it does for network errors. Any other exception is treated as a mistake and raised.
-- Vendor classes, so you can write `OpenAIDecider("gpt-4o-mini")` or `GroqReasoner("llama-3.3-70b-versatile")` and get
-  that vendor's endpoint and key variable without a URL. Each is the generic `Chat*` class with those defaults
-  (`api_key=` and `base_url=` override them):
-
-  | Vendor | System 1 | System 2 |
-  | --- | --- | --- |
-  | OpenAI | `OpenAIDecider` | `OpenAIReasoner` |
-  | Gemini (its own API) | `GeminiDecider` | `GeminiReasoner` |
-  | Mistral | `MistralDecider` | `MistralReasoner` |
-  | DeepSeek | `DeepSeekDecider` | `DeepSeekReasoner` (JSON mode, since it has no schemas) |
-  | xAI | `XAIDecider` | `XAIReasoner` |
-  | Groq | none (no logprobs) | `GroqReasoner` |
-  | Together AI | `TogetherDecider` | `TogetherReasoner` |
-  | Fireworks AI | `FireworksDecider` | `FireworksReasoner` |
-  | OpenRouter | `OpenRouterDecider` | `OpenRouterReasoner` |
-  | Ollama (local) | `OllamaDecider` | `OllamaReasoner` |
-  | Claude | none (no logprobs) | `ClaudeAPI`, `ClaudeCLI` |
-
-  What a vendor supports is up to the vendor. A System 1 needs a model that returns logprobs, which not every model or
-  service does (reasoning models such as OpenAI's GPT-5 and o-series are reported not to on chat completions, and
-  models that think first need it turned off, for Gemini `extra={"thinkingConfig": {"thinkingBudget": 0}}`). A System 2
-  needs structured outputs, or `json_mode="object"` for a service with only JSON mode. Run `.check()` on a decider
-  first. The Gemini adapters speak Gemini's own `generateContent` API (the key comes from `GEMINI_API_KEY` or
-  `GOOGLE_API_KEY`); `GeminiReasoner` was checked live on `gemini-3.1-flash-lite` and `gemini-3-flash-preview`. `GeminiDecider` could
-  not be: every model available to a new key (the Gemini 3 family, Gemma 4) answered "Logprobs is not enabled for this
-  model", and the 2.5 family that supported them is closed to new users, so for now Gemini works as System 2 only. The
-  other vendors' URLs and capabilities come from their public docs and community reports, not live checks.
-- `decide(..., escalate=False)` keeps System 1's answers and only lists the unsure keys.
-
-## Self-hosting System 1 with vLLM
-
-A hosted API costs at least ~500 ms per call in network and queueing. For a faster System 1, serve an open model
-with [vLLM](https://docs.vllm.ai) on a GPU on the same machine or network as hunch, so there is no internet hop.
-Prefix caching lets the per-question requests for one state share its prefill.
+A hosted API costs at least ~500 ms per call. A model served next to hunch answered a three-question email in about
+150 ms on an NVIDIA L4.
 
 ```bash
 vllm serve Qwen/Qwen2.5-7B-Instruct --enable-prefix-caching --max-logprobs 20 --max-model-len 4096
 ```
 
 ```python
-from hunch import Router, VLLMDecider, ClaudeAPI
-
 router = Router(VLLMDecider("Qwen/Qwen2.5-7B-Instruct").check(), ClaudeAPI())
 ```
 
-Or set `HUNCH_SYSTEM1=vllm`, `HUNCH_SYSTEM1_MODEL` and, for a remote box, `HUNCH_SYSTEM1_URL`. `serve/docker-compose.yml`
-runs vLLM and the hunch API together on one GPU machine (Docker with the NVIDIA container toolkit):
-`cp .env.example .env`, set `HUNCH_SYSTEM1_MODEL`, `HUNCH_API_KEY` and a System 2 key, then
-`docker compose -f serve/docker-compose.yml up --build`. The compose file itself has not been run (it needs Docker with an NVIDIA GPU). Its pieces were: the official
-`vllm/vllm-openai` image started with the compose flags on an NVIDIA L4 and served Qwen2.5-7B-Instruct, `serve/Dockerfile`
-built and started the API, and `VLLMDecider`, `check()`, `router.test`, `/decide` and `/feedback` ran against that server.
-When System 1 is unreachable, `/decide` answers 503 with the reason.
+`serve/docker-compose.yml` runs vLLM and the hunch API together on one GPU machine: `cp .env.example .env`, set
+`HUNCH_SYSTEM1_MODEL`, `HUNCH_API_KEY` and a System 2 key, then `docker compose -f serve/docker-compose.yml up
+--build`. A zero-shot 7B model is less accurate than `gpt-4o-mini`, so log decisions, calibrate, and keep a System 2
+behind it.
 
-A 7B model fits a 24 GB GPU. On the L4 it answered a three-question email in about 150 ms (p50 and p95), against about
-500 to 600 ms for hosted APIs; a faster GPU should lower that. Zero-shot it was less accurate than `gpt-4o-mini` on a
-small labeled set (71% against 84%), so log decisions, run `calibrate`, and keep a System 2 behind it.
-`--max-logprobs 20` matches the 20 top logprobs hunch requests.
+## The router
 
-If you install vLLM with pip instead of using the official image, it may need `nvcc` for FlashInfer; set
-`VLLM_USE_FLASHINFER_SAMPLER=0` or use `vllm/vllm-openai`.
+```python
+router = Router(
+    [LocalDecider.load("local.joblib"), OpenAIDecider("gpt-4o-mini")],   # tiers, tried in order
+    ClaudeAPI(),                                                         # System 2
+    threshold=[0.95, 0.8],      # default threshold per tier, until calibration saves better ones
+    log=Store("hunch.db"),      # log every decision, and apply the thresholds it has learned
+    audit=0.05,                 # also send 5% of confident answers to System 2, to grade them
+    cache=Cache("cache.db"),
+)
+result = router.decide(text, questions, thresholds={"urgency": 0.6})
+```
 
-## When a model is down
+A question stops at the first tier that is confident about it; what no tier is sure about goes to System 2. The
+options:
 
-Each call to System 1 or System 2 is retried on network errors and on HTTP 408, 429 and 5xx (`Router(retries=2,
-backoff=0.5)` waits 0.5 s, then 1 s). If it still fails, the result says so in `degraded` (`None` when all is well,
-else a list of `{"system": 1, 2 or "guard", "tier", "error"}`):
+| Option | What it does |
+| --- | --- |
+| `system1` | One decider or a list of tiers. A tier may answer only some questions (a `LocalDecider` answers the ones it was trained on); the rest pass down |
+| `threshold` | Default confidence needed to keep an answer, one number or one per tier. Thresholds passed to `decide` beat calibrated ones, which beat this |
+| `log` | A `Store`: logs decisions and supplies calibrated thresholds |
+| `audit` | Share of confident answers also sent to System 2, only to grade them. This is what lets calibration see every confidence level |
+| `trust_uncalibrated=False` | Trust a tier on a question only once it has a calibrated threshold. Until then everything escalates, which gives calibration an unbiased start |
+| `guard`, `guard_threshold` | A second System 1 that can veto confident answers it disagrees with (see [catching confident errors](#catching-confident-errors)) |
+| `probe` | Share of questions still asked of a tier that is not trusted on them or was pruned (default 0.05), so data keeps coming |
+| `cache` | A `Cache` of model answers |
+| `retries`, `backoff` | Retries on network errors and HTTP 408, 429 and 5xx (default 2, waiting 0.5 s then 1 s) |
 
-- **A System 1 tier down:** it is skipped and its questions pass to the next tier. If every tier is down, System 2
-  answers every question, and each answer has `"hunch": None`.
-- **System 2 down:** the last tier's answers stand, `escalated` is empty, and the unsure keys stay in `unsure`.
-- **The guard down** (say a second LLM used as `guard=`): nothing is vetoed, so the confident answers stand.
-- **Everything down, or no System 2 to fall back to:** the error is raised.
+`decide(..., escalate=False)` skips System 2 and lists the unsure questions in `unsure`.
 
-Only outages fall back. A bad key or an unknown model (401, 404...) raises, so a misconfiguration is not hidden by
-quietly using, and paying for, the other model. Decisions made while System 1 was down are logged but skipped by
-`calibrate`, since they have no System 1 confidence.
+The result:
 
-## Testing against a golden dataset
+```python
+result["answers"]["urgency"]
+# {"answer": 2, "reason": "...", "source": "system2",
+#  "hunch": {"answer": 1, "confidence": 0.62, "tier": 1},              # the last tier's answer, when escalated
+#  "tried": [{"tier": 0, "answer": 1, "confidence": 0.41}, {"tier": 1, "answer": 1, "confidence": 0.62}]}
+result["escalated"]    # questions System 2 answered
+result["unsure"]       # questions no tier was confident about
+result["degraded"]     # None, or which models were down
+result["latency_ms"]   # {"system1", "tiers", "system2", "total"}
+result["id"]           # the logged decision, to attach a label to
+```
 
-`router.test(cases)` scores the router on cases you have already answered, so you can compare models or catch a
-regression before shipping. A case is `{"state": ..., "expected": {key: answer}}`, plus its own `"questions"` or a
-shared `questions=` argument. `cases` is a list or the path of a JSONL file with one case per line. Only the
-questions with an expected answer are asked, and nothing is written to the log.
+### When a model is down
+
+After retries, the router falls back and says so in `degraded`:
+
+- **A tier is down:** it is skipped. If every tier is down, System 2 answers everything.
+- **System 2 is down:** the last tier's answers stand, and the unsure questions stay in `unsure`.
+- **The guard is down:** nothing is vetoed.
+- **Everything is down, or there is nothing to fall back to:** the error is raised.
+
+Only outages fall back. A bad key or an unknown model raises, so a misconfiguration isn't hidden behind answers
+from the other model.
+
+### Cache
+
+`Router(cache=Cache("cache.db", ttl=7 * 24 * 3600))` reuses a model's answer to the same question about the same
+text. It caches what the models said, not the decision, so changing thresholds or recalibrating needs no clearing.
+It helps when items are seen more than once, and above all when rescoring a golden set or trying thresholds, which
+then costs nothing. On a stream of unique items it saves nothing; check `stats(store)["cache"]`.
+
+A vendor can change a model behind the same name, which the cache can't see. Pin a dated model name, set a `ttl`, or
+`clear()` the cache when you change models. Details of the key are in [ARCHITECTURE.md](ARCHITECTURE.md#the-cache-cachepy).
+
+### Catching confident errors
+
+A model's confidence can't reveal the mistakes it is sure about. `Router(..., guard=g, guard_threshold=0.9)` shows
+each confident answer to a second System 1, and when it disagrees with probability at least 0.9, the answer escalates.
+The guard can be a `LocalDecider` trained on your labels (runs in-process) or a second LLM. On public datasets a
+second LLM caught about twice as many confident errors as the local guard, for a call per confident answer; the
+numbers are in [ARCHITECTURE.md](ARCHITECTURE.md#the-router-routerpy).
+
+## The feedback loop
+
+With a log, hunch improves as you label. A typical setup runs the router all day and a short job each night:
+
+```python
+from hunch import Router, Store, calibrate, prune, recheck, retrain, review_queue, stats
+
+store = Store("hunch.db")
+router = Router([local, llm], system2, log=store, audit=0.05, trust_uncalibrated=False)
+
+# During the day
+result = router.decide(text, questions)
+
+# Each night
+for item in review_queue(store, limit=30, sample=0.02, kept=0.1):   # a person labels these
+    store.label(item["id"], item["key"], answer_from_a_person)
+local = retrain(store, current=local, tier=0)["decider"]             # a better classifier, if it helps
+calibrate(store, target_accuracy=0.95, tier=1, sample=0.02)          # thresholds for the LLM tier
+recheck(store, tier=1, sample=0.02, kept=0.1)                        # is that tier still meeting the target?
+prune(store, {"tier 1": 0.00008, "system2": 0.0034}, tier=1)         # stop asking it where it doesn't pay
+report = stats(store, sample=0.02, costs={"tier 1": 0.00008, "system2": 0.0034})
+```
+
+The rest of this section explains each step.
+
+### Log and label
+
+`Router(log=Store("hunch.db"))` logs every decision and returns its `id`. Attach the true answer with
+`store.label(id, key, answer)` (or `POST /feedback`), from a person or a downstream outcome.
+
+Where nobody has labeled, hunch grades a tier by System 2's answer. That measures agreement with System 2, which is
+not the truth when System 2 is often wrong, so label where you can and measure with a random sample (below).
+
+### Review queue: what to label next
+
+`review_queue(store)` (or `GET /review`) lists the ungraded questions where a label helps most, in this order:
+
+| Reason | Why it's queued |
+| --- | --- |
+| `sample` | In a fixed random share of all decisions (`sample=0.02`). The only labels that say how often the router is right overall |
+| `kept` | In a fixed random share of the answers a tier kept (`kept=0.1`). What `recheck` tests a trusted tier with |
+| `disagreement` | A tier was unsure, System 2 answered, and they differ |
+| `audit_disagreement` | A confident answer was audited and System 2 disagreed: how confident mistakes get found |
+| `unresolved` | No tier was confident and System 2 wasn't asked |
+
+```python
+for item in review_queue(store, limit=20, sample=0.02):
+    item["reason"], item["state"], item["question"], item["answer"]
+    item["candidates"]   # what each tier and System 2 said, with System 2's reason
+    store.label(item["id"], item["key"], true_answer)   # the item leaves the queue
+```
+
+### Calibrate: learn each question's threshold
+
+```python
+calibrate(store, target_accuracy=0.95, tier=0)
+# {"urgency": {"threshold": 0.71, "accuracy": 0.9, "trusted_accuracy": 0.96, "escalation_rate": 0.22, "samples": 410}}
+```
+
+For each question, `calibrate` finds the lowest confidence at which the tier's accuracy, judged conservatively,
+meets the target, and saves it so the router applies it. `escalation_rate` is the share that would go to System 2:
+the cost of the target. Call it once per tier. It needs graded answers at every confidence level, which is what
+`audit` provides.
+
+When it finds no threshold, `reason` says why, and `best_target` is the highest target this data would support:
+
+| `reason` | What to do |
+| --- | --- |
+| `not enough data` | Fewer than `min_samples` (30) graded answers. Grade more; the threshold is unchanged |
+| `not enough evidence` | The target isn't ruled out but can't be shown yet. Grade more |
+| `target unreachable` | The tier can't reach the target. Lower it, or change or drop the tier |
+| `below target on labels` | With `sample=`: a threshold was found, but your labels on the random sample show the tier below target |
+
+In the last three cases the tier **fails closed**: it is no longer trusted on that question, which passes to the
+next tier or System 2, and the tier is only asked on a `probe` share. Calibrate again later; with more data it may
+pass. `fail_closed=False` keeps the old threshold instead. `stats(store)["uncalibrated"]` lists these questions.
+
+How the statistics work, and how often they are wrong in simulation: [ARCHITECTURE.md](ARCHITECTURE.md#calibration-calibratepy).
+
+### Retrain: a cheaper first tier
+
+`LocalDecider` (`pip install -e ".[local]"`) embeds the text with a small local model and trains one logistic
+regression per question on your graded decisions. It answers in about 10 ms with no server, so it makes a good
+tier 0 in front of an LLM. It is strong on topical questions and weak on subtle ones such as tone; calibration
+decides per question.
+
+```python
+result = retrain(store, current=local, tier=0)   # train on the log, promote only what helps
+local = result["decider"]
+local.save("local.joblib")                        # LocalDecider.load("local.joblib") in production
+```
+
+`retrain` promotes the new classifier question by question, only if on held-out decisions it meets the target and
+passes on fewer questions than `current`. Where it keeps `current`, it checks it again, so a nightly `retrain` also
+recalibrates the classifier. Use it rather than `calibrate(tier=0)` for the classifier. It needs roughly 100 to 300
+labels per question.
+
+### Recheck and prune
+
+- **`recheck(store, tier=1, sample=0.02, kept=0.1)`** tests each saved threshold against your labels on the random
+  samples, and fails a tier closed when they rule the target out. Run it on a schedule: a tier that is certified is
+  rarely calibrated again, and a threshold certified against System 2 can overstate the tier.
+- **`prune(store, costs, tier=1)`** stops asking a tier the questions where the answers it keeps save less than it
+  costs to ask. It is then only probed, and asked again once it pays. To count waiting as a cost, add its price to
+  each stage's cost (say $0.01 a second).
+
+### Stats and drift
+
+`stats(store)` (or `GET /stats`) summarizes the log:
+
+```python
+report = stats(store, sample=0.02, costs={"tier 0": 0, "tier 1": 0.0002, "system2": 0.004})
+report["questions"]["topic"]["answered_by"]         # {"tier 0": 0.74, "tier 1": 0.26}
+report["questions"]["topic"]["tier_accuracy"]       # accuracy of the answers each tier kept
+report["questions"]["topic"]["accuracy_on_sample"]  # the router's accuracy on the labeled random sample
+report["cost"]                                      # total, savings vs. System 2 alone, and per tier "net"
+report["latency_ms"], report["cache"], report["review_queue"], report["uncalibrated"]
+report["drift"]                                     # what changed since each calibration
+```
+
+- `accuracy_on_sample` has `below_target` when even the top of its interval is under the target. No threshold
+  fixes that: System 2, or the question itself, is the limit.
+- In `cost`, a tier with a negative `net` costs more than it saves. hunch has no price list; pass yours. Add `"ms"`
+  to price waiting.
+- `drift` lists, per calibrated question and tier, `flags` for what moved: `escalation_rate`, `distribution` (the
+  spread of its confidences), `accuracy`, and `change_*` for a change that started later. `unchecked` names the
+  checks that lacked data, so an empty `flags` isn't read as no drift. `upstream` points at an earlier tier that
+  drifted first. A flag means grade a fresh sample and calibrate again.
+- `examples/drift_alert.py hunch.db` prints what moved and exits with status 1 when anything is flagged; run it on
+  a schedule.
+
+How the drift checks keep false alarms rare however often you poll: [ARCHITECTURE.md](ARCHITECTURE.md#measuring-statspy-evaluatepy-goldenpy).
+
+### Testing and comparing models
+
+`router.test(cases)` scores the router on answers you already know, without writing to the log. A case is
+`{"state": ..., "expected": {key: answer}}`; `cases` is a list or a JSONL file.
 
 ```python
 report = router.test("golden.jsonl", questions=questions)
-report["overall"]     # {"n": 120, "accuracy": 0.93, "system1_accuracy": 0.81, "escalation_rate": 0.24}
-report["questions"]   # the same per question
-report["latency_ms"]  # {"system1": {50: 310.2, 95: 642.9}, "system2": {50: 1480.0, 95: 2210.5}, "total": {...}}
-report["failures"]    # [{"case": 7, "key": "urgency", "expected": 2, "got": 1, "source": "hunch", "confidence": 0.97}, ...]
+report["overall"]    # {"n": 120, "accuracy": 0.93, "system1_accuracy": 0.81, "escalation_rate": 0.24}
+report["failures"]   # [{"case": 7, "key": "urgency", "expected": 2, "got": 1, ...}, ...]
 ```
 
-`accuracy` is the final answer and `system1_accuracy` is System 1 alone, so the gap is what escalation buys.
-Every `decide` result also has `latency_ms` (`system1`, `system2` or `None`, `total`), and it is stored in the log.
-Cases run one at a time, so the latencies are those of an unloaded system.
+`evaluate(store, {"qwen": ChatDecider(...), "llama": ChatDecider(...)})` replays your graded decisions through
+candidate System 1 models, to see which meets the target with the least escalation.
 
-## Chaining tiers: a trained classifier in front of an LLM
-
-`Router` takes one System 1 or a list of them, tried in order. A question stops at the first tier that is confident
-about it; the rest pass down, and what no tier is sure about goes to System 2.
-
-```python
-from hunch import Router, Store, LocalDecider, ChatDecider, ClaudeAPI, calibrate
-
-store = Store("hunch.db")
-router = Router([LocalDecider.load("local.joblib"), ChatDecider("gpt-4o-mini", provider="openai")], ClaudeAPI(), log=store, audit=0.1)
-result = router.decide(email_text, questions)
-result["answers"]["urgency"]["tier"]    # 0 = the classifier, 1 = the LLM; "source" is "system2" if Claude answered
-result["answers"]["urgency"]["tried"]   # what each tier said: [{"tier": 0, "answer": 1, "confidence": 0.62}, ...]
-```
-
-`LocalDecider` is a System 1 that runs in-process in about 10 ms: it embeds the state with a small local model
-(`all-MiniLM-L6-v2`) and trains one logistic regression per question on your graded decisions. Install it with
-`pip install "hunch[local]"`, train it from the log once there are enough labels (roughly 100 to 300 per question),
-and save it:
-
-```python
-local = LocalDecider.train(store.labeled())    # or any list of {"state", "key", "truth"} rows
-local.save("local.joblib")                     # LocalDecider.load("local.joblib") in production
-```
-
-- It answers only the questions it was trained on (and no images); the others pass to the next tier. Retrain when
-  you change a question.
-- `retrain(store, current=local)` trains a new classifier on the log's graded decisions and promotes it, question by
-  question, only if on held-out decisions it reaches the accuracy target and passes on fewer questions than `current`.
-  It saves the promoted questions' thresholds to the store and returns `{"decider", "report"}`, so the escalation rate
-  falls as labels and System 2 answers accumulate. Where it keeps `current`, it checks it again on the held-out
-  decisions, which include everything graded since: `"kept": "rechecked"` updates its threshold, `"failed"` stops
-  trusting it when they rule the target out (as `calibrate` fails closed), and `"unproven"` leaves its threshold as
-  it was when they can no longer show the target but do not rule it out. Without that last case, a classifier near
-  the target was switched off and on night after night in the banking77 case study. So a nightly `retrain` also
-  recalibrates the classifier. Use it rather
-  than `calibrate(store, tier=0)`, which grades only the answers the classifier has given since it was promoted:
-  in the banking77 case study, one day of those was too little, and calibrating killed a classifier that `retrain`
-  had just certified.
-- `Router(..., guard=local, guard_threshold=0.9)` catches confident errors, which a model's own confidence cannot:
-  when a tier is confident but the guard (a `LocalDecider` trained on your labels, so it runs in-process) disagrees
-  with probability at least `guard_threshold`, the answer counts as unsure and escalates; the guard's answer is
-  kept under `"guard"`. The guard learns whatever your labels say, mistakes included, so measure it against labels
-  you have checked. On 506 held-out job emails with their original labels, `gpt-4o-mini` looked wrong 37 times at
-  0.95 confidence or more, and a guard at 0.9 caught 13 of them. A second model (Claude) then reviewed every email
-  where the label and `gpt-4o-mini` disagreed, and sided with `gpt-4o-mini` on 68% of them. Against those
-  corrected labels, `gpt-4o-mini` had 9 confident errors (accuracy 0.97, not 0.91), and the guard caught 0 to 2 of
-  them while raising 5 to 35 false alarms. Most of what it had "caught" was label noise. The review favors
-  `gpt-4o-mini`, since a label changed only when the two models agreed, so treat both sets of numbers as bounds.
-- The guard can be any System 1, including a second LLM: `guard=ChatDecider("gpt-4.1-mini", provider="openai")`.
-  On 1,178 held-out items from three public datasets (ag_news, rotten_tomatoes, enron_spam), with labels reviewed
-  the same way, `gpt-4o-mini` was confident (0.95 or more) on 97% of them and wrong on 56 of those. At about 3% extra
-  escalation, a second LLM disagreeing at 0.9 caught 24 (13 false alarms) and the local guard 14 (20 false alarms).
-  The local guard did well on topics and poorly on sentiment (1 of 16). Asking `gpt-4o-mini` to check its own answer
-  caught 7 to 12 with 28 to 43 false alarms, and per-cluster thresholds caught 4 with 65. A second LLM costs a call
-  for every confident answer, while the local guard runs in-process. A guard that is down vetoes nothing.
-- `threshold` can be a list with one number per tier, and each tier has its own calibrated thresholds, since a
-  classifier's 0.9 and an LLM's 0.9 mean different things. Calibrate each tier: `calibrate(store, tier=0)`,
-  `calibrate(store, tier=1)`.
-- `HUNCH_LOCAL_MODEL=local.joblib` puts a saved classifier in front of the LLM for the HTTP API.
-- `escalate=False` skips only System 2; the tiers still run.
-- Measured on public datasets (200 held-out items per question, 300 training labels): a classifier then `gpt-4o-mini`
-  scored 92% on a topic question (the classifier answered 71% of items, p50 12 ms) and 89% on a sentiment question
-  (the classifier was trusted for only 12%, p50 461 ms), against 82% and 90% for the LLM alone. The classifier is
-  strong on topical questions and weak on subtle ones such as tone; calibration decides per question.
-
-## Response cache
-
-`Router(..., cache=Cache("cache.db"))` reuses a model's answer to a question about a text instead of asking again. It
-helps when the same items are processed more than once: a job that reprocesses overlapping data, retries, and above
-all rescoring a golden set or trying thresholds, which then makes no model calls at all. On a stream of unique items
-it saves nothing, so check the hit rate in `stats(store)["cache"]`.
-
-```python
-from hunch import Router, Cache
-
-router = Router(system1, system2, cache=Cache("cache.db", ttl=7 * 24 * 3600))   # ttl in seconds; None keeps answers forever
-router.decide(email_text, questions)["cache"]    # {"hits": 0, "misses": 4}; the second call is {"hits": 4, "misses": 0}
-router.test("golden.jsonl", questions=questions, thresholds={"urgency": 0.7})   # free once the models have answered
-```
-
-- It caches what the models said, not the decision, so changing `threshold`, recalibrating, or editing the thresholds
-  you pass needs no clearing. Only a question that newly becomes unsure calls System 2.
-- A vendor can update a model behind the same name (an alias like `gpt-4o-mini` rather than a dated snapshot). The
-  key cannot see that, so cached answers keep the old model's behavior, and drift only sees the change on texts
-  that miss the cache. Pin a dated model name where the vendor offers one, set a `ttl`, or `clear()` the cache
-  when you change models.
-- It is per question and per model. The key is the model's `identity`, the question's name and definition, the
-  text and the images. A different model, `extra`, URL, question wording or text is a different key. An API key is
-  not part of it. A trained `LocalDecider` has an identity that changes when it is retrained. `ClaudeAPI`, `ChatDecider`,
-  `VLLMDecider` and `ChatReasoner` have one; give `HTTPDecider` or `HTTPReasoner` an `identity=` string (change it when
-  you change the model or your functions) or they are not cached. Bump `PROMPT_VERSION` in `hunch/adapters/base.py` when a
-  prompt changes.
-- System 2 is cached per question too, so a repeat call asks it only about the questions it has not answered.
-- A cached repeat is still a logged decision, so a repeated item counts again in `calibrate` and `LocalDecider.train`.
-  `Cache.clear()` empties the cache and `Cache.size()` counts it. It stores answers, not texts (the key is a hash).
-- `HUNCH_CACHE=cache.db` and `HUNCH_CACHE_TTL=<seconds>` turn it on for the API.
-
-## Usage report
-
-`stats(store)` (or `GET /stats?since=<unix time>` on the API) summarizes the log, so you can see whether each tier is
-earning its place. Its other options are query parameters too (`min_samples`, `alpha`, `false_alarm_every`,
-`min_escalation_change`, `min_distribution_change`), with `costs` as JSON, e.g.
-`costs={"tier 0": 0, "system2": 0.004}`:
-
-```python
-from hunch import stats
-
-report = stats(store)
-report["questions"]["topic"]
-# {"asked": 100,
-#  "answered_by": {"tier 0": 0.74, "tier 1": 0.26},
-#  "tier_accuracy": {"tier 0": {"graded": 11, "accuracy": 0.636}, "tier 1": {"graded": 5, "accuracy": 1.0}},
-#  "accuracy_vs_labels": None}
-report["latency_ms"]
-# {"total": {"p50": 480.3, "p95": 1330.7, "mean": 498.6}, "tier_mean": {"tier 0": 15.7, "tier 1": 504.1},
-#  "system2_called": 0.255, "system2_mean": 774.9}
-```
-
-The output above is from a run of 200 decisions (100 per question) on public datasets, with a classifier, then
-`gpt-4o-mini`, then `gpt-4.1` as System 2 and `audit=0.2`. Eleven graded answers is too few to trust a 64%.
-
-- `answered_by` is the share of answers each tier and System 2 gave. A tier that answers few questions but adds
-  latency to all of them is not paying for itself.
-- `tier_accuracy` is the accuracy of the answers a tier gave and kept (not the ones it passed down), against your
-  label or else System 2's audit answer, with audited answers weighted up for the audit rate. It needs labels or
-  `audit` to have anything to grade.
-- Without your labels, `tier_accuracy` is agreement with System 2, which is not always the truth (in the run above,
-  System 2 disagreed with the dataset's own labels on some items), so give labels where you can.
-- `accuracy_vs_labels` is the accuracy of the final answers where you gave a label.
-- `system2_called` includes audit calls, so `audit` shows up as System 2 cost.
-- `stats(store, costs={"tier 0": 0, "tier 1": 0.0002, "system2": 0.004})` adds `cost`: the total and per-decision
-  cost (a cost per question asked of each stage, in any unit; audits count as System 2), `always_system2` (sending
-  every question to System 2), `savings` (the share saved against that), and for each tier its `cost`, the
-  System 2 questions its kept answers avoided (`saves_vs_system2`) and `net`. A negative `net` means the tier costs
-  more than it saves: drop it, or lower its threshold. Add `"ms"`, a cost per millisecond, to price waiting too.
-  Answers served from the cache are counted as asked, so with a cache it is an upper bound. hunch has no price list,
-  since prices change and differ by account: pass yours.
-- `prune(store, costs, tier=1)` acts on it: a tier is only probed (`Router(probe=)`) on the questions where the share
-  of answers it keeps, times what a System 2 question costs, is less than what asking it costs; it is asked again
-  once its probe answers show it paying. To count waiting, add its price to each stage's cost. In the banking77 case
-  study `gpt-4o-mini` kept about 13% of its answers: in money alone that pays (13% of $0.0034 against $0.00008), but
-  it added 0.57 s to every message to save 0.95 s on one in eight, which made hunch slower than `gpt-4.1` alone.
-- `drift` compares each calibrated question and tier with its last `calibrate` run, and `flags` names what moved:
-  `"escalation_rate"` (the share of the tier's answers below the threshold: the inputs or the model changed),
-  `"distribution"` (how its confidences spread over five quantile bins, which catches a slide that stays above the
-  threshold, such as 0.99 becoming 0.96 with the threshold at 0.95, before it moves the escalation rate or the
-  accuracy) and `"accuracy"` (its audited answers since then, graded by your label where there is one, else by the
-  audit, are below the target). A flag means grade a fresh sample and calibrate again. `accuracy_since` also
-  gives `human`, how many of the graded answers have your label: the others are graded
-  by System 2's audit answer, so with few labels the accuracy mostly measures agreement with System 2.
-- A flag needs both evidence and size. The checks on everything since the calibration share `alpha` (default 0.01),
-  split evenly, and use confidence sequences (with a one-off interval for the calibration's own fixed sample), which
-  hold at every sample size at once: however often you call `stats`, they raise a false flag at most that often,
-  ever. The price is that they need several times more answers to flag a change than a one-off test would. The
-  change must also be big enough to act on: the escalation rate must move at least `min_escalation_change` (default
-  0.05), and the bins must differ by at least `min_distribution_change` (default 0.1, the share of answers that
-  would have to change bins), so a large log does not flag a move from 20% to 21%. Accuracy below the target is
-  already worth acting on, so it has no minimum.
-- Those checks pool everything since the calibration, so a change that starts months later is diluted by the
-  normal traffic before it. The change detectors catch that: `"change_escalation_rate"`, `"change_distribution"`
-  and `"change_accuracy"`. Each keeps a running score (a CUSUM) that normal answers keep near zero and a change
-  makes climb, watching for the same minimum changes (and for accuracy, the error rate doubling). Each starts from
-  the edge of the calibration's interval, so noise in the calibration's own answers is not taken for a change.
-  Together they raise a false flag within n answers at most n / `false_alarm_every` (default 100,000) of the time,
-  however often you call `stats`. `change` gives when each change started and when it was flagged, and a flag
-  stays until the next calibration.
-- Each check needs `min_samples` (default 30) answers since the calibration (audited ones, for accuracy), and
-  `unchecked` names the checks that could not run yet, so an empty `flags` is not read as no drift. Snapshots saved
-  before the distribution check have no bins, so it is `unchecked` until you calibrate.
-- Drift only shows when `stats` is called. To be told, run `examples/drift_alert.py hunch.db` on a schedule: it
-  prints what moved and exits with status 1 when anything is flagged.
-- `upstream` lists the earlier tiers of the same question that flagged drift in the same report (`"reason":
-  "drift"`) or were recalibrated after this tier (`"recalibrated"`). A later tier only sees what the earlier ones
-  pass down, so when tier 0 starts passing harder questions, tier 1 drifts too. Look at the earliest tier first, and
-  recalibrate the later tiers after recalibrating an earlier one.
-- Questions with no calibration snapshot are watched too: never calibrated, run on a per-call `thresholds=`, or
-  reset because `calibrate` failed closed. Drift learns a baseline from their
-  first `min_samples` answers (since the reset, and within the report's `since`) and checks later ones against it;
-  the entry has `baseline` instead of `calibrated_at`. With no threshold, the escalation rate is the share the tier
-  passed on, and accuracy is `unchecked`, since there is no target. A question that was already drifting during
-  those first answers takes that as normal, so calibrate when you can.
-- The accuracy check uses only answers picked at random: audited ones, and with `stats(store, sample=0.02)` labeled
-  ones in the random labeling sample, each weighted by its chance of being picked either way. Any other label is left
-  out, since it was picked some other way (often because it looked wrong) and would make drift look worse than it
-  is. With neither the check never runs, and a model that stays confident while getting worse goes unseen. A cheap
-  tier keeping a few dozen answers a day needs both: in the banking77 case study, 5% audits gave its classifier two
-  or three graded answers a day, against the 30 a check needs.
-  `retrain` saves a snapshot for each question it promotes or rechecks, from the classifier's confidences on the
-  logged decisions it was not trained on (on the ones it was, it is more sure than on new traffic), so its accuracy
-  is checked too, and a flag on it clears once it passes a recheck.
-- `latency_ms` times the whole decision, the mean time each tier took, and how often System 2 was called. The report also has
-  `degraded` (how many decisions had a model down) and `decisions` at the top level.
-
-## Human review queue
-
-The labels that calibration and `LocalDecider` learn from are cheapest to get where the models disagree.
-`review_queue(store)` (or `GET /review?limit=50&reason=disagreement`) lists the ungraded questions a person's answer
-would help most, most useful first:
-
-```python
-from hunch import review_queue
-
-for item in review_queue(store, limit=20):
-    item["reason"]       # "disagreement", "audit_disagreement" or "unresolved"
-    item["state"]        # the text that was judged
-    item["question"]     # the question as asked
-    item["answer"]       # what the router decided
-    item["candidates"]   # what each tier and System 2 said, with System 2's reason
-    store.label(item["id"], item["key"], true_answer)    # or POST /feedback; the item leaves the queue
-```
-
-- `sample` (with `review_queue(store, sample=0.02)`): the decision is in a fixed random share of all decisions,
-  whatever the models said, and comes first. The other reasons pick the hard cases, so their labels cannot say how
-  often the router is right overall; labels on the sample can. `stats(store, sample=0.02)` then gives, per question,
-  `accuracy_on_sample`: the final answers' accuracy on the labeled sample, a 90% interval, the target, and
-  `below_target` when even the top of the interval is below it. No threshold fixes that: System 2, or the question,
-  is the limit. In the banking77 case study `gpt-4.1` itself was right 79% of the time against a 95% target, and
-  nothing else in `stats` could show it.
-- `kept` (with `review_queue(store, kept=0.1)`): a tier was confident and its answer stood, and the decision is in a
-  fixed random share of those. Labels on these are what `recheck` tests a trusted tier with.
-- `disagreement`: a tier was unsure, System 2 answered, and the two differ.
-- `audit_disagreement`: a confident answer was audited (`audit=`) and System 2 disagreed. This is how errors that the
-  tiers were sure about get found.
-- `unresolved`: no tier was confident and System 2 was not asked (`escalate=False`, or it was down).
-- An answer from System 2 with no System 1 answer to compare against (System 1 was down) is not queued. Claude's
-  answers carry no confidence score, so "System 2 was also unsure" cannot be detected; disagreement is the signal.
-- The queue is only as informative as System 2 is different from your tiers. In a run on public datasets with
-  `gpt-4o-mini` as the last tier and `gpt-4.1` as System 2, System 2 agreed with the tier on all 16 questions it was
-  asked, so every queued item came from the audit (3 of 36 audited answers). A System 2 from a different model family
-  disagrees more.
-- `stats(store)["review_queue"]` counts what is waiting, by reason.
-
-## Calibrating from your own data
-
-A confidence of 0.8 does not mean 80% right, especially from raw logprobs. Log decisions, grade some, and hunch
-learns the threshold for each question that meets an accuracy target.
-
-```python
-from hunch import Router, Store, calibrate, evaluate
-
-store = Store("hunch.db")
-router = Router(system1, system2, log=store, audit=0.1)
-result = router.decide(email_text, questions)          # result["id"] identifies the logged decision
-store.label(result["id"], "urgency", 2)                 # the true answer, from a human or a downstream outcome
-
-calibrate(store, target_accuracy=0.95)                  # saves per-question thresholds the router now applies
-                                                        # (tier=1 etc. for later tiers of a chain)
-# {"urgency": {"threshold": 0.71, "accuracy": 0.9, "trusted_accuracy": 0.96, "escalation_rate": 0.22, "samples": 410}}
-
-evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/v1"),
-                 "llama-8b": ChatDecider("llama3.1:8b", "http://localhost:11434/v1")})
-```
-
-- Until a question is calibrated, a tier is trusted at the router's default `threshold`, which may be far from the
-  target: in the banking77 case study (`examples/case_study_banking77.md`), `gpt-4o-mini` kept 93% of answers on
-  day 1 at 71% accuracy. `Router(..., log=store, trust_uncalibrated=False)` trusts a tier on a question only once
-  there is a threshold for it (from `calibrate`, `retrain`, or passed per call). Until then everything escalates,
-  which costs System 2 calls but gives calibration a complete, unbiased sample to start from.
-
-- Truth is a human label when there is one, else System 2's answer. Escalated questions always have System 2's
-  answer, but they are all low confidence. `audit=0.1` also sends a random 10% of confident questions to System 2
-  (their answers still come from System 1), and calibration weights those 10x, so the estimate covers every
-  confidence level. Without audit or human labels the calibration only sees the unsure questions.
-- `threshold` is the lowest confidence at which System 1's accuracy, judged conservatively (the lower end of a 90%
-  interval), meets the target. It is found by a fixed-sequence test: from the most confident answers down to less
-  confident ones, each slice is certified in turn and the first failure stops the search, so the bound holds for the
-  threshold that was picked and not just for the best of many tries. It is `None` until there are enough graded
-  answers (`min_samples`, default 30). `escalation_rate` is the share of System 1's answers that would go to
-  System 2 at that threshold, which is the cost of the target.
-- When there is no threshold, `reason` says why, and `best_target` is the highest target that *would* have found
-  one on this data (judged as conservatively as the threshold; try a target at or below it):
-  - `"not enough data"`: fewer than `min_samples` graded answers. Grade more. The question keeps its current threshold.
-  - `"not enough evidence"`: the target is not ruled out, but the data cannot show it yet. Grade more.
-  - `"target unreachable"`: even the optimistic end of the estimate is below the target at every threshold that keeps
-    a tenth of the answers. Lower the target, or change or drop this tier.
-  - `"below target on labels"` (with `calibrate(store, sample=0.02)`, the rate given to `review_queue`): a threshold
-    was found, but your labels on the random sample show the tier below the target there.
-
-  Where nobody labeled, an answer is graded by System 2's, so a threshold certifies agreement with System 2. That
-  overstates the tier when System 2 is often wrong: in the banking77 case study `gpt-4o-mini` was certified at 95%
-  against `gpt-4.1`, and was 89% to 94% right against the dataset's labels. `graded_by` says how many grades at or
-  above the threshold came from your labels and how many from System 2, and `sample=` checks the threshold against
-  the labeled sample (a confidence sequence, so calibrating every night adds no false rejections).
-
-  That check only runs when you calibrate, and a tier that is certified is rarely calibrated again. `recheck(store,
-  tier=1, sample=0.02)` runs it on its own, on a schedule: each saved threshold is checked against the labeled sample,
-  and a question whose labels rule the target out fails closed ("below target on labels"); nothing else changes,
-  drift snapshot included. It needs labels on the tier's kept answers: with a 2% sample and a tier keeping 15% of
-  messages, that is about one label for every 330 messages. `review_queue(store, sample=0.02, kept=0.1)` also queues
-  a random 10% of the answers a tier kept, and `recheck(store, tier=1, sample=0.02, kept=0.1)` counts their labels
-  too, each weighted by its chance of being picked.
-
-  The last three fail closed: `calibrate` saves a threshold nothing can reach, so that tier is not trusted for the
-  question and everything passes to the next tier or System 2 until a later calibration finds a threshold. The tier
-  is then only asked about a random `probe` share of those questions (`Router(probe=0.05)`), so you stop paying for
-  answers that are thrown away while the sample keeps data coming. Calibrate a failed tier again on a schedule: with
-  more data it may pass. Pass
-  `fail_closed=False` to keep the current threshold instead. Each failure is logged at warning level (logger
-  `hunch`), `calibrate` returns the reason, and `stats(store)["uncalibrated"]` lists the questions whose latest
-  calibration found nothing, until a later one does.
-- How far to trust it, from simulations with a known accuracy curve (`tests/test_calibration_simulation.py`): for a
-  calibrated model with 1000 graded answers and a 90% target, about 6% of calibrations land below the target
-  (nominally 10%), and the misses are small (under a point on average). A model that can reach 95% gets a
-  threshold in more than half of calibrations on 300 answers, about 5% of them below the target. When the model
-  cannot reach the target at all, it abstains in over 97% of runs. The audit weights recover a tier's true accuracy to
-  within about 3 points, where averaging the graded rows is off by 6 to 10 points for a tier that only sees what
-  earlier tiers passed down.
-- `evaluate` replays the graded decisions through each candidate System 1 and returns the same report, so you can
-  see which model meets the target with the least escalation. Decisions with images are skipped.
-- Thresholds passed to `decide` beat the calibrated ones, which beat `threshold`.
-
-## Configuring models with env vars
-
-`router_from_env()` builds the Router from the environment, and the HTTP API uses it, so a deployment
-switches models without code changes.
-
-| Variable | Values |
-| --- | --- |
-| `HUNCH_SYSTEM1` | `chat` (default, a `ChatDecider`), `vllm` (a `VLLMDecider`, URL defaulting to `http://localhost:8000/v1`) or `gemini` (a `GeminiDecider`) |
-| `HUNCH_SYSTEM1_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 1: model name (required), base URL, a provider name that fills in the URL and key (see below), key (optional for local servers). Give a URL or a provider; no endpoint is assumed |
-| `HUNCH_SYSTEM2` | `auto` (default: `chat` if `HUNCH_SYSTEM2_URL` or `_PROVIDER` is set, else the Claude API if installed and keyed, else the CLI), `claude`, `claude-cli`, `chat`, `gemini`, `none` |
-| `HUNCH_SYSTEM2_JSON_MODE` | `schema` (default) or `object` for a `chat` System 2 whose service only offers JSON mode |
-| `HUNCH_SYSTEM2_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | model for `claude` or `chat`; URL or provider and key for `chat` |
-| `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON object merged into every request body, e.g. `{"reasoning_effort": "none"}` |
-| `HUNCH_THRESHOLD` | confidence below which a question escalates (default 0.8) |
-| `HUNCH_DB` | path of the SQLite log; set it to enable logging, `/feedback` and `/calibrate` |
-| `HUNCH_CACHE`, `HUNCH_CACHE_TTL` | path of the response cache, and how many seconds an answer stays valid (default forever) |
-| `HUNCH_AUDIT` | share of confident questions also checked by System 2 for calibration (default 0) |
-
-```bash
-# a self-served model on vLLM as System 1, whichever System 2 `auto` finds
-HUNCH_SYSTEM1_MODEL=Qwen/Qwen3-8B HUNCH_SYSTEM1_URL=http://localhost:8000/v1 uvicorn hunch.api:app
-```
-
-## HTTP API
+## HTTP API and configuration
 
 ```bash
 pip install -e ".[api]"
@@ -540,36 +417,42 @@ curl -s localhost:8000/decide -H "Authorization: Bearer $HUNCH_API_KEY" \
   -d '{"state": "...", "questions": {...}, "thresholds": {"urgency": 0.6}}'
 ```
 
-`POST /decide` takes `state`, `questions`, and optionally `images` (data URIs), `thresholds` and `escalate`.
-Every request needs `Authorization: Bearer $HUNCH_API_KEY`.
+| Route | Does |
+| --- | --- |
+| `POST /decide` | `state`, `questions`, optionally `images` (data URIs), `thresholds`, `escalate`. Returns an `id` when logging |
+| `POST /feedback` | `{"id": ..., "labels": {"urgency": 2}}` |
+| `POST /calibrate` | `{"target_accuracy": 0.95}`, optionally `min_samples` and `sample` |
+| `GET /stats` | The `stats` report; its options are query parameters, `costs` as JSON |
+| `GET /review` | The review queue; `limit`, `reason`, `sample`, `kept` |
+| `GET /health` | No token needed |
 
-With `HUNCH_DB` set, `/decide` also returns an `id`. `POST /feedback` with `{"id": ..., "labels": {"urgency": 2}}`
-records the true answers, and `POST /calibrate` with `{"target_accuracy": 0.95}` computes and saves thresholds. A
-workflow tool can send feedback from wherever a person corrects the result.
+Every other route needs `Authorization: Bearer $HUNCH_API_KEY`. The API builds its router with `router_from_env()`,
+which you can also call yourself:
 
-## Running under load
+| Variable | Values |
+| --- | --- |
+| `HUNCH_SYSTEM1` | `chat` (default), `vllm` or `gemini` |
+| `HUNCH_SYSTEM1_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 1's model (required), and a URL or a provider, and key |
+| `HUNCH_SYSTEM2` | `auto` (default), `claude`, `claude-cli`, `chat`, `gemini`, `none` |
+| `HUNCH_SYSTEM2_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 2's model, URL or provider, and key |
+| `HUNCH_SYSTEM2_JSON_MODE` | `schema` (default) or `object` |
+| `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON merged into every request, e.g. `{"reasoning_effort": "none"}` |
+| `HUNCH_LOCAL_MODEL` | A saved `LocalDecider` to put in front of System 1 |
+| `HUNCH_THRESHOLD` | Default threshold (0.8) |
+| `HUNCH_DB` | SQLite log; enables `/feedback` and `/calibrate` |
+| `HUNCH_CACHE`, `HUNCH_CACHE_TTL` | Response cache, and seconds an answer stays valid |
+| `HUNCH_AUDIT` | Share of confident answers audited (default 0) |
 
-`examples/loadtest.py <url> questions.json --clients 32 --requests 1000` sends concurrent `/decide` requests with a fresh
-text each and prints throughput, p50/p95/p99 latency and the errors by kind.
+## Performance
 
-What load testing found, with fake models that take 20 ms (so these show hunch's own limits, not a model's), on a laptop:
+- One process serves roughly 90 `/decide` requests a second with two model calls each; `uvicorn hunch.api:app
+  --workers 4` reached about 300, sharing the SQLite log and cache.
+- Identical concurrent requests ask the model once.
+- `/stats` and `/review` read the whole log; poll them rarely and use `since=`.
+- SQLite is for one machine: several workers on one disk are fine, separate machines are not supported.
 
-- **One process** handles `/decide` at roughly 90 requests per second with two model calls each, and in-process fakes
-  at 600+ requests per second at 128 clients with p99 under 250 ms. Run more with `uvicorn hunch.api:app --workers 4`:
-  the workers share the SQLite log and cache (WAL mode), and four reached about 300 requests per second with no
-  errors and no lost decisions, including `/feedback`, `/stats` and `/review` calls against a log of 12,000 decisions.
-  The load generator shared a process with the fake model server, so treat these as a floor.
-- **Model calls share one connection pool.** Building a client per call (what `httpx.post` does) held the GIL for
-  about 10 ms and capped a process near 30 model calls a second however many threads it had; a fast local model such
-  as vLLM would have hit that immediately.
-- **Identical requests at once ask the model once**: concurrent requests for the same question wait for the first
-  and then read the cache. This is per process, so with `--workers N` up to N identical requests can still reach the
-  model at once.
-- **`/stats` and `/review` read the whole log** (about 0.25 s of CPU each at 20,000 decisions of two questions). While one runs in a
-  process, that process answers other requests more slowly. Use `since=` on `/stats`, poll them rarely, and run
-  several workers so one heavy call does not stall everything.
-- **SQLite is for one machine.** Several worker processes on the same disk are fine. Separate machines need to share
-  one log, which this does not support.
+`examples/loadtest.py <url> questions.json --clients 32 --requests 1000` measures your own setup. What load testing
+found is in [ARCHITECTURE.md](ARCHITECTURE.md#concurrency).
 
 ## Tests
 
