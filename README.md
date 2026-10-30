@@ -497,7 +497,7 @@ What load testing found, with fake models that take 20 ms (so these show hunch's
 - **Identical requests at once ask the model once**: concurrent requests for the same question wait for the first
   and then read the cache. This is per process, so with `--workers N` up to N identical requests can still reach the
   model at once.
-- **`/stats` and `/review` read the whole log** (about 0.5 s of CPU at 20,000 decisions). While one runs in a
+- **`/stats` and `/review` read the whole log** (about 0.25 s of CPU each at 20,000 decisions of two questions). While one runs in a
   process, that process answers other requests more slowly. Use `since=` on `/stats`, poll them rarely, and run
   several workers so one heavy call does not stall everything.
 - **SQLite is for one machine.** Several worker processes on the same disk are fine. Separate machines need to share
