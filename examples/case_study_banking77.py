@@ -14,7 +14,7 @@ card-security intents, a shift drift monitoring should notice.
     python examples/case_study_banking77.py baseline   # asks both models about every message (the paid part)
     python examples/case_study_banking77.py simulate   # runs the ten days, reusing those answers from the cache
 
-Add --smoke to run 20 messages a day for 2 days first, and --seed N to fix which answers get audited and probed. Needs an OpenAI key in OPENAI_API_KEY. Working files go to
+Add --smoke to run 20 messages a day for 2 days first, and --seed N to pick another repeatable run (which answers get audited and probed, and which go in the labeling sample). Needs an OpenAI key in OPENAI_API_KEY. Working files go to
 data/case_study_banking77/ (or data/case_study_banking77_smoke/); the results are summary_<seed>.json and days_<seed>.jsonl there.
 """
 import argparse
@@ -133,7 +133,10 @@ def per_call(work):
 
 def simulate(work, days, seed=0, per_second=0.0):
     names, schedule = days
-    random.seed(seed)  # the router picks audits and probes at random
+    # The router picks audits and probes at random, and the store's ids pick the labeling sample. Decisions run one
+    # at a time (every answer comes from the cache) so both draw in the same order each run, and the log's
+    # timestamps, which order the review queue, come in the same order too.
+    random.seed(seed)
     q = question(names)
     mini, big = models()
     cost, ms, rows = per_call(work)
@@ -144,7 +147,7 @@ def simulate(work, days, seed=0, per_second=0.0):
     sim = work / f"sim_{tag}.db"
     for suffix in ("", "-wal", "-shm"):
         Path(f"{sim}{suffix}").unlink(missing_ok=True)
-    store, cache = Store(sim), Cache(work / "cache.db")
+    store, cache = Store(sim, seed=seed), Cache(work / "cache.db")
     gold, local, recalibrated, report = {}, None, [], []
     for day, messages in enumerate(schedule, 1):
         # Tier 0 is always the classifier (empty until retrain first promotes one), so gpt-4o-mini stays tier 1.
@@ -152,12 +155,7 @@ def simulate(work, days, seed=0, per_second=0.0):
                         trust_uncalibrated=False, probe=PROBE)
         start = time.time()
 
-        def one(m):
-            result = router.decide(m["text"], q)
-            return m, result
-
-        with ThreadPoolExecutor(WORKERS) as pool:
-            decided = list(pool.map(one, messages))
+        decided = [(m, router.decide(m["text"], q)) for m in messages]
         right = {"tier 0": [0, 0], "tier 1": [0, 0], "system2": [0, 0]}
         latency = []
         for m, result in decided:

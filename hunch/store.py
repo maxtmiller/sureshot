@@ -1,5 +1,6 @@
 """SQLite log of every decision, the labels that grade them, and the thresholds calibration learned."""
 import json
+import random
 import sqlite3
 import time
 import uuid
@@ -17,8 +18,11 @@ CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts REAL, thresh
 
 
 class Store:
-    def __init__(self, path):
+    def __init__(self, path, seed=None):
+        """seed fixes the decision ids, which pick the labeling sample: a run that logs the same decisions in the
+        same order gets the same ids. Without it ids are random uuids."""
         self.path = str(path)
+        self._ids = random.Random(seed) if seed is not None else None
         with self._db() as db:
             db.executescript(SCHEMA)
             if "histogram" not in {row[1] for row in db.execute("PRAGMA table_info(calibrations)")}:
@@ -40,7 +44,7 @@ class Store:
 
     def log(self, state, questions, result, images=0):
         """Records a decision (the Router's result, with its audit_rate) and returns its id."""
-        decision_id = uuid.uuid4().hex
+        decision_id = uuid.UUID(int=self._ids.getrandbits(128)).hex if self._ids else uuid.uuid4().hex
         with self._db() as db:
             db.execute("INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?)",
                        (decision_id, time.time(), state, json.dumps(questions), images, json.dumps(result)))
