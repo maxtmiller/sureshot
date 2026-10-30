@@ -1380,3 +1380,26 @@ def test_retrain_resets_the_drift_snapshot_of_what_it_promotes(tmp_path):
         Router(FakeDecider(), None, log=store).decide("server meeting", q)
     drift = stats(store)["drift"]
     assert len(drift) == 1 and drift[0]["calibrated_at"] is None and drift[0]["baseline"] == {"answers": 5}
+
+
+def test_stats_prices_each_stage_and_what_it_saves(tmp_path):
+    from hunch import stats
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"], "importance": QUESTIONS["importance"]}
+    # Tier 0 keeps needs_prep and passes importance on; tier 1 is unsure too, so System 2 answers it.
+    fast, llm = Tier({"needs_prep": (True, 0.99), "importance": (1, 0.5)}), Tier({"importance": (2, 0.6)})
+    for _ in range(10):
+        Router([fast, llm], FakeClaude(), threshold=[0.8, 0.8], log=store).decide("event", q)
+    costs = {"tier 0": 0.0, "tier 1": 1.0, "system2": 10.0}
+    cost = stats(store, costs=costs)["cost"]
+    assert cost["total"] == 110 and cost["per_decision"] == 11 and cost["always_system2"] == 200 and cost["savings"] == pytest.approx(0.45)
+    # Tier 0 is free and saves a System 2 question every time; tier 1 is asked every time and never keeps an answer.
+    assert cost["tiers"] == {"tier 0": {"cost": 0.0, "saves_vs_system2": 100.0, "net": 100.0},
+                             "tier 1": {"cost": 10.0, "saves_vs_system2": 0.0, "net": -10.0}}
+    assert stats(store, costs=costs | {"ms": 1.0})["cost"]["total"] > 110 and stats(store)["cost"] is None
+    # Audits are System 2 questions too: both confident answers of this decision are audited.
+    Router(Tier({"needs_prep": (True, 0.99), "importance": (1, 0.99)}), FakeClaude(), log=store, audit=1.0).decide("event", q)
+    assert stats(store, costs=costs)["cost"]["total"] == 110 + 20
+    with pytest.raises(ValueError, match="system2"):
+        stats(store, costs={"tier 0": 1.0})
