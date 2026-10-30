@@ -123,8 +123,9 @@ class Store:
         with self._db() as db:
             return {(i, k): json.loads(a) for i, k, a in db.execute("SELECT decision_id, key, answer FROM labels")}
 
-    def labeled(self):
-        """One row per graded question and tier that answered it: that tier's answer and confidence, the truth, and a weight.
+    def _graded(self):
+        """(row, answer, result) for each graded question of each logged decision; row has id, key, state, question,
+        images, truth, kind and weight.
 
         The truth is a human label ("human"), else System 2's answer ("proxy"). System 2 saw every escalated question
         (weight 1) and a random audit_rate share of the confident ones (weight 1/audit_rate), so weighting by the
@@ -132,22 +133,34 @@ class Store:
         with self._db() as db:
             decisions = db.execute("SELECT id, state, questions, images, result FROM decisions").fetchall()
             labels = {(i, k): json.loads(a) for i, k, a in db.execute("SELECT decision_id, key, answer FROM labels")}
-        rows = []
         for decision_id, state, questions, images, result in decisions:
             questions, result = json.loads(questions), json.loads(result)
             for key, answer in result["answers"].items():
                 escalated = answer["source"] == "system2"
-                # Decisions logged before tiers existed have no "tried": their only System 1 answer is the one itself.
-                tried = answer.get("tried") or ([{"tier": 0, **{k: (answer["hunch"] if escalated else answer)[k] for k in ("answer", "confidence")}}]
-                                                if (answer["hunch"] if escalated else answer) else [])
-                proxy = answer["answer"] if escalated else answer.get("audit", {}).get("answer")
                 if (decision_id, key) in labels:
                     truth, kind, weight = labels[(decision_id, key)], "human", 1.0
                 elif escalated or "audit" in answer:
-                    truth, kind, weight = proxy, "proxy", 1.0 if escalated else 1 / result["audit_rate"]
+                    truth, kind = answer["answer"] if escalated else answer["audit"]["answer"], "proxy"
+                    weight = 1.0 if escalated else 1 / result["audit_rate"]
                 else:
                     continue
-                for entry in tried:
-                    rows.append({"id": decision_id, "key": key, "state": state, "question": questions[key], "images": images, "tier": entry["tier"],
-                                 "confidence": entry["confidence"], "answer": entry["answer"], "truth": truth, "kind": kind, "weight": weight})
+                row = {"id": decision_id, "key": key, "state": state, "question": questions[key], "images": images, "truth": truth, "kind": kind, "weight": weight}
+                yield row, answer, result
+
+    def graded(self):
+        """One row per graded question of each logged decision, whether or not a System 1 tier answered it (see
+        _graded): what a classifier can learn from, which includes every question System 2 answered alone."""
+        return [row for row, _, _ in self._graded()]
+
+    def labeled(self):
+        """One row per graded question and tier that answered it: the graded row (see _graded) with that tier's answer
+        and confidence. A question no tier answered has no row here; graded() has it."""
+        rows = []
+        for row, answer, _ in self._graded():
+            escalated = answer["source"] == "system2"
+            # Decisions logged before tiers existed have no "tried": their only System 1 answer is the one itself.
+            tried = answer.get("tried") or ([{"tier": 0, **{k: (answer["hunch"] if escalated else answer)[k] for k in ("answer", "confidence")}}]
+                                            if (answer["hunch"] if escalated else answer) else [])
+            for entry in tried:
+                rows.append(row | {"tier": entry["tier"], "confidence": entry["confidence"], "answer": entry["answer"]})
         return rows
