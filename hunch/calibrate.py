@@ -215,7 +215,7 @@ def prune(store, costs, tier=0, min_answers=100):
     return report
 
 
-def recheck(store, tier=0, sample=0.02, target_accuracy=None):
+def recheck(store, tier=0, sample=0.02, target_accuracy=None, kept=0.0):
     """Checks each saved threshold of one tier against your labels on the random labeling sample (the rate given to
     review_queue), without recalibrating. Where nobody labeled, calibrate grades a tier by System 2's answers, so a
     threshold can certify agreement with System 2 rather than accuracy; this is the check that catches it, run on a
@@ -223,25 +223,35 @@ def recheck(store, tier=0, sample=0.02, target_accuracy=None):
     at 5%, so checking every night adds no false rejections) fails closed, as in calibrate, with the reason
     "below target on labels"; anything else is left as it is, drift snapshot included.
 
+    kept (the rate given to review_queue) also counts the labels on that random share of the tier's kept answers,
+    which is where most of its labels come from when the sample is small. Each label is weighted by the inverse of
+    its chance of being picked, so kept answers do not crowd out the others.
+
     The target is the one the threshold was calibrated for, else target_accuracy. Returns {key: {threshold, target,
-    graded, accuracy, high, failed}} for the questions with a finite threshold."""
+    graded, accuracy, high, failed}} for the questions with a finite threshold; accuracy is weighted."""
     targets = {c["key"]: c["target"] for c in store.calibrations() if c["tier"] == tier}
     thresholds = {key: t for key, t in store.thresholds(tier).items() if t != float("inf")}
     graded = {key: [] for key in thresholds}
     for row in store.labeled():
-        if (row["tier"] == tier and row["key"] in thresholds and row["kind"] == "human" and in_sample(row["id"], sample)
-                and row["confidence"] >= thresholds[row["key"]]):
-            graded[row["key"]].append(row["answer"] == row["truth"])
+        if row["tier"] != tier or row["key"] not in thresholds or row["kind"] != "human" or row["confidence"] < thresholds[row["key"]]:
+            continue
+        rate = max(sample, kept) if row["kept"] else sample
+        if in_sample(row["id"], rate):
+            graded[row["key"]].append((row["answer"] == row["truth"], 1 / rate))
     report, failed = {}, {}
     for key, threshold in thresholds.items():
         target = targets.get(key, target_accuracy)
-        right, n = sum(graded[key]), len(graded[key])
-        high = confidence_sequence(right, n, 0.05)[1] if n else None
+        n = len(graded[key])
+        weight, weight_sq = sum(w for _, w in graded[key]), sum(w * w for _, w in graded[key])
+        accuracy = sum(w for right, w in graded[key] if right) / weight if n else None
+        # The effective count of the weighted labels: as much evidence as that many equally weighted ones.
+        effective = weight * weight / weight_sq if n else 0
+        high = confidence_sequence(accuracy * effective, effective, 0.05)[1] if n else None
         failed_now = target is not None and high is not None and high < target
-        report[key] = {"threshold": threshold, "target": target, "graded": n, "accuracy": right / n if n else None, "high": high, "failed": failed_now}
+        report[key] = {"threshold": threshold, "target": target, "graded": n, "accuracy": accuracy, "high": high, "failed": failed_now}
         if failed_now:
             failed[key] = target
-            log.warning("tier %d no longer trusted for %r: %d of %d labeled answers right (target %.2f)", tier, key, right, n, target)
+            log.warning("tier %d no longer trusted for %r: %.0f%% of %d labeled answers right (target %.2f)", tier, key, 100 * accuracy, n, target)
     if failed:
         store.save_thresholds({key: float("inf") for key in failed}, tier)
         store.save_issues({key: {"reason": "below target on labels", "best_target": None, "target": target} for key, target in failed.items()}, tier, list(failed))

@@ -1,7 +1,7 @@
 """The questions worth a person's answer: a random sample, where the models disagree, or where nobody was sure."""
 import zlib
 
-REASONS = ("sample", "disagreement", "audit_disagreement", "unresolved")
+REASONS = ("sample", "kept", "disagreement", "audit_disagreement", "unresolved")
 
 
 def in_sample(decision_id, rate):
@@ -10,7 +10,7 @@ def in_sample(decision_id, rate):
     return rate > 0 and zlib.crc32(decision_id.encode()) % 10_000 < rate * 10_000
 
 
-def review_queue(store, limit=50, reasons=REASONS, since=0.0, sample=0.0):
+def review_queue(store, limit=50, reasons=REASONS, since=0.0, sample=0.0, kept=0.0):
     """Ungraded questions in the log that a person's label would help most, as a list of items, most useful first
     (by reason, then oldest first). An item is {id, key, reason, state, question, answer, source, candidates, ts}; give
     the true answer with store.label(id, key, answer) (or POST /feedback) and it leaves the queue.
@@ -19,19 +19,22 @@ def review_queue(store, limit=50, reasons=REASONS, since=0.0, sample=0.0):
     - "sample": the decision is in a random `sample` share of all decisions, whatever the models said. Labels on
       these are what stats(store, sample=...) measures the router's accuracy with: the other reasons pick the hard
       cases, so their labels say nothing about how often the router is right overall. They come first.
+    - "kept": a System 1 tier was confident and its answer stood, and the decision is in a random `kept` share of
+      those. Labels on these are what recheck(store, kept=...) tests a trusted tier with: a small `sample` gives it
+      few labels on what the tier keeps.
     - "disagreement": a tier was unsure, System 2 answered, and the two differ.
     - "audit_disagreement": a confident answer was audited by System 2, which disagreed.
     - "unresolved": no tier was confident and System 2 was not asked (escalate=False, or it was down).
 
     candidates lists what each tier and System 2 said. Questions answered by System 2 with no System 1 answer to
     compare (System 1 was down) are not queued."""
-    items = sorted((item for item in pending(store, since, sample=sample) if item["reason"] in reasons), key=lambda item: (REASONS.index(item["reason"]), item["ts"]))
+    items = sorted((item for item in pending(store, since, sample=sample, kept=kept) if item["reason"] in reasons), key=lambda item: (REASONS.index(item["reason"]), item["ts"]))
     items = items[:limit] if limit is not None else items
     states = store.states({item["id"] for item in items})
     return [item | {"state": states[item["id"]]} for item in items]
 
 
-def pending(store, since=0.0, decisions=None, labels=None, sample=0.0):
+def pending(store, since=0.0, decisions=None, labels=None, sample=0.0, kept=0.0):
     """Every queued item, without its state text (so counting is cheap). `decisions` and `labels` may be passed
     already loaded (as store.results(since) and store.labels() return them), so a caller that has them does not
     read and decode the log again."""
@@ -55,6 +58,8 @@ def pending(store, since=0.0, decisions=None, labels=None, sample=0.0):
                 reason = "unresolved"
             if in_sample(decision_id, sample):
                 reason = "sample"
+            elif reason is None and answer["source"] == "hunch" and key not in result["unsure"] and in_sample(decision_id, kept):
+                reason = "kept"
             if reason is None:
                 continue
             items.append({"id": decision_id, "key": key, "reason": reason, "question": questions[key], "answer": answer["answer"],

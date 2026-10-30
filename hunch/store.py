@@ -170,13 +170,15 @@ class Store:
 
     def labeled(self):
         """One row per graded question and tier that answered it: the graded row (see _graded) with that tier's answer
-        and confidence. A question no tier answered has no row here; graded() has it."""
+        and confidence, and whether it was the answer that stood ("kept": the tier was confident and nothing vetoed it). A
+        question no tier answered has no row here; graded() has it."""
         rows = []
-        for row, answer, _ in self._graded():
+        for row, answer, result in self._graded():
             escalated = answer["source"] == "system2"
             # Decisions logged before tiers existed have no "tried": their only System 1 answer is the one itself.
             tried = answer.get("tried") or ([{"tier": 0, **{k: (answer["hunch"] if escalated else answer)[k] for k in ("answer", "confidence")}}]
                                             if (answer["hunch"] if escalated else answer) else [])
             for entry in tried:
-                rows.append(row | {"tier": entry["tier"], "confidence": entry["confidence"], "answer": entry["answer"]})
+                kept = not escalated and answer.get("tier", 0) == entry["tier"] and row["key"] not in result["unsure"]
+                rows.append(row | {"tier": entry["tier"], "confidence": entry["confidence"], "answer": entry["answer"], "kept": kept})
         return rows

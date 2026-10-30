@@ -12,8 +12,8 @@ simulated days. Each round turned up problems in hunch; they were fixed and the 
 - **Router:** a local classifier (untrained at first), then `gpt-4o-mini`, then `gpt-4.1` as System 2. Accuracy
   target 95%, 5% of confident answers audited. Nothing is trusted until it is calibrated (`trust_uncalibrated=False`),
   and a tier that failed closed or does not pay is only asked about 5% of messages (`probe`).
-- **Each night:** a person labels 30 items from the review queue, a random 2% of messages first (the dataset's
-  labels stand in for them). `retrain` may promote a new classifier and rechecks the one it keeps. `gpt-4o-mini` is
+- **Each night:** a person labels 30 items from the review queue, a random 2% of messages first, then a random 10%
+  of the answers a tier kept (the dataset's labels stand in for them). `retrain` may promote a new classifier and rechecks the one it keeps. `gpt-4o-mini` is
   recalibrated whenever it has no certified threshold or drift flags it, `recheck` tests its threshold against the
   labeled sample, and `prune` stops asking it when it costs more than it saves.
 - **Cost:** OpenAI list prices ($0.15 / $0.60 per million tokens for `gpt-4o-mini`, $2 / $8 for `gpt-4.1`) times the
@@ -24,8 +24,9 @@ simulated days. Each round turned up problems in hunch; they were fixed and the 
 - **Latency:** each message is priced with typical times (`gpt-4o-mini` 0.57 s and `gpt-4.1` 0.95 s, their means in
   the baseline run; the classifier 60 ms), since the simulation reads the models' answers from a cache.
 - **Luck:** which answers get audited and probed is random, and it decides what gets graded. Each setup was run three
-  times. The seed does not make a run repeatable, since eight worker threads draw from one random generator in no
-  fixed order.
+  times. The runs in the tables below were not repeatable, since eight worker threads drew from one random
+  generator in no fixed order; the simulation now decides one message at a time and seeds the log's ids, so a seed
+  gives the same run every time.
 
 ## Results
 
@@ -108,8 +109,13 @@ Third round, and the fixes it led to (#53, #54, #55):
 ## What still needs to change
 
 1. **`recheck` needs far more labels than a 2% sample gives.** By day 10 it had 1 to 11 labeled answers from
-   `gpt-4o-mini`'s kept messages, too few to rule out 95% for a tier that was 83% to 94% right. Labels could be
-   aimed at the kept answers of trusted tiers, rather than spread over all messages.
+   `gpt-4o-mini`'s kept messages, too few to rule out 95% for a tier that was 83% to 94% right. The review queue now
+   also offers a random share of the answers a tier kept (`kept=0.1`), and `recheck` counts their labels. In the
+   money-only setup (three seeds, after the repeatability fix) that raised its labels by day 10 from 6 to 15 to 33
+   to 56, with the router's accuracy unchanged (79.2% to 79.7%), but the upper bound on `gpt-4o-mini`'s accuracy
+   still sat at 99% to 100% against its measured 91% to 93%. Ruling out 95% at that accuracy takes a few hundred
+   labels on its kept answers, more than 30 labels a night can give in ten days. With waiting priced,
+   `gpt-4o-mini` is pruned and keeps almost nothing, so there is nothing to recheck.
 2. **Luck still decides a lot.** The classifier was promoted on day 3 or never, and the labeled sample's estimate of
    the router's accuracy on day 10 ranged from 68% to 88% (50 to 71 labels) against a true 79%, depending on which
    answers happened to be audited and labeled.

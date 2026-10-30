@@ -414,6 +414,8 @@ for item in review_queue(store, limit=20):
   `below_target` when even the top of the interval is below it. No threshold fixes that: System 2, or the question,
   is the limit. In the banking77 case study `gpt-4.1` itself was right 79% of the time against a 95% target, and
   nothing else in `stats` could show it.
+- `kept` (with `review_queue(store, kept=0.1)`): a tier was confident and its answer stood, and the decision is in a
+  fixed random share of those. Labels on these are what `recheck` tests a trusted tier with.
 - `disagreement`: a tier was unsure, System 2 answered, and the two differ.
 - `audit_disagreement`: a confident answer was audited (`audit=`) and System 2 disagreed. This is how errors that the
   tiers were sure about get found.
@@ -482,7 +484,9 @@ evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/
   tier=1, sample=0.02)` runs it on its own, on a schedule: each saved threshold is checked against the labeled sample,
   and a question whose labels rule the target out fails closed ("below target on labels"); nothing else changes,
   drift snapshot included. It needs labels on the tier's kept answers: with a 2% sample and a tier keeping 15% of
-  messages, that is about one label for every 330 messages.
+  messages, that is about one label for every 330 messages. `review_queue(store, sample=0.02, kept=0.1)` also queues
+  a random 10% of the answers a tier kept, and `recheck(store, tier=1, sample=0.02, kept=0.1)` counts their labels
+  too, each weighted by its chance of being picked.
 
   The last three fail closed: `calibrate` saves a threshold nothing can reach, so that tier is not trusted for the
   question and everything passes to the next tier or System 2 until a later calibration finds a threshold. The tier
