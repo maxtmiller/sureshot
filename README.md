@@ -359,7 +359,7 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   pass down, so when tier 0 starts passing harder questions, tier 1 drifts too. Look at the earliest tier first, and
   recalibrate the later tiers after recalibrating an earlier one.
 - Questions with no calibration snapshot are watched too: never calibrated, run on a per-call `thresholds=`, or
-  reset because `calibrate` failed closed or `retrain` replaced the classifier. Drift learns a baseline from their
+  reset because `calibrate` failed closed. Drift learns a baseline from their
   first `min_samples` answers (since the reset, and within the report's `since`) and checks later ones against it;
   the entry has `baseline` instead of `calibrated_at`. With no threshold, the escalation rate is the share the tier
   passed on, and accuracy is `unchecked`, since there is no target. A question that was already drifting during
@@ -368,7 +368,8 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   not audited is left out, since it was picked some other way (often because it looked wrong) and would make drift
   look worse than it is. With `audit=0` the accuracy check never runs, and a model that stays confident while
   getting worse goes unseen: set `audit` to watch for that.
-  `retrain` clears the snapshot of the questions it promotes until the next `calibrate`.
+  `retrain` saves a snapshot for each question it promotes, from the new classifier's confidences on the logged
+  decisions, so its accuracy is checked too.
 - `latency_ms` times the whole decision, the mean time each tier took, and how often System 2 was called. The report also has
   `degraded` (how many decisions had a model down) and `decisions` at the top level.
 
