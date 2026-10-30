@@ -391,6 +391,13 @@ for item in review_queue(store, limit=20):
     store.label(item["id"], item["key"], true_answer)    # or POST /feedback; the item leaves the queue
 ```
 
+- `sample` (with `review_queue(store, sample=0.02)`): the decision is in a fixed random share of all decisions,
+  whatever the models said, and comes first. The other reasons pick the hard cases, so their labels cannot say how
+  often the router is right overall; labels on the sample can. `stats(store, sample=0.02)` then gives, per question,
+  `accuracy_on_sample`: the final answers' accuracy on the labeled sample, a 90% interval, the target, and
+  `below_target` when even the top of the interval is below it. No threshold fixes that: System 2, or the question,
+  is the limit. In the banking77 case study `gpt-4.1` itself was right 79% of the time against a 95% target, and
+  nothing else in `stats` could show it.
 - `disagreement`: a tier was unsure, System 2 answered, and the two differ.
 - `audit_disagreement`: a confident answer was audited (`audit=`) and System 2 disagreed. This is how errors that the
   tiers were sure about get found.
