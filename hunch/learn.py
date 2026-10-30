@@ -14,11 +14,14 @@ def _samples(decider, rows):
     return samples
 
 
-def _snapshots(store, decider, thresholds, target):
-    """The drift snapshot of each promoted question: the decider's confidence (its top class probability) on every
-    logged decision that asked it. A question with nothing logged gets none, so drift learns a baseline instead."""
+def _snapshots(store, decider, thresholds, target, trained):
+    """The drift snapshot of each question in `thresholds`: the decider's confidence (its top class probability) on
+    every logged decision that asked it, except the ones it was trained on (`trained`, ids), where it is more sure
+    than on new traffic. A question with nothing left gets none, so drift learns a baseline instead."""
     asked = {}
     for decision_id, _, questions, _ in store.results():
+        if decision_id in trained:
+            continue
         for key in thresholds:
             if key in questions:
                 asked.setdefault(key, []).append(decision_id)
@@ -37,22 +40,32 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
     """Trains a LocalDecider on the log's graded decisions and promotes it, question by question, only if on held-out
     decisions it reaches target_accuracy and passes on fewer questions than `current` (a LocalDecider, or None) does.
     Returns {"decider": current with the promoted questions replaced (current itself if none was), "report": {key:
-    {"promoted", "threshold", "escalation_rate", "previous_escalation_rate"}}}. The thresholds of promoted questions
-    are saved to the store for `tier`, so a Router using it applies them.
+    {"promoted", "threshold", "escalation_rate", "previous_escalation_rate", "kept"}}}. The thresholds are saved to
+    the store for `tier`, so a Router using it applies them.
+
+    Where `current` is kept it is checked again on the same held-out decisions, which include everything graded since
+    it was trained: "kept" is "rechecked" when it still meets the target there (its threshold is updated to what they
+    support), "failed" when they rule the target out (it is not trusted, as when calibrate fails closed, until a later
+    retrain certifies it or a new one), "unproven" when they can no longer show the target but do not rule it out
+    (its threshold, trusted or not, is left as it was), and None when there is no current classifier for the
+    question. The "unproven" case keeps a classifier near the target from being switched off and on night after
+    night as one check passes and the next does not. So running retrain every night also recalibrates the
+    classifier, and clears a drift flag on it once it has passed again.
 
     Decisions are split by id into train and held-out (the same split every time, so repeated runs compare like with
-    like). Held-out rows keep their weights, so audited-confident and escalated answers are weighted as in calibrate().
-    `current` may have trained on the held-out decisions, which only makes it harder to beat.
+    like, and `current` never trained on the held-out ones if it came from an earlier retrain). Held-out rows keep
+    their weights, so audited-confident and escalated answers are weighted as in calibrate().
 
-    For each promoted question it also saves a drift snapshot, as calibrate() does: the new classifier's confidences
-    on every logged decision that asked the question, with the threshold and target, so stats(store)["drift"] checks
-    its later answers (accuracy included) against them."""
+    Each question given a threshold also gets a drift snapshot, as calibrate() does: the classifier's confidences on
+    the logged decisions it was not trained on, with the threshold and target, so stats(store)["drift"] checks its
+    later answers (accuracy included) against them."""
     pairs = {}
     for row in store.labeled():
         pairs.setdefault((row["id"], row["key"]), row)
     train, held = [], []
     for row in pairs.values():
         (held if zlib.crc32(row["id"].encode()) % 100 < holdout * 100 else train).append(row)
+    trained = {row["id"] for row in train}
     answers = {}
     for row in train:
         answers.setdefault(row["key"], set()).add(row["truth"])
@@ -61,14 +74,27 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
     candidate = LocalDecider.train(train, embed=embed, embedding=embedding) if train else LocalDecider({}, embed, embedding)
     new = {key: summarize(s, target_accuracy, min_samples) for key, s in _samples(candidate, held).items()}
     old = {key: summarize(s, target_accuracy, min_samples) for key, s in _samples(current, held).items()} if current else {}
-    heads, thresholds, report = dict(current.heads) if current else {}, {}, {}
-    for key, r in new.items():
-        before = old.get(key, {}).get("escalation_rate") if old.get(key, {}).get("threshold") is not None else None
-        promoted = r["threshold"] is not None and (before is None or r["escalation_rate"] < before)
+    heads, promoted_at, kept_at, closed, report = dict(current.heads) if current else {}, {}, {}, [], {}
+    for key in new.keys() | old.keys():
+        r, o = new.get(key), old.get(key, {})
+        before = o.get("escalation_rate") if o.get("threshold") is not None else None
+        promoted = r is not None and r["threshold"] is not None and (before is None or r["escalation_rate"] < before)
+        kept = None
         if promoted:
-            heads[key], thresholds[key] = candidate.heads[key], r["threshold"]
-        report[key] = {"promoted": promoted, "threshold": r["threshold"], "escalation_rate": r["escalation_rate"], "previous_escalation_rate": before}
-    store.save_thresholds(thresholds, tier)
-    store.save_calibrations(_snapshots(store, candidate, thresholds, target_accuracy), tier, list(thresholds))
-    decider = LocalDecider(heads, embed or (current and current._embed), embedding) if thresholds else current
+            heads[key], promoted_at[key] = candidate.heads[key], r["threshold"]
+        elif o.get("threshold") is not None:
+            kept, kept_at[key] = "rechecked", o["threshold"]
+        elif o.get("reason") == "target unreachable":
+            kept = "failed"
+            closed.append(key)
+        elif o:
+            kept = "unproven"
+        report[key] = {"promoted": promoted, "threshold": r and r["threshold"], "escalation_rate": r and r["escalation_rate"],
+                       "previous_escalation_rate": before, "kept": kept}
+    store.save_thresholds(promoted_at | kept_at | {key: float("inf") for key in closed}, tier)
+    snapshots = _snapshots(store, candidate, promoted_at, target_accuracy, trained)
+    if kept_at:
+        snapshots |= _snapshots(store, current, kept_at, target_accuracy, trained)
+    store.save_calibrations(snapshots, tier, list(promoted_at) + list(kept_at) + closed)
+    decider = LocalDecider(heads, embed or (current and current._embed), embedding) if promoted_at else current
     return {"decider": decider, "report": report}
