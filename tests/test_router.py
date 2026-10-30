@@ -1427,3 +1427,40 @@ def test_stats_prices_each_stage_and_what_it_saves(tmp_path):
     assert stats(store, costs=costs)["cost"]["total"] == 110 + 20
     with pytest.raises(ValueError, match="system2"):
         stats(store, costs={"tier 0": 1.0})
+
+
+def test_trust_uncalibrated_false_escalates_until_there_is_a_threshold(tmp_path):
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    sure = Tier({"needs_prep": (True, 0.99)})
+    cautious = Router(sure, FakeClaude(), log=store, trust_uncalibrated=False)
+    result = cautious.decide("event", q)
+    assert result["escalated"] == ["needs_prep"] and result["answers"]["needs_prep"]["hunch"]["confidence"] == 0.99
+    # A threshold passed per call, or saved by calibrate or retrain, counts as calibrated.
+    assert cautious.decide("event", q, thresholds={"needs_prep": 0.9})["escalated"] == []
+    store.save_thresholds({"needs_prep": 0.9}, 0)
+    assert cautious.decide("event", q)["escalated"] == []
+    # The default keeps trusting the router's threshold, and without a log there is nothing to calibrate with.
+    (tmp_path / "b").mkdir()
+    assert Router(sure, FakeClaude(), log=_calibration_store(tmp_path / "b")).decide("event", q)["escalated"] == []
+    assert Router(sure, FakeClaude(), trust_uncalibrated=False).decide("event", q)["escalated"] == []
+
+
+def test_a_tier_that_failed_closed_is_only_probed(tmp_path):
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"], "importance": QUESTIONS["importance"]}
+    store.save_thresholds({"needs_prep": float("inf")}, 0)
+    fast = Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99)})
+    result = Router(fast, FakeClaude(), log=store, probe=0.0).decide("event", q)
+    # needs_prep skips the tier and goes to System 2; importance is still asked.
+    assert fast.asked == [["importance"]] and result["escalated"] == ["needs_prep"] and result["answers"]["needs_prep"]["tried"] == []
+    probed = Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99)})
+    assert Router(probed, FakeClaude(), log=store, probe=1.0).decide("event", q)["answers"]["needs_prep"]["tried"][0]["tier"] == 0
+    # With nowhere to pass it on, the tier is asked and its answer stands as unsure.
+    alone = Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99)})
+    result = Router(alone, None, log=store, probe=0.0).decide("event", q)
+    assert alone.asked == [["needs_prep", "importance"]] and result["unsure"] == ["needs_prep"]
+    # A tier asked about nothing is not called at all.
+    idle = Tier({"needs_prep": (True, 0.99)})
+    Router([idle, Tier({"needs_prep": (True, 0.5)})], FakeClaude(), log=store, probe=0.0).decide("event", {"needs_prep": QUESTIONS["needs_prep"]})
+    assert idle.asked == []
