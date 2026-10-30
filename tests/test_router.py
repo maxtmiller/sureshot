@@ -1399,10 +1399,13 @@ def test_retrain_saves_a_drift_snapshot_for_what_it_promotes(tmp_path):
     assert [d["calibrated_at"] is not None for d in stats(store)["drift"]] == [True]
     assert retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]["needs_prep"]["promoted"]
     # The promoted classifier replaces the old snapshot with its own: its threshold, the target, and its confidences
-    # on the 160 logged decisions, so drift checks its accuracy too.
+    # on the logged decisions it was not trained on (the held-out ones), so drift checks its accuracy too.
+    import zlib
+
+    held = sum(zlib.crc32(i.encode()) % 100 < 30 for i, _, _, _ in store.results())
     (snapshot,) = store.calibrations()
-    assert snapshot["target"] == 0.8 and snapshot["threshold"] == store.thresholds(0)["needs_prep"] and snapshot["answers"] == 160
-    assert store.resets() == {} and sum(snapshot["histogram"]["counts"]) == 160
+    assert snapshot["target"] == 0.8 and snapshot["threshold"] == store.thresholds(0)["needs_prep"] and snapshot["answers"] == held
+    assert store.resets() == {} and sum(snapshot["histogram"]["counts"]) == held
     drift = stats(store)["drift"]
     assert len(drift) == 1 and drift[0]["calibrated_at"] == snapshot["ts"] and drift[0]["baseline"] is None
 
@@ -1489,3 +1492,29 @@ def test_a_tier_that_failed_closed_is_only_probed(tmp_path):
     idle = Tier({"needs_prep": (True, 0.99)})
     Router([idle, Tier({"needs_prep": (True, 0.5)})], FakeClaude(), log=store, probe=0.0).decide("event", {"needs_prep": QUESTIONS["needs_prep"]})
     assert idle.asked == []
+
+
+def test_retrain_rechecks_the_classifier_it_keeps(tmp_path):
+    from hunch import retrain, stats
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    docs = [("server meeting", True), ("meeting about server", True), ("invoice sale", False), ("sale invoice due", False)] * 40
+    ids = []
+    for text, prep in docs:
+        ids.append(Router(FakeDecider(), None, log=store).decide(text, q)["id"])
+        store.label(ids[-1], "needs_prep", prep)
+    first = retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)
+    assert first["report"]["needs_prep"]["promoted"] and first["report"]["needs_prep"]["kept"] is None
+    # Nothing new: the same classifier is kept, checked again and passes, and its snapshot is refreshed.
+    snapshot = store.calibrations()[0]
+    second = retrain(store, current=first["decider"], target_accuracy=0.8, min_samples=5, embed=_bag)
+    assert second["decider"] is first["decider"] and second["report"]["needs_prep"]["kept"] == "rechecked"
+    assert store.calibrations()[0]["ts"] > snapshot["ts"] and store.thresholds(0)["needs_prep"] < float("inf")
+    # The world changes: every label is now the opposite, and the target is 0.99. The old classifier fails its
+    # recheck, so it is no longer trusted; a new one has too few held-out decisions to certify 0.99 yet.
+    for i, (_, prep) in zip(ids, docs):
+        store.label(i, "needs_prep", not prep)
+    third = retrain(store, current=first["decider"], target_accuracy=0.99, min_samples=5, embed=_bag)
+    assert third["report"]["needs_prep"]["kept"] == "failed" and store.thresholds(0)["needs_prep"] == float("inf")
+    assert (0, "needs_prep") in store.resets() and not third["report"]["needs_prep"]["promoted"] and stats(store)["drift"] == []

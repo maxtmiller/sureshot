@@ -225,7 +225,12 @@ local.save("local.joblib")                     # LocalDecider.load("local.joblib
 - `retrain(store, current=local)` trains a new classifier on the log's graded decisions and promotes it, question by
   question, only if on held-out decisions it reaches the accuracy target and passes on fewer questions than `current`.
   It saves the promoted questions' thresholds to the store and returns `{"decider", "report"}`, so the escalation rate
-  falls as labels and System 2 answers accumulate.
+  falls as labels and System 2 answers accumulate. Where it keeps `current`, it checks it again on the held-out
+  decisions, which include everything graded since: `"kept": "rechecked"` updates its threshold, and `"failed"` stops
+  trusting it (as `calibrate` fails closed). So a nightly `retrain` also recalibrates the classifier. Use it rather
+  than `calibrate(store, tier=0)`, which grades only the answers the classifier has given since it was promoted:
+  in the banking77 case study, one day of those was too little, and calibrating killed a classifier that `retrain`
+  had just certified.
 - `Router(..., guard=local, guard_threshold=0.9)` catches confident errors, which a model's own confidence cannot:
   when a tier is confident but the guard (a `LocalDecider` trained on your labels, so it runs in-process) disagrees
   with probability at least `guard_threshold`, the answer counts as unsure and escalates; the guard's answer is
@@ -368,8 +373,9 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   not audited is left out, since it was picked some other way (often because it looked wrong) and would make drift
   look worse than it is. With `audit=0` the accuracy check never runs, and a model that stays confident while
   getting worse goes unseen: set `audit` to watch for that.
-  `retrain` saves a snapshot for each question it promotes, from the new classifier's confidences on the logged
-  decisions, so its accuracy is checked too.
+  `retrain` saves a snapshot for each question it promotes or rechecks, from the classifier's confidences on the
+  logged decisions it was not trained on (on the ones it was, it is more sure than on new traffic), so its accuracy
+  is checked too, and a flag on it clears once it passes a recheck.
 - `latency_ms` times the whole decision, the mean time each tier took, and how often System 2 was called. The report also has
   `degraded` (how many decisions had a model down) and `decisions` at the top level.
 
