@@ -1491,6 +1491,27 @@ def test_a_tier_that_failed_closed_is_only_probed(tmp_path):
     assert idle.asked == []
 
 
+def test_drift_accuracy_counts_labels_on_the_random_sample(tmp_path):
+    from hunch import Store, calibrate, review_queue, stats
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store = Store(tmp_path / "hunch.db")
+    for i in range(100):
+        sure = i % 2 == 0
+        store.label(Router(Tier({"needs_prep": (sure, 0.95 if sure else 0.7)}), None, log=store).decide("event", q)["id"], "needs_prep", True)
+    calibrate(store, 0.95, 30)
+    # No audits, so without the sample the accuracy check has nothing to go on.
+    for _ in range(400):
+        Router(Tier({"needs_prep": (True, 0.95)}), FakeClaude(), log=store).decide("event", q)
+    assert "accuracy" in stats(store)["drift"][0]["unchecked"]
+    # People label the sample and find the kept answers mostly wrong.
+    for n, item in enumerate(review_queue(store, limit=None, sample=0.2)):
+        store.label(item["id"], "needs_prep", n % 5 == 0)
+    drift = stats(store, sample=0.2)["drift"][0]
+    assert drift["accuracy_since"]["graded"] >= 30 and drift["accuracy_since"]["human"] == drift["accuracy_since"]["graded"]
+    assert "accuracy" in drift["flags"] and "accuracy" not in drift["unchecked"]
+
+
 def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_path):
     from hunch import calibrate, review_queue
 
