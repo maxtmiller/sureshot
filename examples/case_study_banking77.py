@@ -2,10 +2,11 @@
 
 banking77 (PolyAI/banking77) is about 13,000 real customer messages, each labeled by a person with one of 77 intents.
 The router is a local classifier (untrained at first), then gpt-4o-mini, then gpt-4.1 as System 2, with a 95%
-accuracy target. Each day 300 messages arrive. Each night a person labels 30 items from the review queue (here the
-dataset's own labels stand in for them), the classifier is retrained, and gpt-4o-mini is recalibrated on the first
-three nights and afterwards whenever drift is flagged. From day 6 half the messages come from eight card-security
-intents, a shift drift monitoring should notice.
+accuracy target. Nothing is trusted until it is calibrated, and a tier that failed closed is only asked about 5% of
+messages. Each day 300 messages arrive. Each night a person labels 30 items from the review queue, a random 2% of
+messages first (here the dataset's own labels stand in for them), the classifier is retrained, and gpt-4o-mini is
+recalibrated whenever it has no certified threshold or drift is flagged. From day 6 half the messages come from eight
+card-security intents, a shift drift monitoring should notice.
 
     python examples/case_study_banking77.py baseline   # asks both models about every message (the paid part)
     python examples/case_study_banking77.py simulate   # runs the ten days, reusing those answers from the cache
@@ -28,7 +29,7 @@ import hunch.adapters.base as base
 from hunch import Cache, ChatDecider, ChatReasoner, LocalDecider, Router, Store, calibrate, retrain, review_queue, stats
 
 PRICES = {"gpt-4o-mini": (0.15, 0.60), "gpt-4.1": (2.00, 8.00)}  # $ per million input and output tokens; check yours
-TARGET, AUDIT, LABELS_PER_NIGHT, WARMUP_NIGHTS, WORKERS = 0.95, 0.05, 30, 3, 8
+TARGET, AUDIT, PROBE, SAMPLE, LABELS_PER_NIGHT, WORKERS = 0.95, 0.05, 0.05, 0.02, 30, 8
 SHIFTED = ["compromised_card", "lost_or_stolen_card", "card_payment_not_recognised", "cash_withdrawal_not_recognised",
            "direct_debit_payment_not_recognised", "transaction_charged_twice", "card_swallowed", "lost_or_stolen_phone"]
 
@@ -139,7 +140,8 @@ def simulate(work, days):
     gold, local, recalibrated, report = {}, None, [], []
     for day, messages in enumerate(schedule, 1):
         # Tier 0 is always the classifier (empty until retrain first promotes one), so gpt-4o-mini stays tier 1.
-        router = Router([local or LocalDecider({}), mini], big, threshold=[0.95, 0.8], log=store, audit=AUDIT, cache=cache, retries=4, backoff=2.0)
+        router = Router([local or LocalDecider({}), mini], big, threshold=[0.95, 0.8], log=store, audit=AUDIT, cache=cache, retries=4, backoff=2.0,
+                        trust_uncalibrated=False, probe=PROBE)
         start = time.time()
         local_ms = []
 
@@ -163,16 +165,16 @@ def simulate(work, days):
                            + (ms["gpt-4.1"] if result["latency_ms"]["system2"] is not None else 0))
             local_ms.append(result["latency_ms"]["tiers"][0])
         # Night: a person labels what the review queue asks for most.
-        queue = review_queue(store, limit=LABELS_PER_NIGHT)
+        queue = review_queue(store, limit=LABELS_PER_NIGHT, sample=SAMPLE)
         for item in queue:
             store.label(item["id"], item["key"], gold[item["id"]], source="human")
         trained = retrain(store, current=local, tier=0, target_accuracy=TARGET, min_samples=30)
         local = trained["decider"]
         s = stats(store, since=start, costs=costs)  # today's cost
-        whole = stats(store)  # drift compares everything since each calibration, not just today
+        whole = stats(store, sample=SAMPLE)  # drift compares everything since each calibration, not just today
         drift = {d["tier"]: d for d in whole["drift"]}
         flagged = any(d["flags"] for d in whole["drift"])
-        if day <= WARMUP_NIGHTS or flagged:
+        if store.thresholds(1).get("intent") in (None, float("inf")) or flagged:
             cal = calibrate(store, TARGET, 30, tier=1)["intent"]
             recalibrated.append(day)
         else:
@@ -185,7 +187,8 @@ def simulate(work, days):
             "accuracy_by": {who: (r[1] / r[0] if r[0] else None) for who, r in right.items()},
             "cost": s["cost"]["total"], "always_system2_cost": s["cost"]["always_system2"], "savings": s["cost"]["savings"],
             "latency_ms_mean": statistics.mean(latency), "local_ms_mean": statistics.mean(local_ms),
-            "labels_tonight": len(queue), "review_reasons": {r: sum(i["reason"] == r for i in queue) for r in ("disagreement", "audit_disagreement", "unresolved")},
+            "labels_tonight": len(queue), "review_reasons": {r: sum(i["reason"] == r for i in queue) for r in ("sample", "disagreement", "audit_disagreement", "unresolved")},
+            "accuracy_on_sample": whole["questions"]["intent"]["accuracy_on_sample"],
             "retrain": trained["report"].get("intent"), "calibrated": cal and {k: cal[k] for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target")},
             "tier1_threshold": store.thresholds(1).get("intent"), "tier0_threshold": store.thresholds(0).get("intent"),
             "drift": {t: {"flags": d["flags"], "unchecked": d["unchecked"], "escalation_rate": d["escalation_rate"], "baseline": d["baseline"]} for t, d in drift.items()},
