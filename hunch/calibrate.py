@@ -1,7 +1,8 @@
 """Pick, per question, the lowest confidence threshold at which System 1 meets an accuracy target."""
 import logging
 from bisect import bisect_right
-from math import ceil, sqrt
+from math import ceil, lgamma, log as ln, sqrt
+from hunch.review import in_sample
 
 log = logging.getLogger("hunch")
 
@@ -44,6 +45,29 @@ def _scan(samples, target_accuracy, min_samples):
         else:
             stopped = True
     return certified, best_optimistic
+
+
+def confidence_sequence(successes, n, alpha):
+    """(low, high): a confidence sequence for a rate seen as `successes` out of n, which contains the true rate at
+    every n at once except alpha of the time, so it stays valid however often it is checked as answers come in.
+    It is Robbins' mixture of the likelihood over a uniform prior, bounded with Ville's inequality; unlike a bound
+    that ignores the spread (Hoeffding's), it is tight for rates near 0 or 1. n may be an effective count."""
+    mix = lgamma(1 + successes) + lgamma(1 + n - successes) - lgamma(2 + n)
+    bound = ln(1 / alpha)
+
+    def outside(p):
+        return mix - successes * ln(p) - (n - successes) * ln(1 - p) >= bound
+
+    def edge(inside, out):
+        for _ in range(60):
+            mid = (inside + out) / 2
+            inside, out = (inside, mid) if outside(mid) else (mid, out)
+        return inside
+
+    best = successes / n
+    low = 0.0 if successes <= 0 or not outside(1e-12) else edge(best, 1e-12)
+    high = 1.0 if successes >= n or not outside(1 - 1e-12) else edge(best, 1 - 1e-12)
+    return low, high
 
 
 def summarize(samples, target_accuracy=0.95, min_samples=30):
@@ -99,7 +123,7 @@ def histogram(confidences, bins=5):
     return {"edges": edges, "counts": counts}
 
 
-def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fail_closed=True):
+def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fail_closed=True, sample=0.0):
     """Calibrates every question for one tier (the first by default; call it once per tier of a chain) from its graded
     answers in the log and, with save, stores the thresholds so a Router using this store applies them. Returns
     {key: summarize(...)}.
@@ -109,21 +133,41 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
     always passes to the next tier or System 2, until a later calibration finds a threshold. "not enough data" keeps
     the default, so a question with few graded answers still works.
 
+    Where nobody labeled, an answer is graded by System 2's, so agreeing with System 2 counts as right: a threshold
+    certifies agreement with System 2, which overstates the tier when System 2 is often wrong. "graded_by" says how
+    many of the grades at or above the threshold came from your labels ("human") and how many from System 2. With
+    `sample` (the rate given to review_queue), the threshold is also checked against your labels on that random
+    sample: if they show the tier's answers there below the target (a confidence sequence at 5%, so calibrating
+    every night adds no false rejections), the reason is "below target on labels" and, with fail_closed, the tier is
+    not trusted. "sample_check" gives {graded, accuracy, high}.
+
     With save, each threshold found is also recorded with the share of all of this tier's logged answers (graded or
     not) that fall below it and how their confidences are spread, which is what stats(store)["drift"] compares later
     answers against."""
-    by_key = {}
+    by_key, rows = {}, {}
     for row in store.labeled():
         if row["tier"] != tier:
             continue
         by_key.setdefault(row["key"], []).append((row["confidence"], row["answer"] == row["truth"], row["weight"]))
+        rows.setdefault(row["key"], []).append(row)
     report = {key: summarize(samples, target_accuracy, min_samples) for key, samples in by_key.items()}
+    for key, r in report.items():
+        kept = [row for row in rows[key] if r["threshold"] is None or row["confidence"] >= r["threshold"]]
+        r["graded_by"] = {"human": sum(row["kind"] == "human" for row in kept), "system2": sum(row["kind"] == "proxy" for row in kept)}
+        if sample and r["threshold"] is not None:
+            labeled = [row for row in kept if row["kind"] == "human" and in_sample(row["id"], sample)]
+            right = sum(row["answer"] == row["truth"] for row in labeled)
+            high = confidence_sequence(right, len(labeled), 0.05)[1] if labeled else None
+            r["sample_check"] = {"graded": len(labeled), "accuracy": right / len(labeled) if labeled else None, "high": high}
+            if high is not None and high < target_accuracy:
+                r.update(threshold=None, trusted_accuracy=None, escalation_rate=None, reason="below target on labels")
     for key, r in report.items():
         if r["threshold"] is None:
             best = f"; the best this data supports is {r['best_target']:.2f}" if r["best_target"] is not None else ""
             log.warning("no threshold for %r at tier %d: %s (target %.2f%s)", key, tier, r["reason"], target_accuracy, best)
     if save:
-        closed = {key: float("inf") for key, r in report.items() if fail_closed and r["reason"] in ("not enough evidence", "target unreachable")}
+        closed = {key: float("inf") for key, r in report.items()
+                  if fail_closed and r["reason"] in ("not enough evidence", "target unreachable", "below target on labels")}
         found = {key: r["threshold"] for key, r in report.items() if r["threshold"] is not None}
         store.save_thresholds(closed | found, tier)
         store.save_issues({key: {"reason": r["reason"], "best_target": r["best_target"], "target": target_accuracy} for key, r in report.items() if r["threshold"] is None},

@@ -1489,3 +1489,26 @@ def test_a_tier_that_failed_closed_is_only_probed(tmp_path):
     idle = Tier({"needs_prep": (True, 0.99)})
     Router([idle, Tier({"needs_prep": (True, 0.5)})], FakeClaude(), log=store, probe=0.0).decide("event", {"needs_prep": QUESTIONS["needs_prep"]})
     assert idle.asked == []
+
+
+def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_path):
+    from hunch import calibrate, review_queue
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # The tier always agrees with System 2 (the audits), so graded by System 2 it looks perfect.
+    router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store, audit=1.0)
+    for _ in range(300):
+        router.decide("event", q)
+    report = calibrate(store, 0.9, 30, save=False)["needs_prep"]
+    assert report["threshold"] == 0.99 and report["graded_by"] == {"human": 0, "system2": 300}
+    # People label the random sample, and say a third of it was wrong. The rest is still graded by System 2, so
+    # without the sample check the threshold passes; with it, calibration fails closed.
+    sample = review_queue(store, limit=None, sample=0.1)
+    for n, item in enumerate(sample):
+        store.label(item["id"], "needs_prep", n % 3 != 0)
+    assert calibrate(store, 0.9, 30, save=False)["needs_prep"]["threshold"] == 0.99
+    checked = calibrate(store, 0.9, 30, sample=0.1)["needs_prep"]
+    assert checked["reason"] == "below target on labels" and checked["threshold"] is None and store.thresholds() == {"needs_prep": float("inf")}
+    assert checked["sample_check"]["graded"] == len(sample) and checked["sample_check"]["high"] < 0.9
+    assert checked["graded_by"] == {"human": len(sample), "system2": 300 - len(sample)}

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from hunch.calibrate import calibrate
 from hunch.review import REASONS, review_queue
 from hunch.stats import stats
@@ -64,6 +64,7 @@ class FeedbackRequest(BaseModel):
 class CalibrateRequest(BaseModel):
     target_accuracy: float = 0.95
     min_samples: int = 30
+    sample: float = Field(0.0, ge=0, le=1)
 
 
 @app.post("/decide")
@@ -120,4 +121,4 @@ def review(limit: int = 50, reason: str | None = None, sample: float = Query(0.0
 @app.post("/calibrate")
 def calibrate_thresholds(request: CalibrateRequest, authorization: str = Header(default="")):
     authorize(authorization)
-    return calibrate(log(), request.target_accuracy, request.min_samples)
+    return calibrate(log(), request.target_accuracy, request.min_samples, sample=request.sample)
