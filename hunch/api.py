@@ -1,9 +1,10 @@
 """HTTP API: POST /decide, /feedback and /calibrate with a bearer token (HUNCH_API_KEY). Run locally with `uvicorn hunch.api:app`."""
 import os
 import hmac
+import json
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel
 from hunch.calibrate import calibrate
 from hunch.review import REASONS, review_queue
@@ -89,9 +90,23 @@ def feedback(request: FeedbackRequest, authorization: str = Header(default="")):
 
 
 @app.get("/stats")
-def usage_stats(since: float = 0.0, authorization: str = Header(default="")):
+def usage_stats(since: float = 0.0, min_samples: int = Query(30, ge=1), alpha: float = Query(0.01, gt=0, lt=1),
+                false_alarm_every: float = Query(100_000, gt=1), min_escalation_change: float = Query(0.05, ge=0, le=1),
+                min_distribution_change: float = Query(0.1, ge=0, le=1), costs: str | None = None,
+                authorization: str = Header(default="")):
+    """costs is JSON, e.g. {"tier 0": 0, "tier 1": 0.0002, "system2": 0.004}: a cost per question of each stage."""
     authorize(authorization)
-    return stats(log(), since)
+    prices = None
+    if costs is not None:
+        try:
+            prices = json.loads(costs)
+        except json.JSONDecodeError:
+            raise HTTPException(422, "costs must be JSON, e.g. {\"system2\": 0.004}")
+        if not isinstance(prices, dict) or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in prices.values()):
+            raise HTTPException(422, "costs must map each stage to a number")
+        if "system2" not in prices:
+            raise HTTPException(422, 'costs needs a "system2" cost per question')
+    return stats(log(), since, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change, prices)
 
 
 @app.get("/review")
