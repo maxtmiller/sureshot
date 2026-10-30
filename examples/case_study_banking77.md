@@ -106,6 +106,21 @@ Third round, and the fixes it led to (#53, #54, #55):
    `gpt-4o-mini` was skipped it had nothing new to learn from, was never promoted, and hunch cost as much as
    `gpt-4.1` alone. It now learns from every graded question (`Store.graded()`).
 
+Fifth round, after the [trec case study](case_study_trec.md) found a tier certified on System 2's grades alone:
+`calibrate(sample=, confident=)` now needs your labels on the random samples to confirm a threshold before the
+router trusts it, and the review queue offers a random share of the answers a tier was confident about
+(`confident=0.1`, replacing the share of kept answers). Three seeds each way:
+
+| | Accuracy | Cost | Mean latency |
+|---|---|---|---|
+| money only | 79.4% to 79.5% | $8.88 to $9.73 | 1.34 to 1.46 s |
+| waiting at $0.01 a second | 79.4% to 79.5% | $8.72 to $9.23 | 0.93 to 0.99 s |
+
+`gpt-4o-mini` was certified on night 1 from 3 to 6 labels and about 50 System 2 grades, and stayed unconfirmed in
+all six runs: by day 10 its labels were 91% to 93% right (27 to 49 of them, money only), short of 95%. Before, it
+kept 340 to 396 answers at 90% to 91% accuracy; now it keeps none, the classifier carries the savings, and hunch
+costs 4% to 14% less than `gpt-4.1` alone instead of 10% to 22%. Accuracy did not move.
+
 ## What still needs to change
 
 1. **`recheck` needs far more labels than a 2% sample gives.** By day 10 it had 1 to 11 labeled answers from

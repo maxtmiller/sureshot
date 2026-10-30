@@ -241,12 +241,18 @@ tier's answer and confidence, the **truth**, and a **weight**:
 - Escalated questions were always seen by System 2 (weight 1). Confident ones are graded only if audited, so each gets
   weight `1 / audit_rate`. Weighting by the inverse of the chance of being graded makes the rows represent *all* of a
   tier's answers, not just the unsure ones. Simulation tests check this recovers the true accuracy.
-- `labeled()` rows also say whether the tier's answer was the one that stood (`kept`), which `recheck` needs.
+- `labeled()` rows also say whether the tier was `confident` (at or above the threshold it was held to, whether or
+  not its answer was kept), which the router logs with each tier's answer; `calibrate` and `recheck` need it.
   `graded()` has one row per graded question, including those no tier answered, for training.
 
 **Random samples by id.** `in_sample(id, rate)` picks a fixed share of decisions by a hash of the id, so the same
 decisions stay picked however often the queue is read. Two samples use it: `sample` (all decisions, for measuring
-the router) and `kept` (the answers a tier kept, for `recheck`). Using the same hash makes them nested.
+the router) and `confident` (the answers a tier was confident about, to confirm and recheck its threshold). Using
+the same hash makes them nested. Both take precedence over the other review reasons, so a decision in a sample is
+queued as such even when the models disagreed on it: if it were queued for disagreeing instead, it might be left
+unlabeled, and the labels that did come in would no longer be a random pick.
+
+The `unconfirmed` table lists thresholds `calibrate` saved that labels have not confirmed yet.
 
 ### Calibration (`calibrate.py`)
 
@@ -271,13 +277,23 @@ accurate, so everything above it can skip System 2.
 - **Graded by System 2.** Where nobody labeled, an answer is graded by System 2's, so a threshold certifies agreement
   with System 2. That overstates the tier when System 2 is often wrong: in the banking77 case study `gpt-4o-mini` was
   certified at 95% against `gpt-4.1` and was 89% to 94% right against the dataset's labels. `graded_by` reports how
-  many grades above the threshold came from labels and how many from System 2, and `sample=` checks the threshold
-  against the labeled random sample with a confidence sequence (so calibrating every night adds no false rejections).
-- **`recheck`** runs that check on its own, on a schedule, since a certified tier is rarely calibrated again. It counts
-  labels on the `sample` and, with `kept=`, on the random share of the tier's kept answers, each weighted by the
-  inverse of its chance of being picked; the confidence sequence uses the effective count. With a 2% sample and a tier
-  keeping 15% of messages, the sample alone gives about one label per 330 messages. In the banking77 case study `kept`
-  gave 4 to 6 times more labels, still too few to rule out 95% for a tier that was 91% to 93% right.
+  many grades above the threshold came from labels and how many from System 2. On the trec case study it was worse:
+  `gpt-4o-mini` was certified at 95% from about 35 answers all graded by `gpt-4.1`, and above that threshold the two
+  agreed on every question while being right 87.5% of the time. Two models that share their mistakes look perfect
+  graded by each other.
+- **Labels must confirm.** So with `sample=` or `confident=`, the labels on those random samples at or above a
+  threshold are checked two ways. If a confidence sequence rules the target out, the tier fails closed ("below target
+  on labels"). If they don't yet clear the target on the same Wilson bound the threshold was certified with (about 31
+  labels, all right, for 95%), the threshold is saved but unconfirmed ("not enough labels"): the router asks the tier
+  and logs its answers but doesn't keep them. *Why not fail closed:* a tier that is only probed is rarely confident,
+  so labels on its confident answers would stop coming and it could never be confirmed. *Why the `confident` share
+  rather than the answers the tier kept:* an unconfirmed tier keeps nothing. Each label is weighted by the inverse of
+  its chance of being picked, with the effective count in both bounds. Without either rate, nothing needs confirming,
+  and a threshold can rest on System 2's grades alone. `retrain` does not ask for confirmation yet.
+- **`recheck`** runs the same check on a schedule, since a certified tier is rarely calibrated again: it confirms an
+  unconfirmed threshold once the labels show the target, and fails one they rule out. With a 2% sample and a tier
+  keeping 15% of messages, the sample alone gives about one label per 330 messages; the `confident` share is what
+  makes confirmation reachable.
 - **`prune`** skips a tier on a question when `keep_rate * cost(System 2) < cost(tier)`: each answer it keeps saves a
   System 2 question, and each one it is asked costs its own. Comparing with System 2 overstates what an earlier tier
   saves when a later tier would have answered, so it errs toward asking. Waiting is priced by adding it to each
@@ -309,7 +325,7 @@ accurate, so everything above it can skip System 2.
 - Measured on public datasets (200 held-out items per question, 300 training labels): a classifier then
   `gpt-4o-mini` scored 92% on a topic question (the classifier answered 71%, p50 12 ms) and 89% on sentiment (trusted
   for only 12%, p50 461 ms), against 82% and 90% for the LLM alone.
-- **`review_queue`** lists ungraded questions where a person's label helps most: the random `sample` and `kept` shares
+- **`review_queue`** lists ungraded questions where a person's label helps most: the random `sample` and `confident` shares
   first (the only labels that measure accuracy without bias), then where tiers and System 2 disagreed, an audit
   disagreed with a confident answer, or nobody was sure and System 2 was not asked. The hard cases make calibration
   and retraining better per label than labeling at random, but they say nothing about overall accuracy.
@@ -408,6 +424,8 @@ What load testing found, with fake models that take 20 ms (so these show hunch's
 - Isotonic or Venn-Abers calibration was evaluated and not adopted: in simulation it gained nothing (#16).
 - Per-slice thresholds and a self-verifier were measured and lost to a second LLM as the guard (#17).
 - A CLI is not built (#8).
-- `recheck` needs a few hundred labels on a tier's kept answers to rule out a target the tier misses by a few points.
+- `recheck` needs a few hundred labels on a tier's confident answers to rule out a target the tier misses by a few
+  points, and about 31 all-right labels to confirm a 95% threshold.
+- `retrain` certifies the classifier on held-out decisions that are mostly graded by System 2, without confirmation.
 - The guard and `LocalDecider` run in-process and are not wrapped in outage fallback.
 - Only the ordering of tiers is fixed by you; the router does not learn which tier to try first.

@@ -274,12 +274,12 @@ router = Router([local, llm], system2, log=store, audit=0.05, trust_uncalibrated
 result = router.decide(text, questions)
 
 # Each night
-for item in review_queue(store, limit=30, sample=0.02, kept=0.1):   # a person labels these
+for item in review_queue(store, limit=30, sample=0.02, confident=0.1):     # a person labels these
     store.label(item["id"], item["key"], answer_from_a_person)
-local = retrain(store, current=local, tier=0)["decider"]             # a better classifier, if it helps
-calibrate(store, target_accuracy=0.95, tier=1, sample=0.02)          # thresholds for the LLM tier
-recheck(store, tier=1, sample=0.02, kept=0.1)                        # is that tier still meeting the target?
-prune(store, {"tier 1": 0.00008, "system2": 0.0034}, tier=1)         # stop asking it where it doesn't pay
+local = retrain(store, current=local, tier=0)["decider"]                  # a better classifier, if it helps
+calibrate(store, target_accuracy=0.95, tier=1, sample=0.02, confident=0.1)  # thresholds for the LLM tier
+recheck(store, tier=1, sample=0.02, confident=0.1)                        # confirmed? still meeting the target?
+prune(store, {"tier 1": 0.00008, "system2": 0.0034}, tier=1)              # stop asking it where it doesn't pay
 report = stats(store, sample=0.02, costs={"tier 1": 0.00008, "system2": 0.0034})
 ```
 
@@ -300,7 +300,7 @@ not the truth when System 2 is often wrong, so label where you can and measure w
 | Reason | Why it's queued |
 | --- | --- |
 | `sample` | In a fixed random share of all decisions (`sample=0.02`). The only labels that say how often the router is right overall |
-| `kept` | In a fixed random share of the answers a tier kept (`kept=0.1`). What `recheck` tests a trusted tier with |
+| `confident` | In a fixed random share of the answers a tier was confident about, kept or not (`confident=0.1`). What confirms and rechecks a tier's threshold |
 | `disagreement` | A tier was unsure, System 2 answered, and they differ |
 | `audit_disagreement` | A confident answer was audited and System 2 disagreed: how confident mistakes get found |
 | `unresolved` | No tier was confident and System 2 wasn't asked |
@@ -324,6 +324,13 @@ meets the target, and saves it so the router applies it. `escalation_rate` is th
 the cost of the target. Call it once per tier. It needs graded answers at every confidence level, which is what
 `audit` provides.
 
+Where nobody labeled, an answer is graded by System 2's, so on its own a threshold only shows agreement with
+System 2. When two models make the same mistakes, that can look perfect: on the trec case study `gpt-4o-mini` was
+certified at 95% this way and was 81% to 87% right. So pass `sample=` and `confident=` (the rates you give
+`review_queue`), and your labels on those random samples must **confirm** the threshold: until they show the target,
+it is saved but unconfirmed (`reason` is `not enough labels`), and the router keeps asking the tier without keeping
+its answers. `recheck` confirms it once the labels arrive.
+
 When it finds no threshold, `reason` says why, and `best_target` is the highest target this data would support:
 
 | `reason` | What to do |
@@ -331,9 +338,10 @@ When it finds no threshold, `reason` says why, and `best_target` is the highest 
 | `not enough data` | Fewer than `min_samples` (30) graded answers. Grade more; the threshold is unchanged |
 | `not enough evidence` | The target isn't ruled out but can't be shown yet. Grade more |
 | `target unreachable` | The tier can't reach the target. Lower it, or change or drop the tier |
-| `below target on labels` | With `sample=`: a threshold was found, but your labels on the random sample show the tier below target |
+| `below target on labels` | A threshold was found, but your labels on the random samples rule the target out |
+| `not enough labels` | A threshold was found but your labels don't confirm it yet. It is saved and not trusted; label more |
 
-In the last three cases the tier **fails closed**: it is no longer trusted on that question, which passes to the
+In `not enough evidence`, `target unreachable` and `below target on labels` the tier **fails closed**: it is no longer trusted on that question, which passes to the
 next tier or System 2, and the tier is only asked on a `probe` share. Calibrate again later; with more data it may
 pass. `fail_closed=False` keeps the old threshold instead. `stats(store)["uncalibrated"]` lists these questions.
 
@@ -359,8 +367,9 @@ labels per question.
 
 ### Recheck and prune
 
-- **`recheck(store, tier=1, sample=0.02, kept=0.1)`** tests each saved threshold against your labels on the random
-  samples, and fails a tier closed when they rule the target out. Run it on a schedule: a tier that is certified is
+- **`recheck(store, tier=1, sample=0.02, confident=0.1)`** tests each saved threshold against your labels on the
+  random samples: it confirms an unconfirmed threshold once they show the target, and fails a tier closed when they
+  rule the target out. Run it on a schedule: a tier that is certified is
   rarely calibrated again, and a threshold certified against System 2 can overstate the tier.
 - **`prune(store, costs, tier=1)`** stops asking a tier the questions where the answers it keeps save less than it
   costs to ask. It is then only probed, and asked again once it pays. To count waiting as a cost, add its price to
@@ -421,9 +430,9 @@ curl -s localhost:8000/decide -H "Authorization: Bearer $HUNCH_API_KEY" \
 | --- | --- |
 | `POST /decide` | `state`, `questions`, optionally `images` (data URIs), `thresholds`, `escalate`. Returns an `id` when logging |
 | `POST /feedback` | `{"id": ..., "labels": {"urgency": 2}}` |
-| `POST /calibrate` | `{"target_accuracy": 0.95}`, optionally `min_samples` and `sample` |
+| `POST /calibrate` | `{"target_accuracy": 0.95}`, optionally `min_samples`, `sample` and `confident` |
 | `GET /stats` | The `stats` report; its options are query parameters, `costs` as JSON |
-| `GET /review` | The review queue; `limit`, `reason`, `sample`, `kept` |
+| `GET /review` | The review queue; `limit`, `reason`, `sample`, `confident` |
 | `GET /health` | No token needed |
 
 Every other route needs `Authorization: Bearer $HUNCH_API_KEY`. The API builds its router with `router_from_env()`,

@@ -277,7 +277,7 @@ def _on_sample(graded, right, target, z=1.645):
 
 
 def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_000, min_escalation_change=0.05, min_distribution_change=0.1, costs=None,
-          sample=0.0, kept=0.0):
+          sample=0.0, confident=0.0):
     """Summarizes the log since a unix time. Returns:
 
     decisions, degraded (how many had a model down), cache (model answers served from the cache against asked of
@@ -324,7 +324,7 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     cache are counted as asked, so with a cache this is an upper bound.
 
     review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue), with
-    `sample` and `kept` the rates given to review_queue.
+    `sample` and `confident` the rates given to review_queue.
 
     In questions, accuracy_on_sample (None unless `sample` is given) is the accuracy of the final answers on the
     labeled decisions of that random sample, which unlike your other labels says how often the router is right
@@ -337,7 +337,7 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     audit rate; that is what to look at to decide whether a tier is earning its place."""
     labels = store.labels()
     decisions = store.results(since)
-    queue = pending(store, since, decisions, labels, sample, kept)
+    queue = pending(store, since, decisions, labels, sample, confident)
     latency = {"total": [], "tiers": {}, "system2": []}
     questions, degraded, hits, misses = {}, 0, 0, 0
     asked, kept, system2_asked = {}, {}, 0

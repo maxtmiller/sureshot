@@ -37,7 +37,7 @@ from hunch import Cache, ChatDecider, ChatReasoner, LocalDecider, Router, Store,
 from hunch.review import REASONS
 
 PRICES = {"gpt-4o-mini": (0.15, 0.60), "gpt-4.1": (2.00, 8.00)}  # $ per million input and output tokens; check yours
-TARGET, AUDIT, PROBE, SAMPLE, KEPT, LABELS_PER_NIGHT, WORKERS = 0.95, 0.05, 0.05, 0.02, 0.1, 30, 8
+TARGET, AUDIT, PROBE, SAMPLE, CONFIDENT, LABELS_PER_NIGHT, WORKERS = 0.95, 0.05, 0.05, 0.02, 0.1, 30, 8
 LOCAL_MS = 60  # the classifier's typical time per message on one laptop; measuring it live breaks when runs share a CPU
 
 
@@ -196,7 +196,7 @@ def simulate(work, dataset, days, seed=0, per_second=0.0):
             latency.append((LOCAL_MS if 0 in tiers else 0) + (ms["gpt-4o-mini"] if 1 in tiers else 0)
                            + (ms["gpt-4.1"] if result["latency_ms"]["system2"] is not None else 0))
         # Night: a person labels what the review queue asks for most.
-        queue = review_queue(store, limit=LABELS_PER_NIGHT, sample=SAMPLE, kept=KEPT)
+        queue = review_queue(store, limit=LABELS_PER_NIGHT, sample=SAMPLE, confident=CONFIDENT)
         for item in queue:
             store.label(item["id"], item["key"], gold[item["id"]], source="human")
         trained = retrain(store, current=local, tier=0, target_accuracy=TARGET, min_samples=30)
@@ -206,11 +206,11 @@ def simulate(work, dataset, days, seed=0, per_second=0.0):
         drift = {d["tier"]: d for d in whole["drift"]}
         # retrain rechecks the classifier every night; calibrate grades only its answers since promotion, too few.
         due = {d["tier"] for d in whole["drift"] if d["flags"] and d["tier"] == 1} | ({1} if store.thresholds(1).get(key) in (None, float("inf")) else set())
-        cals = {t: calibrate(store, TARGET, 30, tier=t, sample=SAMPLE)[key] for t in sorted(due)}
+        cals = {t: calibrate(store, TARGET, 30, tier=t, sample=SAMPLE, confident=CONFIDENT)[key] for t in sorted(due)}
         cal = cals.get(1)
         if due:
             recalibrated.append([day, sorted(due)])
-        rechecked = recheck(store, tier=1, sample=SAMPLE, kept=KEPT).get(key)
+        rechecked = recheck(store, tier=1, sample=SAMPLE, confident=CONFIDENT).get(key)
         pruned = prune(store, worth, tier=1).get(key)
         n = len(messages)
         day_report = {
@@ -222,9 +222,9 @@ def simulate(work, dataset, days, seed=0, per_second=0.0):
             "latency_ms_mean": statistics.mean(latency),
             "labels_tonight": len(queue), "review_reasons": {r: sum(i["reason"] == r for i in queue) for r in REASONS},
             "accuracy_on_sample": whole["questions"][key]["accuracy_on_sample"],
-            "retrain": trained["report"].get(key), "recheck": rechecked, "prune": pruned, "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "sample_check")}
+            "retrain": trained["report"].get(key), "recheck": rechecked, "prune": pruned, "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "label_check")}
                            for t, c in cals.items()},
-            "tier1_threshold": store.thresholds(1).get(key), "tier0_threshold": store.thresholds(0).get(key),
+            "tier1_threshold": store.thresholds(1).get(key), "tier1_unconfirmed": key in store.unconfirmed(1), "tier0_threshold": store.thresholds(0).get(key),
             "drift": {t: {"flags": d["flags"], "unchecked": d["unchecked"], "escalation_rate": d["escalation_rate"], "baseline": d["baseline"]} for t, d in drift.items()},
         }
         report.append(day_report)
