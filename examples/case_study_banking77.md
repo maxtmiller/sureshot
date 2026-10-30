@@ -1,7 +1,7 @@
 # Case study: routing bank support messages (banking77)
 
 An end-to-end test of hunch on a realistic job: routing a bank's support messages to one of 77 intents, over ten
-simulated days. Each run turned up problems in hunch; they were fixed and the study run again. The script is
+simulated days. Each round turned up problems in hunch; they were fixed and the study run again. The script is
 `case_study_banking77.py`; every round's numbers are in `case_study_banking77_results.json`.
 
 ## Setup
@@ -11,17 +11,21 @@ simulated days. Each run turned up problems in hunch; they were fixed and the st
   compromised cards, unrecognized payments), to see whether drift monitoring notices.
 - **Router:** a local classifier (untrained at first), then `gpt-4o-mini`, then `gpt-4.1` as System 2. Accuracy
   target 95%, 5% of confident answers audited. Nothing is trusted until it is calibrated (`trust_uncalibrated=False`),
-  and a tier that failed closed is only asked about 5% of messages (`probe`).
+  and a tier that failed closed or does not pay is only asked about 5% of messages (`probe`).
 - **Each night:** a person labels 30 items from the review queue, a random 2% of messages first (the dataset's
   labels stand in for them). `retrain` may promote a new classifier and rechecks the one it keeps. `gpt-4o-mini` is
-  recalibrated whenever it has no certified threshold or drift flags it, with its threshold checked against the
-  labeled sample.
-- **Baselines:** the same 3,000 messages sent to `gpt-4o-mini` alone and to `gpt-4.1` alone.
+  recalibrated whenever it has no certified threshold or drift flags it, `recheck` tests its threshold against the
+  labeled sample, and `prune` stops asking it when it costs more than it saves.
 - **Cost:** OpenAI list prices ($0.15 / $0.60 per million tokens for `gpt-4o-mini`, $2 / $8 for `gpt-4.1`) times the
   tokens each call really used. Asking both models about every message once cost $10.39; every run read those
   answers from a cache, so the runs themselves cost nothing more.
-- **Seeds:** which answers get audited and probed is random, and it decides what gets graded, so one run can mislead:
-  the final setup was run with three seeds.
+- **Waiting:** whether `gpt-4o-mini` pays depends on what a second of waiting is worth. The final round was run with
+  money only, and with waiting priced at $0.01 a second.
+- **Latency:** each message is priced with typical times (`gpt-4o-mini` 0.57 s and `gpt-4.1` 0.95 s, their means in
+  the baseline run; the classifier 60 ms), since the simulation reads the models' answers from a cache.
+- **Luck:** which answers get audited and probed is random, and it decides what gets graded. Each setup was run three
+  times. The seed does not make a run repeatable, since eight worker threads draw from one random generator in no
+  fixed order.
 
 ## Results
 
@@ -29,28 +33,35 @@ simulated days. Each run turned up problems in hunch; they were fixed and the st
 |---|---|---|---|
 | hunch, first run | 78.8% | $8.42 | 1.31 s |
 | hunch, after the first fixes (one run) | 79.4% | $8.52 | 1.15 s |
-| hunch, final (three seeds) | 79.2% to 79.5% | $7.94 to $8.98 | 1.26 to 1.39 s |
+| hunch, after the second fixes (three runs) | 79.2% to 79.5% | $7.94 to $8.98 | 1.26 to 1.39 s |
+| hunch, final, money only (three runs) | 79.2% to 79.3% | $8.59 to $9.14 | 1.34 to 1.40 s |
+| hunch, final, waiting at $0.01 a second (three runs) | 79.2% to 79.5% | $8.57 to $9.04 | 0.93 to 0.97 s |
 | `gpt-4.1` alone | 79.3% | $10.14 | 0.95 s |
 | `gpt-4o-mini` alone | 69.0% | $0.25 | 0.57 s |
 
-hunch matches `gpt-4.1` for 11% to 22% less. No model here gets near the 95% target, and hunch says so: the labeled
-random sample put the router below its target from day 2, 3 or 5, depending on the seed. It is slower than
-`gpt-4.1` alone, for a reason given below.
+With waiting priced, hunch matches `gpt-4.1`'s accuracy for 11% to 15% less at the same speed, and from day 7 it is
+faster (0.86 to 0.91 s). No model here gets near the 95% target, and hunch says so: the labeled random sample put the
+router below its target from day 2 or 3 in five runs of six, and day 9 in the sixth.
 
-In the final setup, by seed:
+The final round with waiting priced, by run:
 
-| Seed | Local classifier | Its accuracy | `gpt-4o-mini` kept | Its accuracy | Drift flags |
-|---|---|---|---|---|---|
-| 0 | 18% to 24% of messages from day 4 | 89% to 100% | 8% to 17% | 83% to 94% | none |
-| 1 | 19% on day 10 only (promoted night 9) | 100% | 11% to 18% | 87% to 94% | none |
-| 2 | 19% to 28% from day 5 | 91% to 100% | 10% to 18% | 83% to 94% | none |
+| Run | Local classifier | Its accuracy | `gpt-4o-mini` | Drift flags |
+|---|---|---|---|---|
+| 1 | from day 5, 11% to 41% of messages | 91% to 100% | skipped from night 1 | none |
+| 2 | from day 4, 16% to 24% | 86% to 100% | skipped from night 1 | none |
+| 3 | from day 3, 19% to 23% | 83% to 96% | skipped from night 1 | none |
+
+With money only, `gpt-4o-mini` paid for itself (it kept about 13% of messages for a fraction of a cent each) and was
+asked about every message, and the classifier was promoted on day 8, on day 10, or not at all.
 
 ## What worked
 
 - **The local classifier.** Trained on `gpt-4.1`'s answers plus the labels, it answered about a fifth of messages
-  once promoted, mostly at 95% or more against the dataset's labels, in about 50 ms, for nothing. In the first run,
+  once promoted, mostly at 95% or more against the dataset's labels, in about 60 ms, for nothing. In the first run,
   on the 326 messages it kept it was right 97.9% of the time, as often as `gpt-4.1` on the same messages (96.3%): it
   keeps the easy ones.
+- **Dropping the tier that does not pay.** Asked about every message, `gpt-4o-mini` added 0.57 s to each to save
+  0.95 s on about one in eight. `prune` skipped it, and the classifier took over the easy messages.
 - **Failing closed and saying so.** `gpt-4o-mini` is badly overconfident here (88% of its answers at 0.95 confidence or
   more, 74% of those right), and the random labeling sample shows the whole router below its target.
 - **Numbered labels** (new for this study, since 77 options is past the old limit of 26). 28.7% of `gpt-4o-mini`'s
@@ -77,27 +88,36 @@ Second run, and the fixes it led to (#48, #49, #51):
    the labeled sample.
 2. **The classifier's accuracy was never checked** (two or three audited answers a day). Drift now also counts
    labeled sample answers.
-3. **A drift flag on the classifier never cleared.** Running it with three seeds showed two more problems here: the
-   snapshot from #46 was built partly from the decisions the classifier was trained on, so drift flagged it the day
-   after promotion; and recalibrating it with `calibrate(tier=0)`, which grades only its answers since promotion,
-   switched it off for good. `retrain` now leaves training decisions out of the snapshot and rechecks the classifier
-   it keeps every night, stopping trusting it only when the data rules the target out (without that last rule, a
-   classifier near the target was switched off and on night after night).
+3. **A drift flag on the classifier never cleared.** Three runs showed two more problems: the snapshot from #46 was
+   built partly from the decisions the classifier was trained on, so drift flagged it the day after promotion; and
+   recalibrating it with `calibrate(tier=0)` switched it off for good. `retrain` now leaves training decisions out of
+   the snapshot and rechecks the classifier it keeps every night, stopping trusting it only when the data rules the
+   target out (without that last rule, a classifier near the target was switched off and on night after night).
+
+Third round, and the fixes it led to (#53, #54, #55):
+
+1. **Nothing rechecked a certified tier** (`gpt-4o-mini` was certified on night 1 and never checked again).
+   `recheck(store, tier, sample=)` now tests saved thresholds against the labeled sample on a schedule.
+2. **A tier that keeps little still cost latency on every message**, which made hunch slower than `gpt-4.1` alone.
+   `prune(store, costs, tier)` now stops asking a tier, apart from the probe sample, where it costs more than it
+   saves; waiting counts if it is priced into `costs`.
+3. **Skipping a tier starved the classifier.** `retrain` learned only from questions some tier had answered, so once
+   `gpt-4o-mini` was skipped it had nothing new to learn from, was never promoted, and hunch cost as much as
+   `gpt-4.1` alone. It now learns from every graded question (`Store.graded()`).
 
 ## What still needs to change
 
-1. **`gpt-4o-mini` is still overstated.** It was certified on night 1 against `gpt-4.1` and kept 83% to 94% right
-   against the labels all run. The sample check only runs when `calibrate` does, and nothing ran it again: drift did
-   not flag `gpt-4o-mini`, and its threshold stayed certified. A certified tier should be rechecked against the
-   labeled sample on a schedule, as `retrain` now does for the classifier.
-2. **A tier that keeps little still costs latency on every message.** `gpt-4o-mini` kept 8% to 18% of messages but
-   was asked about all of them, adding 0.57 s to most, which is why hunch is slower than `gpt-4.1` alone. `stats` can
-   price this (`costs={"ms": ...}`), but nothing acts on it.
-3. **Results depend on luck.** The classifier was promoted on night 3, 4 or 9 depending on the seed, and the labeled
-   sample's estimate of the router's accuracy ranged from 78% to 87% against a true 79%.
+1. **`recheck` needs far more labels than a 2% sample gives.** By day 10 it had 1 to 11 labeled answers from
+   `gpt-4o-mini`'s kept messages, too few to rule out 95% for a tier that was 83% to 94% right. Labels could be
+   aimed at the kept answers of trusted tiers, rather than spread over all messages.
+2. **Luck still decides a lot.** The classifier was promoted on day 3 or never, and the labeled sample's estimate of
+   the router's accuracy on day 10 ranged from 68% to 88% (50 to 71 labels) against a true 79%, depending on which
+   answers happened to be audited and labeled.
+3. **The target is out of reach.** No setup gets near 95% here, because `gpt-4.1` itself is at 79%. Better option
+   descriptions, examples in the prompt, or a stronger System 2 are what would move it; hunch can only say so.
 
 ## Caveats
 
 One dataset, a simulated labeler that is always right, and plain intent names as option descriptions (better
-descriptions or examples would likely raise both models' accuracy). Latency for the models is the mean from the
-baseline run, since the simulation read their answers from the cache; the local classifier's is measured.
+descriptions or examples would likely raise both models' accuracy). Latency comes from typical times, not measured
+ones, since the simulation reads the models' answers from a cache.
