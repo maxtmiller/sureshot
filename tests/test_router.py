@@ -1148,7 +1148,8 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     drift = stats(store)["drift"]
     assert drift == [{"tier": 0, "key": "needs_prep", "calibrated_at": drift[0]["calibrated_at"], "threshold": 0.95, "target": 0.95,
                       "answers_since": 0, "escalation_rate": {"at_calibration": 0.5, "since": None}, "accuracy_since": None,
-                      "distribution_change": None, "recent": None, "flags": [], "unchecked": ["escalation_rate", "distribution", "accuracy"],
+                      "distribution_change": None, "change": {}, "flags": [],
+                      "unchecked": ["escalation_rate", "distribution", "accuracy", "change_escalation_rate", "change_distribution", "change_accuracy"],
                       "baseline": None, "upstream": []}]
     # The same mix as at calibration is not drift. Labels on unaudited answers are not a random sample, so even all
     # wrong they do not count toward accuracy.
@@ -1156,12 +1157,12 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
         result = Router(Tier({"needs_prep": (True, 0.95 if i % 2 else 0.7)}), None, log=store).decide("event", q)
         store.label(result["id"], "needs_prep", False)
     drift = stats(store)["drift"][0]
-    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["accuracy_since"] is None
+    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy", "change_accuracy"] and drift["accuracy_since"] is None
     # Now the tier is unsure about everything: the share escalated moved.
     for _ in range(240):
         Router(Tier({"needs_prep": (True, 0.7)}), None, log=store).decide("event", q)
     drift = stats(store)["drift"][0]
-    assert drift["flags"] == ["escalation_rate", "distribution"] and drift["answers_since"] == 300 and drift["escalation_rate"]["since"] == pytest.approx(0.9)
+    assert drift["flags"] == ["escalation_rate", "distribution", "change_escalation_rate", "change_distribution"] and drift["answers_since"] == 300 and drift["escalation_rate"]["since"] == pytest.approx(0.9)
 
     # Audits say the confident answers are wrong: accuracy fell below the target, once there are enough of them.
     wrong = calibrated(tmp_path / "b.db")
@@ -1170,11 +1171,11 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     for _ in range(20):
         audited.decide("event", q), unsure.decide("event", q)
     drift = stats(wrong)["drift"][0]
-    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["accuracy_since"] == {"graded": 20, "human": 0, "accuracy": 0.0}
+    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy", "change_accuracy"] and drift["accuracy_since"] == {"graded": 20, "human": 0, "accuracy": 0.0}
     for _ in range(20):
         audited.decide("event", q), unsure.decide("event", q)
     drift = stats(wrong)["drift"][0]
-    assert drift["flags"] == ["accuracy"] and drift["unchecked"] == [] and drift["accuracy_since"]["graded"] == 40
+    assert drift["flags"] == ["accuracy", "change_accuracy"] and drift["unchecked"] == [] and drift["accuracy_since"]["graded"] == 40
     # A label overrides the audit's answer: the person says these were right after all.
     for decision_id, _, _, result in wrong.results(drift["calibrated_at"]):
         if "audit" in result["answers"]["needs_prep"]:
@@ -1191,7 +1192,7 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     assert stats(store)["drift"] == []
 
 
-def test_drift_window_catches_a_late_change_the_cumulative_check_dilutes(tmp_path):
+def test_change_detector_catches_a_late_change_the_cumulative_check_dilutes(tmp_path):
     from hunch import Store, calibrate, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1201,17 +1202,16 @@ def test_drift_window_catches_a_late_change_the_cumulative_check_dilutes(tmp_pat
         result = Router(Tier({"needs_prep": (sure, 0.95 if sure else 0.7)}), None, log=store).decide("event", q)
         store.label(result["id"], "needs_prep", True)
     calibrate(store, 0.95, 30)
-    # 400 answers like calibration, then the tier turns unsure about the last 100.
-    for i in range(400):
+    # 2000 answers like calibration, then the tier turns unsure about the last 300.
+    for i in range(2000):
         Router(Tier({"needs_prep": (True, 0.95 if i % 2 else 0.7)}), None, log=store).decide("event", q)
-    for _ in range(100):
+    for _ in range(300):
         Router(Tier({"needs_prep": (True, 0.7)}), None, log=store).decide("event", q)
-    drift = stats(store, window=100)["drift"][0]
-    assert drift["escalation_rate"]["since"] == pytest.approx(0.6) and "escalation_rate" not in drift["flags"]
-    assert drift["recent"]["escalation_rate"] == 1.0 and drift["flags"] == ["recent_escalation_rate", "recent_distribution"]
-    assert drift["unchecked"] == ["accuracy", "recent_accuracy"]
-    # A window as large as the history would only repeat the cumulative check, so it is left out.
-    assert stats(store, window=500)["drift"][0]["recent"] is None and stats(store, window=0)["drift"][0]["recent"] is None
+    drift = stats(store)["drift"][0]
+    assert drift["escalation_rate"]["since"] == pytest.approx(1300 / 2300) and "escalation_rate" not in drift["flags"]
+    assert "change_escalation_rate" in drift["flags"]
+    times = [ts for _, ts, _, _ in store.results(drift["calibrated_at"])]
+    assert times.index(drift["change"]["change_escalation_rate"]["started_at"]) >= 1950
 
 
 def test_drift_sees_confidence_sliding_while_still_above_the_threshold(tmp_path):
@@ -1265,7 +1265,7 @@ def test_drift_needs_a_change_big_enough_to_act_on(tmp_path):
     assert drift["escalation_rate"]["since"] == pytest.approx(0.6) and drift["distribution_change"] == pytest.approx(0.1)
     assert stats(store, min_escalation_change=0.15, min_distribution_change=0.15)["drift"][0]["flags"] == []
     assert stats(store, min_escalation_change=0, min_distribution_change=0)["drift"][0]["flags"] == [
-        "escalation_rate", "distribution", "recent_escalation_rate", "recent_distribution"]
+        "escalation_rate", "distribution", "change_escalation_rate", "change_distribution"]
 
 
 def test_anytime_bounds_hold_over_every_look():
@@ -1290,12 +1290,19 @@ def test_anytime_bounds_hold_over_every_look():
     assert _sequence(0, 50, 0.01)[0] == 0.0 and _sequence(50, 50, 0.01)[1] == 1.0
 
 
-def test_holm_shares_one_false_alarm_budget():
-    from hunch.stats import _holm
+def test_cusum_rarely_raises_a_false_alarm_and_dates_a_real_change():
+    import math
+    import random
+    from hunch.stats import _cusum
 
-    assert _holm([0.004, 0.001, 0.02], 0.01) == [True, True, False]
-    assert _holm([0.006, 0.006], 0.01) == [False, False]  # each would pass alone at 0.01
-    assert _holm([], 0.01) == []
+    random.seed(1)
+    h = math.log(20000)
+    # No change: a flag within 2000 answers at most 2000 / 20000 of the time.
+    assert sum(_cusum([random.random() < 0.2 for _ in range(2000)], 0.2, 0.25, h) is not None for _ in range(100)) <= 20
+    # A change at answer 500 from 0.2 to 0.35 is flagged soon after, and dated near it.
+    xs = [random.random() < 0.2 for _ in range(500)] + [random.random() < 0.35 for _ in range(2000)]
+    start, flagged = _cusum(xs, 0.2, 0.25, h)
+    assert start >= 400 and flagged < 1500
 
 
 def test_drift_points_at_the_upstream_tier(tmp_path):
@@ -1339,11 +1346,11 @@ def test_drift_watches_questions_without_a_calibration(tmp_path):
     for _ in range(40):
         Router(Tier({"needs_prep": (True, 0.95)}), None, log=store).decide("event", q)
     drift = stats(store)["drift"][0]
-    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["escalation_rate"] == {"at_calibration": 0.0, "since": 0.0}
+    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy", "change_accuracy"] and drift["escalation_rate"] == {"at_calibration": 0.0, "since": 0.0}
     # Now it is unsure about everything: it passes more on, and its confidences moved.
     for _ in range(60):
         Router(Tier({"needs_prep": (True, 0.6)}), None, log=store).decide("event", q)
-    assert stats(store)["drift"][0]["flags"] == ["escalation_rate", "distribution"]
+    assert stats(store)["drift"][0]["flags"] == ["escalation_rate", "distribution", "change_escalation_rate", "change_distribution"]
 
     # A calibration that fails closed starts a new baseline: the tier now passes everything on, which is not drift.
     for _ in range(100):
