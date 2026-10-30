@@ -314,6 +314,13 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   System 2 disagreed with the dataset's own labels on some items), so give labels where you can.
 - `accuracy_vs_labels` is the accuracy of the final answers where you gave a label.
 - `system2_called` includes audit calls, so `audit` shows up as System 2 cost.
+- `stats(store, costs={"tier 0": 0, "tier 1": 0.0002, "system2": 0.004})` adds `cost`: the total and per-decision
+  cost (a cost per question asked of each stage, in any unit; audits count as System 2), `always_system2` (sending
+  every question to System 2), `savings` (the share saved against that), and for each tier its `cost`, the
+  System 2 questions its kept answers avoided (`saves_vs_system2`) and `net`. A negative `net` means the tier costs
+  more than it saves: drop it, or lower its threshold. Add `"ms"`, a cost per millisecond, to price waiting too.
+  Answers served from the cache are counted as asked, so with a cache it is an upper bound. hunch has no price list,
+  since prices change and differ by account: pass yours.
 - `drift` compares each calibrated question and tier with its last `calibrate` run, and `flags` names what moved:
   `"escalation_rate"` (the share of the tier's answers below the threshold: the inputs or the model changed),
   `"distribution"` (how its confidences spread over five quantile bins, which catches a slide that stays above the

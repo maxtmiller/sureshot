@@ -266,7 +266,24 @@ def _drift(store, decisions, labels, min_samples, alpha, false_alarm_every, min_
     return entries
 
 
-def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_000, min_escalation_change=0.05, min_distribution_change=0.1):
+def _costs(costs, n_decisions, questions_asked, asked, system2_asked, kept, total_ms, system2_ms):
+    if "system2" not in costs:
+        raise ValueError('costs needs a "system2" cost per question')
+    price = lambda who: costs.get(who, 0.0)
+    per_ms = costs.get("ms", 0.0)
+    spent = {who: n * price(who) for who, n in asked.items()}
+    total = sum(spent.values()) + system2_asked * price("system2") + per_ms * total_ms
+    always = questions_asked * price("system2")
+    if per_ms:
+        # Without System 2 latency measured there is nothing to price the baseline's waiting with.
+        always = always + per_ms * system2_ms * n_decisions if system2_ms is not None else None
+    tiers = {who: {"cost": cost, "saves_vs_system2": kept.get(who, 0) * price("system2"), "net": kept.get(who, 0) * price("system2") - cost}
+             for who, cost in sorted(spent.items())}
+    return {"total": total, "per_decision": total / n_decisions if n_decisions else None, "always_system2": always,
+            "savings": 1 - total / always if always else None, "tiers": tiers}
+
+
+def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_000, min_escalation_change=0.05, min_distribution_change=0.1, costs=None):
     """Summarizes the log since a unix time. Returns:
 
     decisions, degraded (how many had a model down), cache (model answers served from the cache against asked of
@@ -303,6 +320,15 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     min_samples answers since then, in this report's range ("baseline" instead of "calibrated_at"): the escalation
     rate is then the share the tier passed on, and accuracy is unchecked, since there is no target.
 
+    cost (None unless `costs` is given): what the decisions cost and what they saved. costs is {"tier 0": ...,
+    "tier 1": ..., "system2": ...}, a cost per question asked of each (a tier left out costs nothing, as a local
+    classifier nearly does), plus optionally "ms", a cost per millisecond of waiting. Returns the total and
+    per_decision cost (audits count as System 2 questions), always_system2 (what sending every question to System 2
+    would have cost; None if "ms" is given and System 2 latency was never measured), savings (the share saved
+    against that), and per tier its cost on every question it saw, saves_vs_system2 (the System 2 questions its kept
+    answers avoided) and net. A negative net means the tier costs more than it saves. Questions served from the
+    cache are counted as asked, so with a cache this is an upper bound.
+
     review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
 
     questions: for each question, how many times it was asked, answered_by (the share each tier and System 2 gave),
@@ -314,6 +340,7 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     queue = pending(store, since, decisions, labels)
     latency = {"total": [], "tiers": {}, "system2": []}
     questions, degraded, hits, misses = {}, 0, 0, 0
+    asked, kept, system2_asked = {}, {}, 0
     for decision_id, _, _, result in decisions:
         degraded += bool(result.get("degraded"))
         hits += (result.get("cache") or {}).get("hits", 0)
@@ -327,6 +354,11 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
             q = questions.setdefault(key, {"asked": 0, "answered_by": {}, "human": [0, 0], "tiers": {}})
             q["asked"] += 1
             who = "system2" if answer["source"] == "system2" else f"tier {answer.get('tier', 0)}"
+            for entry in answer.get("tried", []):
+                asked[f"tier {entry['tier']}"] = asked.get(f"tier {entry['tier']}", 0) + 1
+            system2_asked += who == "system2" or "audit" in answer
+            if who != "system2":
+                kept[who] = kept.get(who, 0) + 1
             q["answered_by"][who] = q["answered_by"].get(who, 0) + 1
             human = labels.get((decision_id, key))
             if human is not None:
@@ -346,7 +378,11 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
         q["accuracy_vs_labels"] = {"graded": q["human"][0], "accuracy": q["human"][1] / q["human"][0]} if q["human"][0] else None
         q["tier_accuracy"] = {who: {"graded": n, "accuracy": right / weight} for who, (n, right, weight) in sorted(q["tiers"].items())}
         del q["human"], q["tiers"]
-    return {"decisions": len(decisions), "degraded": degraded,
+    cost = None
+    if costs is not None:
+        cost = _costs(costs, len(decisions), sum(q["asked"] for q in questions.values()), asked, system2_asked, kept,
+                      sum(latency["total"]), statistics.mean(latency["system2"]) if latency["system2"] else None)
+    return {"decisions": len(decisions), "degraded": degraded, "cost": cost,
             "cache": {"hits": hits, "misses": misses, "hit_rate": hits / (hits + misses)} if hits + misses else None,
             "latency_ms": {"total": _timing(latency["total"]), "tier_mean": {f"tier {i}": statistics.mean(ms) for i, ms in sorted(latency["tiers"].items())},
                            "system2_called": len(latency["system2"]) / len(decisions) if decisions else None,
