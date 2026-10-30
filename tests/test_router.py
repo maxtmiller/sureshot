@@ -1590,3 +1590,41 @@ def test_prune_stops_asking_a_tier_that_costs_more_than_it_saves(tmp_path):
     assert prune(store, {"tier 0": 2.0, "system2": 10}, min_answers=1000) == {} and store.skipped(0) == set()
     with pytest.raises(ValueError, match="system2"):
         prune(store, {"tier 0": 1.0})
+
+
+def test_recheck_fails_a_certified_tier_its_labeled_sample_rules_out(tmp_path):
+    from hunch import calibrate, recheck, review_queue, stats
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # The tier always agrees with System 2 (the audits), so calibration certifies it.
+    router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store, audit=1.0)
+    for _ in range(300):
+        router.decide("event", q)
+    assert calibrate(store, 0.9, 30)["needs_prep"]["threshold"] == 0.99
+    # Nothing labeled yet: nothing to go on, nothing changes.
+    assert recheck(store, sample=0.1)["needs_prep"] == {"threshold": 0.99, "target": 0.9, "graded": 0, "accuracy": None, "high": None, "failed": False}
+    # A few wrong labels are not enough to rule the target out; many are.
+    sample = review_queue(store, limit=None, sample=0.1)
+    store.label(sample[0]["id"], "needs_prep", False)
+    assert not recheck(store, sample=0.1)["needs_prep"]["failed"] and store.thresholds() == {"needs_prep": 0.99}
+    for item in sample:
+        store.label(item["id"], "needs_prep", False)
+    report = recheck(store, sample=0.1)["needs_prep"]
+    assert report["failed"] and report["graded"] == len(sample) and report["accuracy"] == 0.0
+    assert store.thresholds() == {"needs_prep": float("inf")} and store.issues()[0]["reason"] == "below target on labels"
+    # A tier that already failed closed is not rechecked.
+    assert recheck(store, sample=0.1) == {}
+
+
+def test_retrain_learns_from_questions_no_tier_answered(tmp_path):
+    from hunch import LocalDecider, retrain
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # Every tier is skipped (a classifier with no heads answers nothing), so System 2 answers every question.
+    router = Router(LocalDecider({}, _bag), FakeClaude(), log=store)
+    for text, prep in [("server meeting", True), ("meeting about server", True), ("invoice sale", False), ("sale invoice due", False)] * 40:
+        store.label(router.decide(text, q)["id"], "needs_prep", prep)
+    assert store.labeled() == [] and len(store.graded()) == 160
+    assert retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]["needs_prep"]["promoted"]

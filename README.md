@@ -478,6 +478,12 @@ evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/
   above the threshold came from your labels and how many from System 2, and `sample=` checks the threshold against
   the labeled sample (a confidence sequence, so calibrating every night adds no false rejections).
 
+  That check only runs when you calibrate, and a tier that is certified is rarely calibrated again. `recheck(store,
+  tier=1, sample=0.02)` runs it on its own, on a schedule: each saved threshold is checked against the labeled sample,
+  and a question whose labels rule the target out fails closed ("below target on labels"); nothing else changes,
+  drift snapshot included. It needs labels on the tier's kept answers: with a 2% sample and a tier keeping 15% of
+  messages, that is about one label for every 330 messages.
+
   The last three fail closed: `calibrate` saves a threshold nothing can reach, so that tier is not trusted for the
   question and everything passes to the next tier or System 2 until a later calibration finds a threshold. The tier
   is then only asked about a random `probe` share of those questions (`Router(probe=0.05)`), so you stop paying for
