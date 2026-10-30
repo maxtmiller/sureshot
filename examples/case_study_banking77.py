@@ -6,7 +6,9 @@ accuracy target. Nothing is trusted until it is calibrated, and a tier that fail
 messages. Each day 300 messages arrive. Each night a person labels 30 items from the review queue, a random 2% of
 messages first (here the dataset's own labels stand in for them), the classifier is retrained, gpt-4o-mini is
 recalibrated whenever it has no certified threshold or drift flags it, checking its threshold against the labeled
-random sample. The nightly retrain rechecks the classifier. From day 6 half the messages come from eight
+random sample. The nightly retrain rechecks the classifier, recheck tests gpt-4o-mini's threshold against the
+labeled sample, and prune stops asking gpt-4o-mini when it costs more than it saves (with --per-second, waiting is
+priced in: that many dollars per second of latency). From day 6 half the messages come from eight
 card-security intents, a shift drift monitoring should notice.
 
     python examples/case_study_banking77.py baseline   # asks both models about every message (the paid part)
@@ -27,10 +29,11 @@ from pathlib import Path
 from datasets import load_dataset
 
 import hunch.adapters.base as base
-from hunch import Cache, ChatDecider, ChatReasoner, LocalDecider, Router, Store, calibrate, retrain, review_queue, stats
+from hunch import Cache, ChatDecider, ChatReasoner, LocalDecider, Router, Store, calibrate, prune, recheck, retrain, review_queue, stats
 
 PRICES = {"gpt-4o-mini": (0.15, 0.60), "gpt-4.1": (2.00, 8.00)}  # $ per million input and output tokens; check yours
 TARGET, AUDIT, PROBE, SAMPLE, LABELS_PER_NIGHT, WORKERS = 0.95, 0.05, 0.05, 0.02, 30, 8
+LOCAL_MS = 60  # the classifier's typical time per message on one laptop; measuring it live breaks when runs share a CPU
 SHIFTED = ["compromised_card", "lost_or_stolen_card", "card_payment_not_recognised", "cash_withdrawal_not_recognised",
            "direct_debit_payment_not_recognised", "transaction_charged_twice", "card_swallowed", "lost_or_stolen_phone"]
 
@@ -128,14 +131,17 @@ def per_call(work):
     return cost, ms, rows
 
 
-def simulate(work, days, seed=0):
+def simulate(work, days, seed=0, per_second=0.0):
     names, schedule = days
     random.seed(seed)  # the router picks audits and probes at random
     q = question(names)
     mini, big = models()
     cost, ms, rows = per_call(work)
     costs = {"tier 0": 0.0, "tier 1": cost["gpt-4o-mini"], "system2": cost["gpt-4.1"]}
-    sim = work / f"sim_{seed}.db"
+    # What prune weighs: the price of each call plus the price of waiting for it.
+    worth = {"tier 1": cost["gpt-4o-mini"] + per_second * ms["gpt-4o-mini"] / 1000, "system2": cost["gpt-4.1"] + per_second * ms["gpt-4.1"] / 1000}
+    tag = f"{seed}" + (f"_wait{per_second:g}" if per_second else "")
+    sim = work / f"sim_{tag}.db"
     for suffix in ("", "-wal", "-shm"):
         Path(f"{sim}{suffix}").unlink(missing_ok=True)
     store, cache = Store(sim), Cache(work / "cache.db")
@@ -145,7 +151,6 @@ def simulate(work, days, seed=0):
         router = Router([local or LocalDecider({}), mini], big, threshold=[0.95, 0.8], log=store, audit=AUDIT, cache=cache, retries=4, backoff=2.0,
                         trust_uncalibrated=False, probe=PROBE)
         start = time.time()
-        local_ms = []
 
         def one(m):
             result = router.decide(m["text"], q)
@@ -162,10 +167,9 @@ def simulate(work, days, seed=0):
             right[who][0] += 1
             right[who][1] += a["answer"] == m["gold"]
             tiers = {t["tier"] for t in a["tried"]}
-            # The cache makes the logged latency meaningless, so price each decision with the baseline's mean times.
-            latency.append(result["latency_ms"]["tiers"][0] + (ms["gpt-4o-mini"] if 1 in tiers else 0)
+            # The cache makes the logged latency meaningless, so price each decision with typical times instead.
+            latency.append((LOCAL_MS if 0 in tiers else 0) + (ms["gpt-4o-mini"] if 1 in tiers else 0)
                            + (ms["gpt-4.1"] if result["latency_ms"]["system2"] is not None else 0))
-            local_ms.append(result["latency_ms"]["tiers"][0])
         # Night: a person labels what the review queue asks for most.
         queue = review_queue(store, limit=LABELS_PER_NIGHT, sample=SAMPLE)
         for item in queue:
@@ -181,6 +185,8 @@ def simulate(work, days, seed=0):
         cal = cals.get(1)
         if due:
             recalibrated.append([day, sorted(due)])
+        rechecked = recheck(store, tier=1, sample=SAMPLE).get("intent")
+        pruned = prune(store, worth, tier=1).get("intent")
         n = len(messages)
         day_report = {
             "day": day, "messages": n,
@@ -188,10 +194,10 @@ def simulate(work, days, seed=0):
             "answered_by": {who: r[0] / n for who, r in right.items()},
             "accuracy_by": {who: (r[1] / r[0] if r[0] else None) for who, r in right.items()},
             "cost": s["cost"]["total"], "always_system2_cost": s["cost"]["always_system2"], "savings": s["cost"]["savings"],
-            "latency_ms_mean": statistics.mean(latency), "local_ms_mean": statistics.mean(local_ms),
+            "latency_ms_mean": statistics.mean(latency),
             "labels_tonight": len(queue), "review_reasons": {r: sum(i["reason"] == r for i in queue) for r in ("sample", "disagreement", "audit_disagreement", "unresolved")},
             "accuracy_on_sample": whole["questions"]["intent"]["accuracy_on_sample"],
-            "retrain": trained["report"].get("intent"), "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "sample_check")}
+            "retrain": trained["report"].get("intent"), "recheck": rechecked, "prune": pruned, "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "sample_check")}
                            for t, c in cals.items()},
             "tier1_threshold": store.thresholds(1).get("intent"), "tier0_threshold": store.thresholds(0).get("intent"),
             "drift": {t: {"flags": d["flags"], "unchecked": d["unchecked"], "escalation_rate": d["escalation_rate"], "baseline": d["baseline"]} for t, d in drift.items()},
@@ -213,8 +219,8 @@ def simulate(work, days, seed=0):
                            "cost": cost["gpt-4.1"] * len(everyone), "latency_ms_mean": ms["gpt-4.1"]},
         "per_call": {"cost": cost, "latency_ms": ms},
     }
-    (work / f"days_{seed}.jsonl").write_text("".join(json.dumps(d) + "\n" for d in report))
-    (work / f"summary_{seed}.json").write_text(json.dumps(summary, indent=1))
+    (work / f"days_{tag}.jsonl").write_text("".join(json.dumps(d) + "\n" for d in report))
+    (work / f"summary_{tag}.json").write_text(json.dumps(summary, indent=1))
     print(json.dumps({k: v for k, v in summary.items() if k != "days"}, indent=1))
 
 
@@ -223,8 +229,9 @@ if __name__ == "__main__":
     parser.add_argument("phase", choices=["baseline", "simulate"])
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--per-second", type=float, default=0.0)
     args = parser.parse_args()
     work = Path("data/case_study_banking77" + ("_smoke" if args.smoke else ""))
     work.mkdir(parents=True, exist_ok=True)
     days = traffic(2, 20, 2) if args.smoke else traffic(10, 300, 6)
-    baseline(work, days) if args.phase == "baseline" else simulate(work, days, args.seed)
+    baseline(work, days) if args.phase == "baseline" else simulate(work, days, args.seed, args.per_second)
