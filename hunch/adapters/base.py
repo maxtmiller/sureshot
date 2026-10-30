@@ -53,7 +53,7 @@ def prompt(state, questions):
 
 class OptionDecider:
     """A System 1 that asks each question on its own and reads the model's probability for each option's one-token
-    label (A, B... for choices, 0, 1... for score levels, yes/no for noul), renormalized over the options: that is the
+    label (A, B... for choices, or 1, 2... past 26 options; 0, 1... for score levels; yes/no for noul), renormalized over the options: that is the
     confidence. Subclasses implement `_ask(state, question, images)` and return the raw answer for `normalize`, using
     `_prompt` for the question text and `_probabilities` to turn the model's top tokens into that raw answer."""
 
@@ -64,9 +64,10 @@ class OptionDecider:
             return [("yes", "true", ""), ("no", "false", "")]
         if question["type"] == "score":
             return [(str(i), str(i), level) for i, level in enumerate(question["criteria"])]
-        if len(question["criteria"]) > 26:
-            raise ValueError("this decider supports at most 26 options per choice question")
-        return [(chr(65 + i), key, text) for i, (key, text) in enumerate(question["criteria"].items())]
+        # Letters up to 26 options, then numbers from 1, which GPT tokenizers keep as one token (checked on gpt-4o-mini
+        # with 77 options). Only the top 20 tokens come back with a probability, so with more options the rest count as 0.
+        label = (lambda i: chr(65 + i)) if len(question["criteria"]) <= 26 else (lambda i: str(i + 1))
+        return [(label(i), key, text) for i, (key, text) in enumerate(question["criteria"].items())]
 
     @classmethod
     def _prompt(cls, state, question):

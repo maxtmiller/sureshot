@@ -151,6 +151,24 @@ def test_chat_decider_turns_logprobs_into_confidence(monkeypatch):
     assert all(s["logprobs"] and s["max_tokens"] == 1 for s in sent) and len(sent) == 3
 
 
+def test_chat_decider_numbers_the_options_past_26(monkeypatch):
+    import math
+    from hunch import ChatDecider
+
+    intents = {f"intent_{i}": f"Intent {i}" for i in range(77)}
+    sent = []
+
+    def post(url, json, headers, timeout):
+        sent.append(json["messages"][1]["content"][-1]["text"])
+        return _logprob_response(url, [("52", math.log(0.9)), (" 62", math.log(0.09)), ("Z", math.log(0.01))])
+
+    monkeypatch.setattr(backends, "post", post)
+    answer = ChatDecider("m", "http://local/v1", api_key="k").decide("my card", {"intent": {"type": "choice", "criteria": intents}})["intent"]
+    assert "1: Intent 0" in sent[0] and "77: Intent 76" in sent[0] and "A:" not in sent[0]
+    # "Z" is not a label here, so the confidence is renormalized over the two numbers.
+    assert answer["answer"] == "intent_51" and answer["confidence"] == pytest.approx(0.9 / 0.99)
+
+
 def test_chat_reasoner_uses_structured_outputs(monkeypatch):
     import httpx
     from hunch import ChatReasoner

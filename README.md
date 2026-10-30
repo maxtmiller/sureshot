@@ -45,8 +45,10 @@ result["escalated"]            # ["urgency"]
 
 - `ChatDecider(model, base_url, api_key)` or `ChatDecider(model, provider="groq")`: any OpenAI-compatible endpoint that returns logprobs (OpenAI, vLLM,
   Ollama, Together, Fireworks, Groq), hosted or self-served, with no adapter code. Each question is asked with
-  `max_tokens=1`, and the model's probability over the option labels is the calibrated confidence. Choices are
-  limited to 26 options. Point it at your own server with `base_url="http://localhost:8000/v1"`.
+  `max_tokens=1`, and the model's probability over the option labels is the calibrated confidence. Options are
+  labeled A to Z, or 1, 2... past 26, which needs a tokenizer that keeps those numbers as one token (checked on
+  `gpt-4o-mini` with 77 options). Only the top 20 tokens come back with a probability, so with many options the
+  rest count as 0. Point it at your own server with `base_url="http://localhost:8000/v1"`.
 - `VLLMDecider(model, base_url="http://localhost:8000/v1")`: a model you serve yourself with vLLM. It is a
   `ChatDecider` with a local default URL that turns off thinking for models that support it (see
   [Self-hosting System 1](#self-hosting-system-1-with-vllm)).
