@@ -199,7 +199,7 @@ def simulate(work, dataset, days, seed=0, per_second=0.0):
         queue = review_queue(store, limit=LABELS_PER_NIGHT, sample=SAMPLE, confident=CONFIDENT)
         for item in queue:
             store.label(item["id"], item["key"], gold[item["id"]], source="human")
-        trained = retrain(store, current=local, tier=0, target_accuracy=TARGET, min_samples=30)
+        trained = retrain(store, current=local, tier=0, target_accuracy=TARGET, min_samples=30, sample=SAMPLE, confident=CONFIDENT)
         local = trained["decider"]
         s = stats(store, since=start, costs=costs)  # today's cost
         whole = stats(store, sample=SAMPLE)  # drift compares everything since each calibration, not just today
@@ -224,7 +224,7 @@ def simulate(work, dataset, days, seed=0, per_second=0.0):
             "accuracy_on_sample": whole["questions"][key]["accuracy_on_sample"],
             "retrain": trained["report"].get(key), "recheck": rechecked, "prune": pruned, "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "label_check")}
                            for t, c in cals.items()},
-            "tier1_threshold": store.thresholds(1).get(key), "tier1_unconfirmed": key in store.unconfirmed(1), "tier0_threshold": store.thresholds(0).get(key),
+            "tier1_threshold": store.thresholds(1).get(key), "tier1_unconfirmed": key in store.unconfirmed(1), "tier0_unconfirmed": key in store.unconfirmed(0), "tier0_threshold": store.thresholds(0).get(key),
             "drift": {t: {"flags": d["flags"], "unchecked": d["unchecked"], "escalation_rate": d["escalation_rate"], "baseline": d["baseline"]} for t, d in drift.items()},
         }
         report.append(day_report)

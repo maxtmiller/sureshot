@@ -276,7 +276,7 @@ result = router.decide(text, questions)
 # Each night
 for item in review_queue(store, limit=30, sample=0.02, confident=0.1):     # a person labels these
     store.label(item["id"], item["key"], answer_from_a_person)
-local = retrain(store, current=local, tier=0)["decider"]                  # a better classifier, if it helps
+local = retrain(store, current=local, sample=0.02, confident=0.1)["decider"]  # a better classifier, if it helps
 calibrate(store, target_accuracy=0.95, tier=1, sample=0.02, confident=0.1)  # thresholds for the LLM tier
 recheck(store, tier=1, sample=0.02, confident=0.1)                        # confirmed? still meeting the target?
 prune(store, {"tier 1": 0.00008, "system2": 0.0034}, tier=1)              # stop asking it where it doesn't pay
@@ -364,6 +364,11 @@ local.save("local.joblib")                        # LocalDecider.load("local.job
 passes on fewer questions than `current`. Where it keeps `current`, it checks it again, so a nightly `retrain` also
 recalibrates the classifier. Use it rather than `calibrate(tier=0)` for the classifier. It needs roughly 100 to 300
 labels per question.
+
+The classifier learns mostly from System 2's answers and is graded mostly by them, so it can share System 2's
+mistakes and still look right. Pass `sample=` and `confident=`, as for `calibrate`, and your labels on those random
+samples must confirm it: retrain runs the classifier on every held-out decision a person labeled at random, and
+until those labels show the target its threshold is saved but not trusted.
 
 ### Recheck and prune
 

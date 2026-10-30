@@ -136,6 +136,11 @@ def _label_check(rows, threshold, target, sample, confident):
         rate = max(sample, confident) if row["confident"] else sample
         if in_sample(row["id"], rate):
             picked.append((row["answer"] == row["truth"], 1 / rate))
+    return _check(picked, target)
+
+
+def _check(picked, target):
+    """_label_check on labels already picked: [(right, weight)]."""
     if not picked:
         return {"graded": 0, "accuracy": None, "low": None, "high": None, "ruled_out": False, "confirmed": False}
     weight, weight_sq = sum(w for _, w in picked), sum(w * w for _, w in picked)

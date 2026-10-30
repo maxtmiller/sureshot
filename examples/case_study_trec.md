@@ -100,6 +100,26 @@ not (`confident=0.1`, replacing the share of kept answers). The same six runs ag
 - Accuracy did not change, because `gpt-4o-mini`'s kept answers were few; what changed is that hunch no longer
   claims 95% for answers that were 81% to 87% right.
 
+## Then the classifier too
+
+`retrain(sample=, confident=)` now holds the classifier to the same rule: it is run on every held-out decision a
+person labeled at random, and its threshold is unconfirmed until those labels show the target. The same six runs:
+
+| | Accuracy | Cost | Mean latency |
+|---|---|---|---|
+| money only | 86.0% | $2.23 to $2.26 | 0.95 to 1.36 s |
+| waiting priced | 86.0% | $2.23 | 0.95 to 0.97 s |
+| `gpt-4.1` alone | 86.0% | $2.22 | 0.85 s |
+
+The classifier was promoted in all six runs (from day 3, 6 or 8) and stayed unconfirmed. By its last check it had 5
+to 27 random labels where it was confident, all right, and the lower bound reached 0.66 to 0.91; 95% needs at least 32
+straight right answers on the equal-weight bound, more when labels from the 2% sample (each standing for five times
+as many decisions) are mixed in. Before this change it was trusted and its kept answers were 92% to 98% right.
+
+So with nothing confirmed, hunch here is `gpt-4.1` plus the cost and latency of asking tiers whose answers it can't
+yet keep. That is the honest result at 30 labels a night over ten days: no tier has shown 95% on labels. Getting
+there takes more labels on what the tiers are confident about, a longer run, or a lower target.
+
 ## Caveats
 
 One dataset with its own label conventions ("Who is Stephen Hawking?" asks for a description, not a person), which

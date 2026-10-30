@@ -121,6 +121,19 @@ all six runs: by day 10 its labels were 91% to 93% right (27 to 49 of them, mone
 kept 340 to 396 answers at 90% to 91% accuracy; now it keeps none, the classifier carries the savings, and hunch
 costs 4% to 14% less than `gpt-4.1` alone instead of 10% to 22%. Accuracy did not move.
 
+Sixth round: `retrain(sample=, confident=)` holds the classifier to the same rule, checking it on every held-out
+decision a person labeled at random.
+
+| | Accuracy | Cost | Mean latency |
+|---|---|---|---|
+| money only | 79.3% | $10.39 | 1.56 s |
+| waiting at $0.01 a second | 79.3% | $10.17 to $10.18 | 1.07 to 1.08 s |
+
+The classifier was promoted from day 3 or 4 and stayed unconfirmed in all six runs: by day 10 its random labels were
+93% to 99% right (35 to 48 of them), and the lower bound reached 0.84 to 0.91, short of 0.95. With nothing
+confirmed, hunch costs 0% to 3% more than `gpt-4.1` alone and is slower. Before, the classifier's kept answers were
+90% to 96% right; hunch was cheaper by claiming a 95% it did not have.
+
 ## What still needs to change
 
 1. **`recheck` needs far more labels than a 2% sample gives.** By day 10 it had 1 to 11 labeled answers from
