@@ -309,9 +309,9 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     and accuracy against your labels. Per tier, accuracy is of the answers that tier gave and kept (not the ones it
     passed down), against your label or else System 2's audit answer, with audited answers weighted up for the
     audit rate; that is what to look at to decide whether a tier is earning its place."""
-    queue = pending(store, since)
     labels = store.labels()
     decisions = store.results(since)
+    queue = pending(store, since, decisions, labels)
     latency = {"total": [], "tiers": {}, "system2": []}
     questions, degraded, hits, misses = {}, 0, 0, 0
     for decision_id, _, _, result in decisions:

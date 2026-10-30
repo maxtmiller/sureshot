@@ -21,11 +21,13 @@ def review_queue(store, limit=50, reasons=REASONS, since=0.0):
     return [item | {"state": states[item["id"]]} for item in items]
 
 
-def pending(store, since=0.0):
-    """Every queued item, without its state text (so counting is cheap)."""
-    labels = store.labels()
+def pending(store, since=0.0, decisions=None, labels=None):
+    """Every queued item, without its state text (so counting is cheap). `decisions` and `labels` may be passed
+    already loaded (as store.results(since) and store.labels() return them), so a caller that has them does not
+    read and decode the log again."""
+    labels = store.labels() if labels is None else labels
     items = []
-    for decision_id, ts, questions, result in store.results(since):
+    for decision_id, ts, questions, result in store.results(since) if decisions is None else decisions:
         for key, answer in result["answers"].items():
             if (decision_id, key) in labels:
                 continue
