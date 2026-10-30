@@ -2,7 +2,7 @@
 
 An end-to-end test of hunch on a realistic job: routing a bank's support messages to one of 77 intents, over ten
 simulated days. Each round turned up problems in hunch; they were fixed and the study run again. The script is
-`case_study_banking77.py`; every round's numbers are in `case_study_banking77_results.json`.
+`case_study.py` (`--dataset banking77`, the default); every round's numbers are in `case_study_banking77_results.json`.
 
 ## Setup
 
