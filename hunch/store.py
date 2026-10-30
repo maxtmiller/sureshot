@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, sour
 CREATE TABLE IF NOT EXISTS calibration_issues (tier INTEGER, key TEXT, reason TEXT, best_target REAL, target REAL, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value REAL, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS skips (tier INTEGER, key TEXT, PRIMARY KEY (tier, key));
+CREATE TABLE IF NOT EXISTS unconfirmed (tier INTEGER, key TEXT, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts REAL, threshold REAL, target REAL, escalation_rate REAL, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
 """
 
@@ -77,6 +78,19 @@ class Store:
         with self._db() as db:
             db.executemany("INSERT OR IGNORE INTO skips VALUES (?, ?)", [(tier, key) for key in skip])
             db.executemany("DELETE FROM skips WHERE tier = ? AND key = ?", [(tier, key) for key in ask])
+
+    def unconfirmed(self, tier=0):
+        """The questions whose saved threshold for a tier your labels have not confirmed yet (see hunch.calibrate): the
+        tier is asked, but its answers are not kept."""
+        with self._db() as db:
+            return {key for (key,) in db.execute("SELECT key FROM unconfirmed WHERE tier = ?", (tier,))}
+
+    def save_unconfirmed(self, tier, unconfirmed, confirmed):
+        """Marks the questions in `unconfirmed` as waiting for your labels to confirm a tier's threshold, and the ones in
+        `confirmed` as no longer waiting."""
+        with self._db() as db:
+            db.executemany("INSERT OR IGNORE INTO unconfirmed VALUES (?, ?)", [(tier, key) for key in unconfirmed])
+            db.executemany("DELETE FROM unconfirmed WHERE tier = ? AND key = ?", [(tier, key) for key in confirmed if key not in unconfirmed])
 
     def save_thresholds(self, thresholds, tier=0):
         with self._db() as db:
@@ -170,8 +184,8 @@ class Store:
 
     def labeled(self):
         """One row per graded question and tier that answered it: the graded row (see _graded) with that tier's answer
-        and confidence, and whether it was the answer that stood ("kept": the tier was confident and nothing vetoed it). A
-        question no tier answered has no row here; graded() has it."""
+        and confidence, and whether it was confident (at or above the threshold it was held to, kept or not). A question
+        no tier answered has no row here; graded() has it."""
         rows = []
         for row, answer, result in self._graded():
             escalated = answer["source"] == "system2"
@@ -179,6 +193,7 @@ class Store:
             tried = answer.get("tried") or ([{"tier": 0, **{k: (answer["hunch"] if escalated else answer)[k] for k in ("answer", "confidence")}}]
                                             if (answer["hunch"] if escalated else answer) else [])
             for entry in tried:
-                kept = not escalated and answer.get("tier", 0) == entry["tier"] and row["key"] not in result["unsure"]
-                rows.append(row | {"tier": entry["tier"], "confidence": entry["confidence"], "answer": entry["answer"], "kept": kept})
+                # Logs from before the router recorded "confident" have only whether the answer stood.
+                confident = entry.get("confident", not escalated and answer.get("tier", 0) == entry["tier"] and row["key"] not in result["unsure"])
+                rows.append(row | {"tier": entry["tier"], "confidence": entry["confidence"], "answer": entry["answer"], "confident": confident})
         return rows

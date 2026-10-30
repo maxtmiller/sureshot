@@ -205,7 +205,7 @@ def test_router_from_env(monkeypatch):
 def _calibration_store(tmp_path):
     from hunch import Store
 
-    return Store(tmp_path / "hunch.db")
+    return Store(tmp_path / "hunch.db", seed=0)
 
 
 class Scripted:
@@ -702,7 +702,7 @@ def test_review_queue_lists_disagreements_and_clears_when_graded(tmp_path):
     assert first["id"] == ids[0] and first["answer"] is False and first["source"] == "system2" and first["question"] == q["needs_prep"]
     assert [c["who"] for c in first["candidates"]] == ["tier 0", "system2"] and first["candidates"][1]["reason"] == "because"
     assert [i["state"] for i in review_queue(store, reasons=("unresolved",))] == ["five"] and len(review_queue(store, limit=1)) == 1
-    assert stats(store)["review_queue"] == {"sample": 0, "kept": 0, "disagreement": 1, "audit_disagreement": 1, "unresolved": 1}
+    assert stats(store)["review_queue"] == {"sample": 0, "confident": 0, "disagreement": 1, "audit_disagreement": 1, "unresolved": 1}
     store.label(ids[0], "needs_prep", True)
     assert [i["state"] for i in review_queue(store)] == ["three", "five"]
     # A System 2 answer with no System 1 answer to compare against is not queued.
@@ -1564,7 +1564,7 @@ def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_
     assert calibrate(store, 0.9, 30, save=False)["needs_prep"]["threshold"] == 0.99
     checked = calibrate(store, 0.9, 30, sample=0.1)["needs_prep"]
     assert checked["reason"] == "below target on labels" and checked["threshold"] is None and store.thresholds() == {"needs_prep": float("inf")}
-    assert checked["sample_check"]["graded"] == len(sample) and checked["sample_check"]["high"] < 0.9
+    assert checked["label_check"]["graded"] == len(sample) and checked["label_check"]["high"] < 0.9
     assert checked["graded_by"] == {"human": len(sample), "system2": 300 - len(sample)}
 
 
@@ -1603,7 +1603,7 @@ def test_recheck_fails_a_certified_tier_its_labeled_sample_rules_out(tmp_path):
         router.decide("event", q)
     assert calibrate(store, 0.9, 30)["needs_prep"]["threshold"] == 0.99
     # Nothing labeled yet: nothing to go on, nothing changes.
-    assert recheck(store, sample=0.1)["needs_prep"] == {"threshold": 0.99, "target": 0.9, "graded": 0, "accuracy": None, "high": None, "failed": False}
+    assert recheck(store, sample=0.1)["needs_prep"] == {"threshold": 0.99, "target": 0.9, "graded": 0, "accuracy": None, "low": None, "high": None, "failed": False, "confirmed": True}
     # A few wrong labels are not enough to rule the target out; many are.
     sample = review_queue(store, limit=None, sample=0.1)
     store.label(sample[0]["id"], "needs_prep", False)
@@ -1644,7 +1644,7 @@ def test_a_seeded_store_logs_the_same_ids_and_labeling_sample(tmp_path):
     assert Store(tmp_path / "c.db").log("x", q, {}) != Store(tmp_path / "d.db").log("x", q, {})
 
 
-def test_recheck_counts_labels_on_a_share_of_the_kept_answers(tmp_path):
+def test_recheck_counts_labels_on_a_share_of_the_confident_answers(tmp_path):
     from hunch import Store, recheck, review_queue
 
     store = Store(tmp_path / "s.db", seed=1)
@@ -1653,12 +1653,40 @@ def test_recheck_counts_labels_on_a_share_of_the_kept_answers(tmp_path):
     router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store)
     for _ in range(1000):
         router.decide("event", q)
-    queue = review_queue(store, limit=None, sample=0.02, kept=0.3)
-    assert {item["reason"] for item in queue} == {"sample", "kept"}
+    queue = review_queue(store, limit=None, sample=0.02, confident=0.3)
+    assert {item["reason"] for item in queue} == {"sample", "confident"}
     # The tier is right 80% of the time against a 90% target.
     for i, item in enumerate(queue):
         store.label(item["id"], "needs_prep", i % 5 != 0)
     few = recheck(store, sample=0.02, target_accuracy=0.9)["needs_prep"]
     assert not few["failed"] and few["graded"] < 40
-    many = recheck(store, sample=0.02, target_accuracy=0.9, kept=0.3)["needs_prep"]
+    many = recheck(store, sample=0.02, target_accuracy=0.9, confident=0.3)["needs_prep"]
     assert many["failed"] and many["graded"] == len(queue) and many["accuracy"] == pytest.approx(0.8, abs=0.01)
+
+
+def test_labels_must_confirm_a_threshold_system2_certified(tmp_path):
+    from hunch import calibrate, recheck, review_queue
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # The tier always agrees with System 2 (the audits), so graded by System 2 it looks perfect.
+    router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store, audit=1.0)
+    for _ in range(300):
+        router.decide("event", q)
+    # No labels yet: the threshold is saved but not trusted, and the tier is still asked.
+    report = calibrate(store, 0.9, 30, confident=0.1)["needs_prep"]
+    assert report["threshold"] == 0.99 and report["reason"] == "not enough labels" and not report["label_check"]["confirmed"]
+    assert store.thresholds() == {"needs_prep": 0.99} and store.unconfirmed() == {"needs_prep"}
+    assert store.issues()[0]["reason"] == "not enough labels"
+    result = router.decide("event", q)
+    assert result["escalated"] == ["needs_prep"] and result["answers"]["needs_prep"]["tried"][0]["confident"]
+    # Its confident answers are queued at random even though none was kept, and once the labels show the target,
+    # recheck confirms the threshold and the router keeps the tier's answers.
+    queue = review_queue(store, limit=None, confident=0.1)
+    assert queue and {item["reason"] for item in queue} == {"confident"}
+    for item in queue:
+        store.label(item["id"], "needs_prep", True)
+    checked = recheck(store, sample=0.0, confident=0.1)["needs_prep"]
+    assert checked["confirmed"] and not checked["failed"] and checked["graded"] == len(queue)
+    assert store.unconfirmed() == set() and store.issues() == []
+    assert router.decide("event", q)["escalated"] == []

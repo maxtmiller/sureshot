@@ -47,7 +47,8 @@ class Router:
         trust_uncalibrated=False (with a log) trusts a tier on a question only once there is a threshold for it, saved
         by calibrate or retrain or passed per call; until then its answers are logged and the question passes on, so
         a new deployment escalates everything and collects unbiased data to calibrate with, instead of trusting the
-        default threshold.
+        default threshold. A threshold calibrate saved but your labels have not confirmed yet is never trusted, whatever
+        trust_uncalibrated says.
 
         probe is the share of questions still asked of a tier that failed closed on them (calibrate could not certify
         the target, so nothing it says is kept), or that hunch.prune found costs more than it saves. The rest skip it and go straight to the next tier or System 2, which
@@ -148,6 +149,7 @@ class Router:
             tier_start = time.perf_counter()
             saved = self.log.thresholds(i) if self.log else {}
             skipped = self.log.skipped(i) if self.log else set()
+            unconfirmed = self.log.unconfirmed(i) if self.log else set()
             limit = {key: thresholds.get(key, saved.get(key, self.tier_thresholds[i])) for key in remaining}
             onward = i + 1 < len(self.tiers) or (escalate and self.system2)
             # A tier that failed closed on a question, or does not pay for it, is only asked on a sample, when the
@@ -167,10 +169,11 @@ class Router:
                 if key not in fast:
                     unsure.append(key)
                     continue
-                tried[key].append({"tier": i, "answer": fast[key]["answer"], "confidence": fast[key]["confidence"]})
+                tried[key].append({"tier": i, "answer": fast[key]["answer"], "confidence": fast[key]["confidence"],
+                                   "confident": fast[key]["confidence"] >= limit[key]})
                 latest[key] = fast[key] | {"tier": i}
                 calibrated = key in thresholds or key in saved
-                if fast[key]["confidence"] < limit[key] or (self.log and not self.trust_uncalibrated and not calibrated):
+                if fast[key]["confidence"] < limit[key] or (self.log and not self.trust_uncalibrated and not calibrated) or key in unconfirmed:
                     unsure.append(key)
                 else:
                     answers[key] = fast[key] | {"source": "hunch", "tier": i}

@@ -123,7 +123,32 @@ def histogram(confidences, bins=5):
     return {"edges": edges, "counts": counts}
 
 
-def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fail_closed=True, sample=0.0):
+def _label_check(rows, threshold, target, sample, confident):
+    """Your labels on the random samples at or above a threshold (rows are store.labeled() rows of one tier and
+    question): {graded, accuracy, low, high, ruled_out, confirmed}. A label is counted when its decision is in the
+    `sample` share, or the tier was confident and it is in the `confident` share; each is weighted by the inverse of
+    its chance of being picked. ruled_out uses a confidence sequence at 5%, so checking every night adds no false
+    rejections; confirmed uses the bound calibration certifies with."""
+    picked = []
+    for row in rows:
+        if row["kind"] != "human" or row["confidence"] < threshold:
+            continue
+        rate = max(sample, confident) if row["confident"] else sample
+        if in_sample(row["id"], rate):
+            picked.append((row["answer"] == row["truth"], 1 / rate))
+    if not picked:
+        return {"graded": 0, "accuracy": None, "low": None, "high": None, "ruled_out": False, "confirmed": False}
+    weight, weight_sq = sum(w for _, w in picked), sum(w * w for _, w in picked)
+    accuracy = sum(w for right, w in picked if right) / weight
+    # The effective count of the weighted labels: as much evidence as that many equally weighted ones.
+    effective = weight * weight / weight_sq
+    high = confidence_sequence(accuracy * effective, effective, 0.05)[1]
+    low = wilson_lower(accuracy, effective)
+    return {"graded": len(picked), "accuracy": accuracy, "low": low, "high": high,
+            "ruled_out": target is not None and high < target, "confirmed": target is not None and low >= target}
+
+
+def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fail_closed=True, sample=0.0, confident=0.0):
     """Calibrates every question for one tier (the first by default; call it once per tier of a chain) from its graded
     answers in the log and, with save, stores the thresholds so a Router using this store applies them. Returns
     {key: summarize(...)}.
@@ -135,11 +160,16 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
 
     Where nobody labeled, an answer is graded by System 2's, so agreeing with System 2 counts as right: a threshold
     certifies agreement with System 2, which overstates the tier when System 2 is often wrong. "graded_by" says how
-    many of the grades at or above the threshold came from your labels ("human") and how many from System 2. With
-    `sample` (the rate given to review_queue), the threshold is also checked against your labels on that random
-    sample: if they show the tier's answers there below the target (a confidence sequence at 5%, so calibrating
-    every night adds no false rejections), the reason is "below target on labels" and, with fail_closed, the tier is
-    not trusted. "sample_check" gives {graded, accuracy, high}.
+    many of the grades at or above the threshold came from your labels ("human") and how many from System 2.
+
+    So with `sample` or `confident` (the rates given to review_queue), your labels on those random samples must
+    confirm a threshold before it is trusted. If they rule the target out at or above it (a confidence sequence at
+    5%, so calibrating every night adds no false rejections), the reason is "below target on labels" and, with
+    fail_closed, the tier is not trusted. If they don't yet show the target on the bound calibration certifies with,
+    the threshold is saved but unconfirmed, with the reason "not enough labels": the router keeps asking the tier
+    but not keeping its answers, so labels on what it is confident about keep coming, and recheck confirms it once
+    they show the target. "label_check" gives {graded, accuracy, low, high, ruled_out, confirmed}. Without either
+    rate nothing needs confirming.
 
     With save, each threshold found is also recorded with the share of all of this tier's logged answers (graded or
     not) that fall below it and how their confidences are spread, which is what stats(store)["drift"] compares later
@@ -154,13 +184,12 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
     for key, r in report.items():
         kept = [row for row in rows[key] if r["threshold"] is None or row["confidence"] >= r["threshold"]]
         r["graded_by"] = {"human": sum(row["kind"] == "human" for row in kept), "system2": sum(row["kind"] == "proxy" for row in kept)}
-        if sample and r["threshold"] is not None:
-            labeled = [row for row in kept if row["kind"] == "human" and in_sample(row["id"], sample)]
-            right = sum(row["answer"] == row["truth"] for row in labeled)
-            high = confidence_sequence(right, len(labeled), 0.05)[1] if labeled else None
-            r["sample_check"] = {"graded": len(labeled), "accuracy": right / len(labeled) if labeled else None, "high": high}
-            if high is not None and high < target_accuracy:
+        if (sample or confident) and r["threshold"] is not None:
+            r["label_check"] = check = _label_check(rows[key], r["threshold"], target_accuracy, sample, confident)
+            if check["ruled_out"]:
                 r.update(threshold=None, trusted_accuracy=None, escalation_rate=None, reason="below target on labels")
+            elif not check["confirmed"]:
+                r["reason"] = "not enough labels"
     for key, r in report.items():
         if r["threshold"] is None:
             best = f"; the best this data supports is {r['best_target']:.2f}" if r["best_target"] is not None else ""
@@ -170,8 +199,9 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
                   if fail_closed and r["reason"] in ("not enough evidence", "target unreachable", "below target on labels")}
         found = {key: r["threshold"] for key, r in report.items() if r["threshold"] is not None}
         store.save_thresholds(closed | found, tier)
-        store.save_issues({key: {"reason": r["reason"], "best_target": r["best_target"], "target": target_accuracy} for key, r in report.items() if r["threshold"] is None},
+        store.save_issues({key: {"reason": r["reason"], "best_target": r["best_target"], "target": target_accuracy} for key, r in report.items() if r["reason"]},
                           tier, list(report))
+        store.save_unconfirmed(tier, [key for key, r in report.items() if r["reason"] == "not enough labels"], list(report))
         results = store.results() if found else []
         snapshots = {}
         for key, threshold in found.items():
@@ -215,45 +245,43 @@ def prune(store, costs, tier=0, min_answers=100):
     return report
 
 
-def recheck(store, tier=0, sample=0.02, target_accuracy=None, kept=0.0):
-    """Checks each saved threshold of one tier against your labels on the random labeling sample (the rate given to
-    review_queue), without recalibrating. Where nobody labeled, calibrate grades a tier by System 2's answers, so a
-    threshold can certify agreement with System 2 rather than accuracy; this is the check that catches it, run on a
-    schedule. A question whose labeled answers at or above its threshold rule the target out (a confidence sequence
-    at 5%, so checking every night adds no false rejections) fails closed, as in calibrate, with the reason
-    "below target on labels"; anything else is left as it is, drift snapshot included.
+def recheck(store, tier=0, sample=0.02, target_accuracy=None, confident=0.0):
+    """Checks each saved threshold of one tier against your labels on the random samples (the `sample` and
+    `confident` rates given to review_queue), without recalibrating. Run it on a schedule: a tier that is certified is
+    rarely calibrated again, and where nobody labeled, calibrate grades a tier by System 2's answers, so a threshold
+    can certify agreement with System 2 rather than accuracy.
 
-    kept (the rate given to review_queue) also counts the labels on that random share of the tier's kept answers,
-    which is where most of its labels come from when the sample is small. Each label is weighted by the inverse of
-    its chance of being picked, so kept answers do not crowd out the others.
+    A question whose labels at or above its threshold rule the target out (a confidence sequence at 5%, so checking
+    every night adds no false rejections) fails closed, as in calibrate, with the reason "below target on labels". An
+    unconfirmed threshold (see calibrate) is confirmed once its labels show the target, and the tier's answers are
+    then kept. Anything else is left as it is, drift snapshot included.
 
     The target is the one the threshold was calibrated for, else target_accuracy. Returns {key: {threshold, target,
-    graded, accuracy, high, failed}} for the questions with a finite threshold; accuracy is weighted."""
+    graded, accuracy, low, high, failed, confirmed}} for the questions with a finite threshold; accuracy is weighted."""
     targets = {c["key"]: c["target"] for c in store.calibrations() if c["tier"] == tier}
     thresholds = {key: t for key, t in store.thresholds(tier).items() if t != float("inf")}
-    graded = {key: [] for key in thresholds}
+    unconfirmed = store.unconfirmed(tier)
+    rows = {key: [] for key in thresholds}
     for row in store.labeled():
-        if row["tier"] != tier or row["key"] not in thresholds or row["kind"] != "human" or row["confidence"] < thresholds[row["key"]]:
-            continue
-        rate = max(sample, kept) if row["kept"] else sample
-        if in_sample(row["id"], rate):
-            graded[row["key"]].append((row["answer"] == row["truth"], 1 / rate))
-    report, failed = {}, {}
+        if row["tier"] == tier and row["key"] in thresholds:
+            rows[row["key"]].append(row)
+    report, failed, confirmed = {}, {}, []
     for key, threshold in thresholds.items():
         target = targets.get(key, target_accuracy)
-        n = len(graded[key])
-        weight, weight_sq = sum(w for _, w in graded[key]), sum(w * w for _, w in graded[key])
-        accuracy = sum(w for right, w in graded[key] if right) / weight if n else None
-        # The effective count of the weighted labels: as much evidence as that many equally weighted ones.
-        effective = weight * weight / weight_sq if n else 0
-        high = confidence_sequence(accuracy * effective, effective, 0.05)[1] if n else None
-        failed_now = target is not None and high is not None and high < target
-        report[key] = {"threshold": threshold, "target": target, "graded": n, "accuracy": accuracy, "high": high, "failed": failed_now}
-        if failed_now:
+        check = _label_check(rows[key], threshold, target, sample, confident)
+        report[key] = {"threshold": threshold, "target": target, **{k: check[k] for k in ("graded", "accuracy", "low", "high")},
+                       "failed": check["ruled_out"], "confirmed": key not in unconfirmed or check["confirmed"]}
+        if check["ruled_out"]:
             failed[key] = target
-            log.warning("tier %d no longer trusted for %r: %.0f%% of %d labeled answers right (target %.2f)", tier, key, 100 * accuracy, n, target)
+            log.warning("tier %d no longer trusted for %r: %.0f%% of %d labeled answers right (target %.2f)", tier, key, 100 * check["accuracy"], check["graded"], target)
+        elif key in unconfirmed and check["confirmed"]:
+            confirmed.append(key)
     if failed:
         store.save_thresholds({key: float("inf") for key in failed}, tier)
         store.save_issues({key: {"reason": "below target on labels", "best_target": None, "target": target} for key, target in failed.items()}, tier, list(failed))
         store.save_calibrations({}, tier, list(failed))
+    if failed or confirmed:
+        store.save_unconfirmed(tier, [], list(failed) + confirmed)
+    if confirmed:
+        store.save_issues({}, tier, confirmed)
     return report

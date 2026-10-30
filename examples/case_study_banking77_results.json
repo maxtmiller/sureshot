@@ -8803,5 +8803,5597 @@
     }
    }
   }
+ },
+ "round_5_labels_confirm": {
+  "money_only": {
+   "seed_0": {
+    "days": [
+     {
+      "day": 1,
+      "messages": 300,
+      "accuracy": 0.7833333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7833333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 6,
+       "confident": 24,
+       "disagreement": 0,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 6,
+       "accuracy": 0.8333333333333334,
+       "low": 0.4975531352299733,
+       "high": 0.9618987960475042,
+       "target": null,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 5,
+       "accuracy": 1.0,
+       "low": 0.7531935406121957,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 300,
+       "keep_rate": 0.18333333333333332,
+       "net": 0.0005351946444444443,
+       "skipped": false
+      },
+      "calibrated": {
+       "1": {
+        "threshold": 0.9999999987682839,
+        "trusted_accuracy": 1.0,
+        "escalation_rate": 0.8166666666666667,
+        "reason": "not enough labels",
+        "best_target": 0.9709960937500001,
+        "graded_by": {
+         "human": 5,
+         "system2": 50
+        },
+        "label_check": {
+         "graded": 5,
+         "accuracy": 1.0,
+         "low": 0.7531935406121957,
+         "high": 1.0,
+         "ruled_out": false,
+         "confirmed": false
+        }
+       }
+      },
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 1.0,
+         "since": 1.0
+        },
+        "baseline": {
+         "answers": 30
+        }
+       }
+      }
+     },
+     {
+      "day": 2,
+      "messages": 300,
+      "accuracy": 0.78,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.78
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 7,
+       "disagreement": 16,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 13,
+       "accuracy": 0.8461538461538461,
+       "low": 0.6253142310263194,
+       "high": 0.9477142723664868,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 12,
+       "accuracy": 0.9166666666666666,
+       "low": 0.7585277788146141,
+       "high": 0.9996783509688766,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 600,
+       "keep_rate": 0.18,
+       "net": 0.0005239322799999999,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8233333333333334
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 3,
+      "messages": 300,
+      "accuracy": 0.7633333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7633333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 5,
+       "disagreement": 18,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 20,
+       "accuracy": 0.85,
+       "low": 0.6781541387069472,
+       "high": 0.938422298604295,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.7171961665153503,
+       "escalation_rate": 0.7859922178988327,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 19,
+       "accuracy": 0.8947368421052632,
+       "low": 0.7714286438605348,
+       "high": 0.9960454306552354,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 900,
+       "keep_rate": 0.1711111111111111,
+       "net": 0.0004938993081481481,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7171961665153503,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7898832684824902,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.835
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 4,
+      "messages": 300,
+      "accuracy": 0.7766666666666666,
+      "answered_by": {
+       "tier 0": 0.22,
+       "tier 1": 0.0,
+       "system2": 0.78
+      },
+      "accuracy_by": {
+       "tier 0": 0.9242424242424242,
+       "tier 1": null,
+       "system2": 0.7350427350427351
+      },
+      "cost": 0.8170864862666666,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.19388696919902093,
+      "latency_ms_mean": 1253.341242,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 10,
+       "confident": 14,
+       "disagreement": 6,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 30,
+       "accuracy": 0.8666666666666667,
+       "low": 0.7339519336156454,
+       "high": 0.9387070030787406,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.7400177121162415,
+       "escalation_rate": 0.7706422018348624,
+       "previous_escalation_rate": 0.8226299694189603,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 28,
+       "accuracy": 0.9285714285714286,
+       "low": 0.8398587515228686,
+       "high": 0.9978023354962797,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1134,
+       "keep_rate": 0.164021164021164,
+       "net": 0.0004699444377425044,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7400177121162415,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6675392670157068,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.842925659472422
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 5,
+      "messages": 300,
+      "accuracy": 0.8033333333333333,
+      "answered_by": {
+       "tier 0": 0.2633333333333333,
+       "tier 1": 0.0,
+       "system2": 0.7366666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 0.8860759493670886,
+       "tier 1": null,
+       "system2": 0.7737556561085973
+      },
+      "cost": 0.7855830420666666,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.22496732276203824,
+      "latency_ms_mean": 1200.1240227777778,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 6,
+       "confident": 4,
+       "disagreement": 20,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 36,
+       "accuracy": 0.8333333333333334,
+       "low": 0.7087715919030049,
+       "high": 0.9112869132005288,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": 0.8095710277557373,
+       "escalation_rate": 0.875,
+       "previous_escalation_rate": 0.8293269230769231,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 29,
+       "accuracy": 0.9310344827586207,
+       "low": 0.8450172570379608,
+       "high": 0.9979160255100928,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1355,
+       "keep_rate": 0.15276752767527677,
+       "net": 0.00043192167158671586,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7501409649848938,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6429942418426103,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8559241706161137
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 6,
+      "messages": 300,
+      "accuracy": 0.8466666666666667,
+      "answered_by": {
+       "tier 0": 0.23,
+       "tier 1": 0.0,
+       "system2": 0.77
+      },
+      "accuracy_by": {
+       "tier 0": 0.9565217391304348,
+       "tier 1": null,
+       "system2": 0.8138528138528138
+      },
+      "cost": 0.8134550707333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.19746961489305048,
+      "latency_ms_mean": 1244.4865803333332,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 5,
+       "disagreement": 18,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 43,
+       "accuracy": 0.8604651162790697,
+       "low": 0.7521531279038721,
+       "high": 0.9260944335500061,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 31,
+       "accuracy": 0.9354838709677419,
+       "low": 0.854398553909769,
+       "high": 0.9981160986344615,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1586,
+       "keep_rate": 0.1450189155107188,
+       "net": 0.00040574136334594365,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7501409649848938,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6429942418426103,
+         "since": 0.77
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8639191290824261
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 7,
+      "messages": 300,
+      "accuracy": 0.7933333333333333,
+      "answered_by": {
+       "tier 0": 0.21,
+       "tier 1": 0.0,
+       "system2": 0.79
+      },
+      "accuracy_by": {
+       "tier 0": 0.9365079365079365,
+       "tier 1": null,
+       "system2": 0.7552742616033755
+      },
+      "cost": 0.8409901578,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.17030432350499125,
+      "latency_ms_mean": 1281.2849276666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 9,
+       "confident": 10,
+       "disagreement": 11,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 52,
+       "accuracy": 0.8653846153846154,
+       "low": 0.7692787492832346,
+       "high": 0.9253430953856113,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 37,
+       "accuracy": 0.9459459459459459,
+       "low": 0.8767794319842411,
+       "high": 0.998558483084274,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1823,
+       "keep_rate": 0.14207350521119033,
+       "net": 0.00039578967807643074,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7501409649848938,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6429942418426103,
+         "since": 0.78
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.866053841103086
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 8,
+      "messages": 300,
+      "accuracy": 0.7766666666666666,
+      "answered_by": {
+       "tier 0": 0.21,
+       "tier 1": 0.0,
+       "system2": 0.79
+      },
+      "accuracy_by": {
+       "tier 0": 0.9523809523809523,
+       "tier 1": null,
+       "system2": 0.729957805907173
+      },
+      "cost": 0.8308540298,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.18030432350499126,
+      "latency_ms_mean": 1271.7404156666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 11,
+       "confident": 8,
+       "disagreement": 11,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 63,
+       "accuracy": 0.8412698412698413,
+       "low": 0.7517364786339545,
+       "high": 0.9026936135836161,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 40,
+       "accuracy": 0.925,
+       "low": 0.8534185441169458,
+       "high": 0.9946825828000425,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2060,
+       "keep_rate": 0.13640776699029125,
+       "net": 0.0003766467954692556,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7501409649848938,
+      "drift": {
+       "0": {
+        "flags": [
+         "escalation_rate"
+        ],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6429942418426103,
+         "since": 0.7833333333333333
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8715909090909091
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 9,
+      "messages": 300,
+      "accuracy": 0.82,
+      "answered_by": {
+       "tier 0": 0.18333333333333332,
+       "tier 1": 0.0,
+       "system2": 0.8166666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 1.0,
+       "tier 1": null,
+       "system2": 0.7795918367346939
+      },
+      "cost": 0.861936297,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.1496394905431344,
+      "latency_ms_mean": 1315.502372111111,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 3,
+       "confident": 11,
+       "disagreement": 16,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 66,
+       "accuracy": 0.8484848484848485,
+       "low": 0.7622908024579494,
+       "high": 0.9072283554324976,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 46,
+       "accuracy": 0.9130434782608695,
+       "low": 0.844686389224965,
+       "high": 0.9900159957788583,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2305,
+       "keep_rate": 0.13579175704989155,
+       "net": 0.000374565476934201,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7501409649848938,
+      "drift": {
+       "0": {
+        "flags": [
+         "escalation_rate",
+         "change_escalation_rate"
+        ],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6429942418426103,
+         "since": 0.7916666666666666
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8713216957605985
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 10,
+      "messages": 300,
+      "accuracy": 0.8066666666666666,
+      "answered_by": {
+       "tier 0": 0.22666666666666666,
+       "tier 1": 0.0,
+       "system2": 0.7733333333333333
+      },
+      "accuracy_by": {
+       "tier 0": 0.9117647058823529,
+       "tier 1": null,
+       "system2": 0.7758620689655172
+      },
+      "cost": 0.8169180154666666,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.19405317743948514,
+      "latency_ms_mean": 1249.5591368888888,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 10,
+       "confident": 8,
+       "disagreement": 12,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 76,
+       "accuracy": 0.868421052631579,
+       "low": 0.7918083468681212,
+       "high": 0.9197000795833482,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 49,
+       "accuracy": 0.9183673469387755,
+       "low": 0.8537543522635124,
+       "high": 0.9908035650733297,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2537,
+       "keep_rate": 0.13401655498620418,
+       "net": 0.0003685675851530679,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7501409649848938,
+      "drift": {
+       "0": {
+        "flags": [
+         "escalation_rate",
+         "change_escalation_rate"
+        ],
+        "unchecked": [],
+        "escalation_rate": {
+         "at_calibration": 0.6429942418426103,
+         "since": 0.788
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8725972284309342
+        },
+        "baseline": null
+       }
+      }
+     }
+    ],
+    "router": {
+     "accuracy": 0.795,
+     "cost": 8.883473359133333,
+     "latency_ms_mean": 1338.1339597444444,
+     "labels": 300,
+     "recalibrated_on": [
+      [
+       1,
+       [
+        1
+       ]
+      ]
+     ]
+    },
+    "always_gpt-4o-mini": {
+     "accuracy": 0.69,
+     "cost": 0.2527062,
+     "latency_ms_mean": 567.3157666666667
+    },
+    "always_gpt-4.1": {
+     "accuracy": 0.7933333333333333,
+     "cost": 10.136128,
+     "latency_ms_mean": 954.4512
+    },
+    "per_call": {
+     "cost": {
+      "gpt-4o-mini": 8.42354e-05,
+      "gpt-4.1": 0.0033787093333333333
+     },
+     "latency_ms": {
+      "gpt-4o-mini": 567.3157666666667,
+      "gpt-4.1": 954.4512
+     }
+    }
+   },
+   "seed_1": {
+    "days": [
+     {
+      "day": 1,
+      "messages": 300,
+      "accuracy": 0.7833333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7833333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 4,
+       "confident": 14,
+       "disagreement": 12,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 4,
+       "accuracy": 0.75,
+       "low": 0.35613990556206576,
+       "high": 0.9420993643482015,
+       "target": null,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 3,
+       "accuracy": 1.0,
+       "low": 0.6467747499137634,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 300,
+       "keep_rate": 0.17666666666666667,
+       "net": 0.0005126699155555555,
+       "skipped": false
+      },
+      "calibrated": {
+       "1": {
+        "threshold": 0.9999999989429422,
+        "trusted_accuracy": 1.0,
+        "escalation_rate": 0.8233333333333334,
+        "reason": "not enough labels",
+        "best_target": 0.969921875,
+        "graded_by": {
+         "human": 3,
+         "system2": 50
+        },
+        "label_check": {
+         "graded": 3,
+         "accuracy": 1.0,
+         "low": 0.6467747499137634,
+         "high": 1.0,
+         "ruled_out": false,
+         "confirmed": false
+        }
+       }
+      },
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 1.0,
+         "since": 1.0
+        },
+        "baseline": {
+         "answers": 30
+        }
+       }
+      }
+     },
+     {
+      "day": 2,
+      "messages": 300,
+      "accuracy": 0.78,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.78
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 10,
+       "confident": 3,
+       "disagreement": 17,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 14,
+       "accuracy": 0.8571428571428571,
+       "low": 0.647040986720709,
+       "high": 0.9515454514056555,
+       "target": 0.95,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 7,
+       "accuracy": 1.0,
+       "low": 0.8103352472680125,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 600,
+       "keep_rate": 0.175,
+       "net": 0.0005070387333333333,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8266666666666667
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 3,
+      "messages": 300,
+      "accuracy": 0.7633333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7633333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 2,
+       "disagreement": 21,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 21,
+       "accuracy": 0.8095238095238095,
+       "low": 0.636898093062668,
+       "high": 0.9114857038834671,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.6316487193107605,
+       "escalation_rate": 0.7132075471698114,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 10,
+       "accuracy": 0.9,
+       "low": 0.7178303480809901,
+       "high": 0.9995435831173225,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 900,
+       "keep_rate": 0.16333333333333333,
+       "net": 0.0004676204577777778,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.6316487193107605,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7169811320754716,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8433333333333334
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 4,
+      "messages": 300,
+      "accuracy": 0.7733333333333333,
+      "answered_by": {
+       "tier 0": 0.31333333333333335,
+       "tier 1": 0.0,
+       "system2": 0.6866666666666666
+      },
+      "accuracy_by": {
+       "tier 0": 0.8297872340425532,
+       "tier 1": null,
+       "system2": 0.7475728155339806
+      },
+      "cost": 0.7471537084000001,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.26288055123218645,
+      "latency_ms_mean": 1136.7616904444444,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 8,
+       "confident": 7,
+       "disagreement": 15,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 29,
+       "accuracy": 0.8275862068965517,
+       "low": 0.6857870742902284,
+       "high": 0.9134681145894876,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.7598554491996765,
+       "escalation_rate": 0.8306878306878307,
+       "previous_escalation_rate": 0.9047619047619048,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 11,
+       "accuracy": 0.9090909090909091,
+       "low": 0.7397551407220951,
+       "high": 0.9996197688350666,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1106,
+       "keep_rate": 0.1609403254972875,
+       "net": 0.00045953517986738993,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7598554491996765,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7391304347826086,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8449131513647643
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 5,
+      "messages": 300,
+      "accuracy": 0.8066666666666666,
+      "answered_by": {
+       "tier 0": 0.23,
+       "tier 1": 0.0,
+       "system2": 0.77
+      },
+      "accuracy_by": {
+       "tier 0": 0.927536231884058,
+       "tier 1": null,
+       "system2": 0.7705627705627706
+      },
+      "cost": 0.8202124894,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.19080294822638388,
+      "latency_ms_mean": 1250.8495883333333,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 10,
+       "disagreement": 13,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 36,
+       "accuracy": 0.8333333333333334,
+       "low": 0.7087715919030049,
+       "high": 0.9112869132005288,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 12,
+       "accuracy": 0.9166666666666666,
+       "low": 0.7585277788146141,
+       "high": 0.9996783509688766,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1337,
+       "keep_rate": 0.14659685863874344,
+       "net": 0.0004110727745200698,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7598554491996765,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7391304347826086,
+         "since": 0.77
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8621022179363549
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 6,
+      "messages": 300,
+      "accuracy": 0.85,
+      "answered_by": {
+       "tier 0": 0.17,
+       "tier 1": 0.0,
+       "system2": 0.83
+      },
+      "accuracy_by": {
+       "tier 0": 0.9803921568627451,
+       "tier 1": null,
+       "system2": 0.8232931726907631
+      },
+      "cost": 0.8724093666,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.139307074062206,
+      "latency_ms_mean": 1332.6110943333333,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 1,
+       "confident": 7,
+       "disagreement": 22,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 37,
+       "accuracy": 0.8378378378378378,
+       "low": 0.7158715025643969,
+       "high": 0.9137558650706156,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 16,
+       "accuracy": 0.9375,
+       "low": 0.8126345158461882,
+       "high": 0.9998156674503813,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1586,
+       "keep_rate": 0.13997477931904162,
+       "net": 0.0003886986933165196,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7598554491996765,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7391304347826086,
+         "since": 0.8
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8685847589424572
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 7,
+      "messages": 300,
+      "accuracy": 0.79,
+      "answered_by": {
+       "tier 0": 0.18333333333333332,
+       "tier 1": 0.0,
+       "system2": 0.8166666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 0.9454545454545454,
+       "tier 1": null,
+       "system2": 0.7551020408163265
+      },
+      "cost": 0.8585575876666667,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.1529728238764677,
+      "latency_ms_mean": 1312.320868111111,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 5,
+       "confident": 7,
+       "disagreement": 18,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 42,
+       "accuracy": 0.8095238095238095,
+       "low": 0.6923795610974618,
+       "high": 0.889197530580897,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 18,
+       "accuracy": 0.9444444444444444,
+       "low": 0.8315213195999148,
+       "high": 0.9998534364224493,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1831,
+       "keep_rate": 0.1332605133806663,
+       "net": 0.0003660131403240488,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7598554491996765,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7391304347826086,
+         "since": 0.8055555555555556
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8752449379490529
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 8,
+      "messages": 300,
+      "accuracy": 0.7766666666666666,
+      "answered_by": {
+       "tier 0": 0.17333333333333334,
+       "tier 1": 0.0,
+       "system2": 0.8266666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 0.9615384615384616,
+       "tier 1": null,
+       "system2": 0.7379032258064516
+      },
+      "cost": 0.8655677125333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.14605684484910475,
+      "latency_ms_mean": 1324.3570337777778,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 8,
+       "confident": 4,
+       "disagreement": 18,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 50,
+       "accuracy": 0.82,
+       "low": 0.7149817674172658,
+       "high": 0.8921594465141585,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 19,
+       "accuracy": 0.8947368421052632,
+       "low": 0.7714286438605348,
+       "high": 0.9960454306552354,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2079,
+       "keep_rate": 0.12698412698412698,
+       "net": 0.000344807055026455,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7598554491996765,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7391304347826086,
+         "since": 0.8108333333333333
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8813940415964024
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 9,
+      "messages": 300,
+      "accuracy": 0.82,
+      "answered_by": {
+       "tier 0": 0.13333333333333333,
+       "tier 1": 0.0,
+       "system2": 0.8666666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 1.0,
+       "tier 1": null,
+       "system2": 0.7923076923076923
+      },
+      "cost": 0.9071230493333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.10505959540631948,
+      "latency_ms_mean": 1385.2277124444445,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 4,
+       "confident": 8,
+       "disagreement": 18,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 54,
+       "accuracy": 0.8333333333333334,
+       "low": 0.7344757864389736,
+       "high": 0.9003773883339011,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 27,
+       "accuracy": 0.9259259259259259,
+       "low": 0.8343454968857058,
+       "high": 0.997677943456694,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2339,
+       "keep_rate": 0.12654980761008977,
+       "net": 0.000343339616103748,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7598554491996765,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7391304347826086,
+         "since": 0.822
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8808239333006376
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 10,
+      "messages": 300,
+      "accuracy": 0.81,
+      "answered_by": {
+       "tier 0": 0.17333333333333334,
+       "tier 1": 0.0,
+       "system2": 0.8266666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 0.9807692307692307,
+       "tier 1": null,
+       "system2": 0.7741935483870968
+      },
+      "cost": 0.8689464218666667,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.14272351151577134,
+      "latency_ms_mean": 1327.5385377777777,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 9,
+       "confident": 4,
+       "disagreement": 17,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 63,
+       "accuracy": 0.8412698412698413,
+       "low": 0.7517364786339545,
+       "high": 0.9026936135836161,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 27,
+       "accuracy": 0.9259259259259259,
+       "low": 0.8343454968857058,
+       "high": 0.997677943456694,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2587,
+       "keep_rate": 0.12176265945110167,
+       "net": 0.00032716523393892544,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7598554491996765,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7391304347826086,
+         "since": 0.8227777777777778
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8854394403148229
+        },
+        "baseline": null
+       }
+      }
+     }
+    ],
+    "router": {
+     "accuracy": 0.7953333333333333,
+     "cost": 9.0566205958,
+     "latency_ms_mean": 1363.4967425222221,
+     "labels": 300,
+     "recalibrated_on": [
+      [
+       1,
+       [
+        1
+       ]
+      ]
+     ]
+    },
+    "always_gpt-4o-mini": {
+     "accuracy": 0.69,
+     "cost": 0.2527062,
+     "latency_ms_mean": 567.3157666666667
+    },
+    "always_gpt-4.1": {
+     "accuracy": 0.7933333333333333,
+     "cost": 10.136128,
+     "latency_ms_mean": 954.4512
+    },
+    "per_call": {
+     "cost": {
+      "gpt-4o-mini": 8.42354e-05,
+      "gpt-4.1": 0.0033787093333333333
+     },
+     "latency_ms": {
+      "gpt-4o-mini": 567.3157666666667,
+      "gpt-4.1": 954.4512
+     }
+    }
+   },
+   "seed_2": {
+    "days": [
+     {
+      "day": 1,
+      "messages": 300,
+      "accuracy": 0.7833333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7833333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 8,
+       "confident": 16,
+       "disagreement": 6,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 8,
+       "accuracy": 1.0,
+       "low": 0.7472427908584185,
+       "high": 1.0,
+       "target": null,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 6,
+       "accuracy": 1.0,
+       "low": 0.7855048177628822,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 300,
+       "keep_rate": 0.18333333333333332,
+       "net": 0.0005351946444444443,
+       "skipped": false
+      },
+      "calibrated": {
+       "1": {
+        "threshold": 0.9999999987682839,
+        "trusted_accuracy": 1.0,
+        "escalation_rate": 0.8166666666666667,
+        "reason": "not enough labels",
+        "best_target": 0.9709960937500001,
+        "graded_by": {
+         "human": 6,
+         "system2": 49
+        },
+        "label_check": {
+         "graded": 6,
+         "accuracy": 1.0,
+         "low": 0.7855048177628822,
+         "high": 1.0,
+         "ruled_out": false,
+         "confirmed": false
+        }
+       }
+      },
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 1.0,
+         "since": 1.0
+        },
+        "baseline": {
+         "answers": 30
+        }
+       }
+      }
+     },
+     {
+      "day": 2,
+      "messages": 300,
+      "accuracy": 0.78,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.78
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 6,
+       "confident": 4,
+       "disagreement": 20,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 14,
+       "accuracy": 0.8571428571428571,
+       "low": 0.647040986720709,
+       "high": 0.9515454514056555,
+       "target": 0.95,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 10,
+       "accuracy": 1.0,
+       "low": 0.8592246356887545,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 600,
+       "keep_rate": 0.18,
+       "net": 0.0005239322799999999,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8233333333333334
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 3,
+      "messages": 300,
+      "accuracy": 0.7633333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7633333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 1,
+       "disagreement": 22,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 21,
+       "accuracy": 0.9047619047619048,
+       "low": 0.749147796549716,
+       "high": 0.9679694763798452,
+       "target": 0.95,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 12,
+       "accuracy": 1.0,
+       "low": 0.8798686062881276,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 900,
+       "keep_rate": 0.1711111111111111,
+       "net": 0.0004938993081481481,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.835
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 4,
+      "messages": 300,
+      "accuracy": 0.77,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.77
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 5,
+       "confident": 3,
+       "disagreement": 22,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 26,
+       "accuracy": 0.8461538461538461,
+       "low": 0.6980406212350325,
+       "high": 0.9290054431364714,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.8248436450958252,
+       "escalation_rate": 0.8753387533875339,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 16,
+       "accuracy": 1.0,
+       "low": 0.9071117561683598,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1200,
+       "keep_rate": 0.17,
+       "net": 0.0004901451866666667,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8248436450958252,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8753387533875339,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8344444444444444
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 5,
+      "messages": 300,
+      "accuracy": 0.8,
+      "answered_by": {
+       "tier 0": 0.14,
+       "tier 1": 0.0,
+       "system2": 0.86
+      },
+      "accuracy_by": {
+       "tier 0": 0.9285714285714286,
+       "tier 1": null,
+       "system2": 0.7790697674418605
+      },
+      "cost": 0.9035758692,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.1085591369801171,
+      "latency_ms_mean": 1378.2641033333332,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 5,
+       "confident": 12,
+       "disagreement": 13,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 31,
+       "accuracy": 0.8709677419354839,
+       "low": 0.7416390851559354,
+       "high": 0.9407314999249219,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 20,
+       "accuracy": 0.95,
+       "low": 0.8469524479283127,
+       "high": 0.9998806821731008,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1458,
+       "keep_rate": 0.16255144032921812,
+       "net": 0.0004649786685871056,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8248436450958252,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8753387533875339,
+         "since": 0.86
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.842832469775475
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 6,
+      "messages": 300,
+      "accuracy": 0.85,
+      "answered_by": {
+       "tier 0": 0.12333333333333334,
+       "tier 1": 0.0,
+       "system2": 0.8766666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 0.972972972972973,
+       "tier 1": null,
+       "system2": 0.8326996197718631
+      },
+      "cost": 0.9107544648666667,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.10147694971228982,
+      "latency_ms_mean": 1394.082374111111,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 11,
+       "confident": 5,
+       "disagreement": 14,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 42,
+       "accuracy": 0.8809523809523809,
+       "low": 0.774949417751772,
+       "high": 0.9408377720062081,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 23,
+       "accuracy": 0.9565217391304348,
+       "low": 0.865442581674173,
+       "high": 0.9999092392371024,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1721,
+       "keep_rate": 0.15398024404416036,
+       "net": 0.000436019087700949,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8248436450958252,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8753387533875339,
+         "since": 0.8683333333333333
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8522167487684729
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 7,
+      "messages": 300,
+      "accuracy": 0.79,
+      "answered_by": {
+       "tier 0": 0.1,
+       "tier 1": 0.0,
+       "system2": 0.9
+      },
+      "accuracy_by": {
+       "tier 0": 1.0,
+       "tier 1": null,
+       "system2": 0.7666666666666667
+      },
+      "cost": 0.945131206,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.06756188753733183,
+      "latency_ms_mean": 1439.1347819999999,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 4,
+       "confident": 7,
+       "disagreement": 19,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 46,
+       "accuracy": 0.8913043478260869,
+       "low": 0.7930450037032384,
+       "high": 0.9460832663619126,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 28,
+       "accuracy": 0.9285714285714286,
+       "low": 0.8398587515228686,
+       "high": 0.9978023354962797,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 1991,
+       "keep_rate": 0.15067805123053743,
+       "net": 0.00042486193802109494,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8248436450958252,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8753387533875339,
+         "since": 0.8788888888888889
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8551153163808397
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 8,
+      "messages": 300,
+      "accuracy": 0.7766666666666666,
+      "answered_by": {
+       "tier 0": 0.12,
+       "tier 1": 0.0,
+       "system2": 0.88
+      },
+      "accuracy_by": {
+       "tier 0": 0.9444444444444444,
+       "tier 1": null,
+       "system2": 0.7537878787878788
+      },
+      "cost": 0.9243535376,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.08806051225872435,
+      "latency_ms_mean": 1408.6994426666665,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 11,
+       "confident": 10,
+       "disagreement": 9,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 57,
+       "accuracy": 0.8947368421052632,
+       "low": 0.8091066877922218,
+       "high": 0.9445860927939921,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 32,
+       "accuracy": 0.9375,
+       "low": 0.8586762050322693,
+       "high": 0.9982044620400689,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2255,
+       "keep_rate": 0.14368070953436807,
+       "net": 0.00040121995432372505,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8248436450958252,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8753387533875339,
+         "since": 0.8791666666666667
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8624040920716113
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 9,
+      "messages": 300,
+      "accuracy": 0.82,
+      "answered_by": {
+       "tier 0": 0.09,
+       "tier 1": 0.0,
+       "system2": 0.91
+      },
+      "accuracy_by": {
+       "tier 0": 1.0,
+       "tier 1": null,
+       "system2": 0.8021978021978022
+      },
+      "cost": 0.9588987495333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.05397924184330216,
+      "latency_ms_mean": 1457.5339556666665,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 5,
+       "confident": 1,
+       "disagreement": 24,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 62,
+       "accuracy": 0.8709677419354839,
+       "low": 0.7851645666796673,
+       "high": 0.9257429570014737,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 33,
+       "accuracy": 0.9090909090909091,
+       "low": 0.8242922302628561,
+       "high": 0.9930755946178599,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2528,
+       "keep_rate": 0.14161392405063292,
+       "net": 0.00039423688691983126,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8248436450958252,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8753387533875339,
+         "since": 0.8853333333333333
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8640035906642729
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 10,
+      "messages": 300,
+      "accuracy": 0.8066666666666666,
+      "answered_by": {
+       "tier 0": 0.10333333333333333,
+       "tier 1": 0.0,
+       "system2": 0.8966666666666666
+      },
+      "accuracy_by": {
+       "tier 0": 0.9354838709677419,
+       "tier 1": null,
+       "system2": 0.79182156133829
+      },
+      "cost": 0.9315321332666667,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.08097832499089719,
+      "latency_ms_mean": 1424.5177134444443,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 4,
+       "confident": 4,
+       "disagreement": 22,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 66,
+       "accuracy": 0.8787878787878788,
+       "low": 0.7974017543508154,
+       "high": 0.9303364607474967,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 35,
+       "accuracy": 0.9142857142857143,
+       "low": 0.833730170869592,
+       "high": 0.9936134493201362,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 2797,
+       "keep_rate": 0.1401501608866643,
+       "net": 0.0003892912566559409,
+       "skipped": false
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8248436450958252,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8753387533875339,
+         "since": 0.8872222222222222
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8650380456547857
+        },
+        "baseline": null
+       }
+      }
+     }
+    ],
+    "router": {
+     "accuracy": 0.794,
+     "cost": 9.729779640466667,
+     "latency_ms_mean": 1458.9300237888888,
+     "labels": 300,
+     "recalibrated_on": [
+      [
+       1,
+       [
+        1
+       ]
+      ]
+     ]
+    },
+    "always_gpt-4o-mini": {
+     "accuracy": 0.69,
+     "cost": 0.2527062,
+     "latency_ms_mean": 567.3157666666667
+    },
+    "always_gpt-4.1": {
+     "accuracy": 0.7933333333333333,
+     "cost": 10.136128,
+     "latency_ms_mean": 954.4512
+    },
+    "per_call": {
+     "cost": {
+      "gpt-4o-mini": 8.42354e-05,
+      "gpt-4.1": 0.0033787093333333333
+     },
+     "latency_ms": {
+      "gpt-4o-mini": 567.3157666666667,
+      "gpt-4.1": 954.4512
+     }
+    }
+   }
+  },
+  "waiting_0.01_per_second": {
+   "seed_0": {
+    "days": [
+     {
+      "day": 1,
+      "messages": 300,
+      "accuracy": 0.7833333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7833333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 6,
+       "confident": 24,
+       "disagreement": 0,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 6,
+       "accuracy": 0.8333333333333334,
+       "low": 0.4975531352299733,
+       "high": 0.9618987960475042,
+       "target": null,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 5,
+       "accuracy": 1.0,
+       "low": 0.7531935406121957,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 300,
+       "keep_rate": 0.18333333333333332,
+       "net": -0.003388135822222223,
+       "skipped": true
+      },
+      "calibrated": {
+       "1": {
+        "threshold": 0.9999999987682839,
+        "trusted_accuracy": 1.0,
+        "escalation_rate": 0.8166666666666667,
+        "reason": "not enough labels",
+        "best_target": 0.9709960937500001,
+        "graded_by": {
+         "human": 5,
+         "system2": 50
+        },
+        "label_check": {
+         "graded": 5,
+         "accuracy": 1.0,
+         "low": 0.7531935406121957,
+         "high": 1.0,
+         "ruled_out": false,
+         "confirmed": false
+        }
+       }
+      },
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 1.0,
+         "since": 1.0
+        },
+        "baseline": {
+         "answers": 30
+        }
+       }
+      }
+     },
+     {
+      "day": 2,
+      "messages": 300,
+      "accuracy": 0.78,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.78
+      },
+      "cost": 1.0152132726,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.0015789782844100042,
+      "latency_ms_mean": 990.3811985555556,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 2,
+       "disagreement": 21,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 13,
+       "accuracy": 0.8461538461538461,
+       "low": 0.6253142310263194,
+       "high": 0.9477142723664868,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 7,
+       "accuracy": 1.0,
+       "low": 0.8103352472680125,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 319,
+       "keep_rate": 0.18495297805642633,
+       "net": -0.0033672047949843266,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.7894736842105263
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 3,
+      "messages": 300,
+      "accuracy": 0.7633333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7633333333333333
+      },
+      "cost": 1.0153817433999999,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.0017451865248740983,
+      "latency_ms_mean": 994.1633036666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 1,
+       "disagreement": 22,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 20,
+       "accuracy": 0.85,
+       "low": 0.6781541387069472,
+       "high": 0.938422298604295,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.7143719792366028,
+       "escalation_rate": 0.7821011673151751,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 8,
+       "accuracy": 1.0,
+       "low": 0.8300132802124833,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 340,
+       "keep_rate": 0.19117647058823528,
+       "net": -0.0032867772235294127,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7143719792366028,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7821011673151751,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.75
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 4,
+      "messages": 300,
+      "accuracy": 0.7733333333333333,
+      "answered_by": {
+       "tier 0": 0.21333333333333335,
+       "tier 1": 0.0,
+       "system2": 0.7866666666666666
+      },
+      "accuracy_by": {
+       "tier 0": 0.921875,
+       "tier 1": null,
+       "system2": 0.7330508474576272
+      },
+      "cost": 0.8122380064,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.19867033407628631,
+      "latency_ms_mean": 853.8178008888889,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 10,
+       "confident": 6,
+       "disagreement": 14,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 30,
+       "accuracy": 0.8666666666666667,
+       "low": 0.7339519336156454,
+       "high": 0.9387070030787406,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.8163815140724182,
+       "escalation_rate": 0.8793103448275862,
+       "previous_escalation_rate": 0.896551724137931,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 8,
+       "accuracy": 1.0,
+       "low": 0.8300132802124833,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 356,
+       "keep_rate": 0.19101123595505617,
+       "net": -0.0032889125872659184,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8163815140724182,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8052631578947368,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.7678571428571429
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 5,
+      "messages": 300,
+      "accuracy": 0.8,
+      "answered_by": {
+       "tier 0": 0.14333333333333334,
+       "tier 1": 0.0,
+       "system2": 0.8566666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 0.9069767441860465,
+       "tier 1": null,
+       "system2": 0.7821011673151751
+      },
+      "cost": 0.8770231315333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.1347552719013283,
+      "latency_ms_mean": 927.5037447777778,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 6,
+       "confident": 2,
+       "disagreement": 22,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 36,
+       "accuracy": 0.8333333333333334,
+       "low": 0.7087715919030049,
+       "high": 0.9112869132005288,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": 0.9018691588785047,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 9,
+       "accuracy": 1.0,
+       "low": 0.8459918784779665,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 379,
+       "keep_rate": 0.1820580474934037,
+       "net": -0.0034046166233948996,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8163815140724182,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7751004016064257,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8227848101265823
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 6,
+      "messages": 300,
+      "accuracy": 0.8466666666666667,
+      "answered_by": {
+       "tier 0": 0.13666666666666666,
+       "tier 1": 0.0,
+       "system2": 0.8633333333333333
+      },
+      "accuracy_by": {
+       "tier 0": 0.9512195121951219,
+       "tier 1": null,
+       "system2": 0.8301158301158301
+      },
+      "cost": 0.8798964284666667,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.1319205632893875,
+      "latency_ms_mean": 919.3389334444444,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 4,
+       "disagreement": 19,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 43,
+       "accuracy": 0.8604651162790697,
+       "low": 0.7521531279038721,
+       "high": 0.9260944335500061,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 9,
+       "accuracy": 1.0,
+       "low": 0.8459918784779665,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 396,
+       "keep_rate": 0.17676767676767677,
+       "net": -0.003472985255218856,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8163815140724182,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7751004016064257,
+         "since": 0.8633333333333333
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.84375
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 7,
+      "messages": 300,
+      "accuracy": 0.79,
+      "answered_by": {
+       "tier 0": 0.12,
+       "tier 1": 0.0,
+       "system2": 0.88
+      },
+      "accuracy_by": {
+       "tier 0": 0.9444444444444444,
+       "tier 1": null,
+       "system2": 0.7689393939393939
+      },
+      "cost": 0.8999159782666666,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.11216987565008396,
+      "latency_ms_mean": 932.7547997777777,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 9,
+       "confident": 3,
+       "disagreement": 18,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 52,
+       "accuracy": 0.8653846153846154,
+       "low": 0.7692787492832346,
+       "high": 0.9253430953856113,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 9,
+       "accuracy": 1.0,
+       "low": 0.8459918784779665,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 410,
+       "keep_rate": 0.17560975609756097,
+       "net": -0.003487949320325204,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8163815140724182,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7751004016064257,
+         "since": 0.8716666666666667
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8454545454545455
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 8,
+      "messages": 300,
+      "accuracy": 0.7766666666666666,
+      "answered_by": {
+       "tier 0": 0.13,
+       "tier 1": 0.0,
+       "system2": 0.87
+      },
+      "accuracy_by": {
+       "tier 0": 0.9230769230769231,
+       "tier 1": null,
+       "system2": 0.7547892720306514
+      },
+      "cost": 0.8864853763333334,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.1254201048631851,
+      "latency_ms_mean": 921.9198363333333,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 11,
+       "confident": 2,
+       "disagreement": 17,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 63,
+       "accuracy": 0.8412698412698413,
+       "low": 0.7517364786339545,
+       "high": 0.9026936135836161,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 9,
+       "accuracy": 1.0,
+       "low": 0.8459918784779665,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 425,
+       "keep_rate": 0.16941176470588235,
+       "net": -0.0035680473349019616,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8163815140724182,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7751004016064257,
+         "since": 0.8711111111111111
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.864
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 9,
+      "messages": 300,
+      "accuracy": 0.82,
+      "answered_by": {
+       "tier 0": 0.11,
+       "tier 1": 0.0,
+       "system2": 0.89
+      },
+      "accuracy_by": {
+       "tier 0": 1.0,
+       "tier 1": null,
+       "system2": 0.797752808988764
+      },
+      "cost": 0.913093874,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.09916895879767895,
+      "latency_ms_mean": 937.9166055555555,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 3,
+       "confident": 3,
+       "disagreement": 24,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 66,
+       "accuracy": 0.8484848484848485,
+       "low": 0.7622908024579494,
+       "high": 0.9072283554324976,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 10,
+       "accuracy": 1.0,
+       "low": 0.8592246356887545,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 435,
+       "keep_rate": 0.167816091954023,
+       "net": -0.003588668567049809,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8163815140724182,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7751004016064257,
+         "since": 0.8758333333333334
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8666666666666667
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 10,
+      "messages": 300,
+      "accuracy": 0.81,
+      "answered_by": {
+       "tier 0": 0.12666666666666668,
+       "tier 1": 0.0,
+       "system2": 0.8733333333333333
+      },
+      "accuracy_by": {
+       "tier 0": 0.9736842105263158,
+       "tier 1": null,
+       "system2": 0.7862595419847328
+      },
+      "cost": 0.8899483210666667,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.12200366740961965,
+      "latency_ms_mean": 926.9923928888888,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 10,
+       "confident": 3,
+       "disagreement": 17,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 76,
+       "accuracy": 0.868421052631579,
+       "low": 0.7918083468681212,
+       "high": 0.9197000795833482,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 10,
+       "accuracy": 1.0,
+       "low": 0.8592246356887545,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 451,
+       "keep_rate": 0.164079822616408,
+       "net": -0.0036369532026607546,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8163815140724182,
+      "drift": {
+       "0": {
+        "flags": [
+         "escalation_rate",
+         "change_escalation_rate"
+        ],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7751004016064257,
+         "since": 0.8753333333333333
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8741721854304636
+        },
+        "baseline": null
+       }
+      }
+     }
+    ],
+    "router": {
+     "accuracy": 0.7943333333333333,
+     "cost": 9.228079552066667,
+     "latency_ms_mean": 992.6555582555555,
+     "labels": 300,
+     "recalibrated_on": [
+      [
+       1,
+       [
+        1
+       ]
+      ]
+     ]
+    },
+    "always_gpt-4o-mini": {
+     "accuracy": 0.69,
+     "cost": 0.2527062,
+     "latency_ms_mean": 567.3157666666667
+    },
+    "always_gpt-4.1": {
+     "accuracy": 0.7933333333333333,
+     "cost": 10.136128,
+     "latency_ms_mean": 954.4512
+    },
+    "per_call": {
+     "cost": {
+      "gpt-4o-mini": 8.42354e-05,
+      "gpt-4.1": 0.0033787093333333333
+     },
+     "latency_ms": {
+      "gpt-4o-mini": 567.3157666666667,
+      "gpt-4.1": 954.4512
+     }
+    }
+   },
+   "seed_1": {
+    "days": [
+     {
+      "day": 1,
+      "messages": 300,
+      "accuracy": 0.7833333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7833333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 4,
+       "confident": 14,
+       "disagreement": 12,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 4,
+       "accuracy": 0.75,
+       "low": 0.35613990556206576,
+       "high": 0.9420993643482015,
+       "target": null,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 3,
+       "accuracy": 1.0,
+       "low": 0.6467747499137634,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 300,
+       "keep_rate": 0.17666666666666667,
+       "net": -0.003474290631111112,
+       "skipped": true
+      },
+      "calibrated": {
+       "1": {
+        "threshold": 0.9999999989429422,
+        "trusted_accuracy": 1.0,
+        "escalation_rate": 0.8233333333333334,
+        "reason": "not enough labels",
+        "best_target": 0.969921875,
+        "graded_by": {
+         "human": 3,
+         "system2": 50
+        },
+        "label_check": {
+         "graded": 3,
+         "accuracy": 1.0,
+         "low": 0.6467747499137634,
+         "high": 1.0,
+         "ruled_out": false,
+         "confirmed": false
+        }
+       }
+      },
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 1.0,
+         "since": 1.0
+        },
+        "baseline": {
+         "answers": 30
+        }
+       }
+      }
+     },
+     {
+      "day": 2,
+      "messages": 300,
+      "accuracy": 0.78,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.78
+      },
+      "cost": 1.0156344496,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.0019944988855704615,
+      "latency_ms_mean": 999.8364613333333,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 10,
+       "confident": 0,
+       "disagreement": 20,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 14,
+       "accuracy": 0.8571428571428571,
+       "low": 0.647040986720709,
+       "high": 0.9515454514056555,
+       "target": 0.95,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 3,
+       "accuracy": 1.0,
+       "low": 0.6467747499137634,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 324,
+       "keep_rate": 0.1728395061728395,
+       "net": -0.0035237498732510297,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.875
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 3,
+      "messages": 300,
+      "accuracy": 0.7633333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7633333333333333
+      },
+      "cost": 1.0147078602,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.0010803535630172778,
+      "latency_ms_mean": 979.0348832222222,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 0,
+       "disagreement": 23,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 21,
+       "accuracy": 0.8095238095238095,
+       "low": 0.636898093062668,
+       "high": 0.9114857038834671,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.6330012083053589,
+       "escalation_rate": 0.7132075471698114,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 3,
+       "accuracy": 1.0,
+       "low": 0.6467747499137634,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 337,
+       "keep_rate": 0.16913946587537093,
+       "net": -0.0035715663129574685,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.6330012083053589,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7169811320754716,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8918918918918919
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 4,
+      "messages": 300,
+      "accuracy": 0.7733333333333333,
+      "answered_by": {
+       "tier 0": 0.31666666666666665,
+       "tier 1": 0.0,
+       "system2": 0.6833333333333333
+      },
+      "accuracy_by": {
+       "tier 0": 0.8315789473684211,
+       "tier 1": null,
+       "system2": 0.7463414634146341
+      },
+      "cost": 0.7036981307333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.30575252134411357,
+      "latency_ms_mean": 742.5544101111111,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 8,
+       "confident": 7,
+       "disagreement": 15,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 29,
+       "accuracy": 0.8275862068965517,
+       "low": 0.6857870742902284,
+       "high": 0.9134681145894876,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": 0.8170875310897827,
+       "escalation_rate": 0.8757396449704142,
+       "previous_escalation_rate": 0.7662721893491125,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 3,
+       "accuracy": 1.0,
+       "low": 0.6467747499137634,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 348,
+       "keep_rate": 0.16379310344827586,
+       "net": -0.0036406585379310354,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.6241191625595093,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6220095693779905,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.9166666666666666
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 5,
+      "messages": 300,
+      "accuracy": 0.8066666666666666,
+      "answered_by": {
+       "tier 0": 0.33,
+       "tier 1": 0.0,
+       "system2": 0.67
+      },
+      "accuracy_by": {
+       "tier 0": 0.8484848484848485,
+       "tier 1": null,
+       "system2": 0.7860696517412935
+      },
+      "cost": 0.7001509506,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.3092520629179111,
+      "latency_ms_mean": 735.5908009999999,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 10,
+       "disagreement": 13,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 36,
+       "accuracy": 0.8333333333333334,
+       "low": 0.7087715919030049,
+       "high": 0.9112869132005288,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": 0.8891402714932126,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 3,
+       "accuracy": 1.0,
+       "low": 0.6467747499137634,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 357,
+       "keep_rate": 0.15966386554621848,
+       "net": -0.003694021593277312,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7700976133346558,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.9298245614035088
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 6,
+      "messages": 300,
+      "accuracy": 0.85,
+      "answered_by": {
+       "tier 0": 0.1,
+       "tier 1": 0.0,
+       "system2": 0.9
+      },
+      "accuracy_by": {
+       "tier 0": 1.0,
+       "tier 1": null,
+       "system2": 0.8333333333333334
+      },
+      "cost": 0.9164725833333334,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.09583562546434554,
+      "latency_ms_mean": 941.0981095555555,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 1,
+       "confident": 2,
+       "disagreement": 27,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 37,
+       "accuracy": 0.8378378378378378,
+       "low": 0.7158715025643969,
+       "high": 0.9137558650706156,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": 0.9021113243761996,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 3,
+       "accuracy": 1.0,
+       "low": 0.6467747499137634,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 367,
+       "keep_rate": 0.16076294277929154,
+       "net": -0.003679817974931881,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7700976133346558,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7883755588673621,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.9104477611940298
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 7,
+      "messages": 300,
+      "accuracy": 0.79,
+      "answered_by": {
+       "tier 0": 0.10666666666666667,
+       "tier 1": 0.0,
+       "system2": 0.8933333333333333
+      },
+      "accuracy_by": {
+       "tier 0": 0.96875,
+       "tier 1": null,
+       "system2": 0.7686567164179104
+      },
+      "cost": 0.9106417540666667,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.10158814680845907,
+      "latency_ms_mean": 955.5366796666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 5,
+       "confident": 5,
+       "disagreement": 20,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 42,
+       "accuracy": 0.8095238095238095,
+       "low": 0.6923795610974618,
+       "high": 0.889197530580897,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 4,
+       "accuracy": 1.0,
+       "low": 0.7094211123723042,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 388,
+       "keep_rate": 0.15979381443298968,
+       "net": -0.003692342235051547,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7700976133346558,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7883755588673621,
+         "since": 0.8933333333333333
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8977272727272727
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 8,
+      "messages": 300,
+      "accuracy": 0.7766666666666666,
+      "answered_by": {
+       "tier 0": 0.11,
+       "tier 1": 0.0,
+       "system2": 0.89
+      },
+      "accuracy_by": {
+       "tier 0": 0.9696969696969697,
+       "tier 1": null,
+       "system2": 0.7528089887640449
+      },
+      "cost": 0.9032946876,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.10883654231675055,
+      "latency_ms_mean": 935.9363037777778,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 8,
+       "confident": 1,
+       "disagreement": 21,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 50,
+       "accuracy": 0.82,
+       "low": 0.7149817674172658,
+       "high": 0.8921594465141585,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 4,
+       "accuracy": 1.0,
+       "low": 0.7094211123723042,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 402,
+       "keep_rate": 0.15671641791044777,
+       "net": -0.0037321121114427865,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7700976133346558,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7883755588673621,
+         "since": 0.8916666666666667
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.9019607843137255
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 9,
+      "messages": 300,
+      "accuracy": 0.82,
+      "answered_by": {
+       "tier 0": 0.07666666666666666,
+       "tier 1": 0.0,
+       "system2": 0.9233333333333333
+      },
+      "accuracy_by": {
+       "tier 0": 1.0,
+       "tier 1": null,
+       "system2": 0.8050541516245487
+      },
+      "cost": 0.9403762548666668,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.07225297977031586,
+      "latency_ms_mean": 969.0417952222222,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 4,
+       "confident": 1,
+       "disagreement": 25,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 54,
+       "accuracy": 0.8333333333333334,
+       "low": 0.7344757864389736,
+       "high": 0.9003773883339011,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 4,
+       "accuracy": 1.0,
+       "low": 0.7094211123723042,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 415,
+       "keep_rate": 0.15903614457831325,
+       "net": -0.003702133770281125,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7700976133346558,
+      "drift": {
+       "0": {
+        "flags": [
+         "escalation_rate",
+         "distribution",
+         "change_escalation_rate",
+         "change_distribution"
+        ],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7883755588673621,
+         "since": 0.9022222222222223
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8869565217391304
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 10,
+      "messages": 300,
+      "accuracy": 0.81,
+      "answered_by": {
+       "tier 0": 0.1,
+       "tier 1": 0.0,
+       "system2": 0.9
+      },
+      "accuracy_by": {
+       "tier 0": 1.0,
+       "tier 1": null,
+       "system2": 0.7888888888888889
+      },
+      "cost": 0.9277880069333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.08467216778109621,
+      "latency_ms_mean": 977.1173573333333,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 9,
+       "confident": 2,
+       "disagreement": 19,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 63,
+       "accuracy": 0.8412698412698413,
+       "low": 0.7517364786339545,
+       "high": 0.9026936135836161,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": "unproven"
+      },
+      "recheck": {
+       "threshold": 0.9999999989429422,
+       "target": 0.95,
+       "graded": 4,
+       "accuracy": 1.0,
+       "low": 0.7094211123723042,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 439,
+       "keep_rate": 0.1571753986332574,
+       "net": -0.0037261806019741844,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999989429422,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7700976133346558,
+      "drift": {
+       "0": {
+        "flags": [
+         "escalation_rate",
+         "distribution",
+         "change_escalation_rate",
+         "change_distribution"
+        ],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.7883755588673621,
+         "since": 0.9016666666666666
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8233333333333334,
+         "since": 0.8848920863309353
+        },
+        "baseline": null
+       }
+      }
+     }
+    ],
+    "router": {
+     "accuracy": 0.7953333333333333,
+     "cost": 9.071648097933334,
+     "latency_ms_mean": 975.7513767888888,
+     "labels": 300,
+     "recalibrated_on": [
+      [
+       1,
+       [
+        1
+       ]
+      ]
+     ]
+    },
+    "always_gpt-4o-mini": {
+     "accuracy": 0.69,
+     "cost": 0.2527062,
+     "latency_ms_mean": 567.3157666666667
+    },
+    "always_gpt-4.1": {
+     "accuracy": 0.7933333333333333,
+     "cost": 10.136128,
+     "latency_ms_mean": 954.4512
+    },
+    "per_call": {
+     "cost": {
+      "gpt-4o-mini": 8.42354e-05,
+      "gpt-4.1": 0.0033787093333333333
+     },
+     "latency_ms": {
+      "gpt-4o-mini": 567.3157666666667,
+      "gpt-4.1": 954.4512
+     }
+    }
+   },
+   "seed_2": {
+    "days": [
+     {
+      "day": 1,
+      "messages": 300,
+      "accuracy": 0.7833333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7833333333333333
+      },
+      "cost": 1.03888342,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.024931236069631213,
+      "latency_ms_mean": 1521.7669666666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 8,
+       "confident": 16,
+       "disagreement": 6,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 8,
+       "accuracy": 1.0,
+       "low": 0.7472427908584185,
+       "high": 1.0,
+       "target": null,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 6,
+       "accuracy": 1.0,
+       "low": 0.7855048177628822,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 300,
+       "keep_rate": 0.18333333333333332,
+       "net": -0.003388135822222223,
+       "skipped": true
+      },
+      "calibrated": {
+       "1": {
+        "threshold": 0.9999999987682839,
+        "trusted_accuracy": 1.0,
+        "escalation_rate": 0.8166666666666667,
+        "reason": "not enough labels",
+        "best_target": 0.9709960937500001,
+        "graded_by": {
+         "human": 6,
+         "system2": 49
+        },
+        "label_check": {
+         "graded": 6,
+         "accuracy": 1.0,
+         "low": 0.7855048177628822,
+         "high": 1.0,
+         "ruled_out": false,
+         "confirmed": false
+        }
+       }
+      },
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 1.0,
+         "since": 1.0
+        },
+        "baseline": {
+         "answers": 30
+        }
+       }
+      }
+     },
+     {
+      "day": 2,
+      "messages": 300,
+      "accuracy": 0.78,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.78
+      },
+      "cost": 1.0150448018,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.00141277004394591,
+      "latency_ms_mean": 986.5990934444444,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 6,
+       "confident": 0,
+       "disagreement": 24,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 14,
+       "accuracy": 0.8571428571428571,
+       "low": 0.647040986720709,
+       "high": 0.9515454514056555,
+       "target": 0.95,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 6,
+       "accuracy": 1.0,
+       "low": 0.7855048177628822,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 317,
+       "keep_rate": 0.17665615141955837,
+       "net": -0.003474426521976867,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.9411764705882353
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 3,
+      "messages": 300,
+      "accuracy": 0.7633333333333333,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.7633333333333333
+      },
+      "cost": 1.0146236248,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.0009972494427852308,
+      "latency_ms_mean": 977.1438306666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 7,
+       "confident": 0,
+       "disagreement": 23,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 21,
+       "accuracy": 0.9047619047619048,
+       "low": 0.749147796549716,
+       "high": 0.9679694763798452,
+       "target": 0.95,
+       "below_target": false
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 6,
+       "accuracy": 1.0,
+       "low": 0.7855048177628822,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 329,
+       "keep_rate": 0.1762917933130699,
+       "net": -0.003479135202431612,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": null,
+      "drift": {
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.896551724137931
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 4,
+      "messages": 300,
+      "accuracy": 0.77,
+      "answered_by": {
+       "tier 0": 0.0,
+       "tier 1": 0.0,
+       "system2": 1.0
+      },
+      "accuracy_by": {
+       "tier 0": null,
+       "tier 1": null,
+       "system2": 0.77
+      },
+      "cost": 1.0147078602,
+      "always_system2_cost": 1.0136128,
+      "savings": -0.0010803535630172778,
+      "latency_ms_mean": 979.0348832222222,
+      "labels_tonight": 26,
+      "review_reasons": {
+       "sample": 5,
+       "confident": 0,
+       "disagreement": 21,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 26,
+       "accuracy": 0.8461538461538461,
+       "low": 0.6980406212350325,
+       "high": 0.9290054431364714,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.8163203001022339,
+       "escalation_rate": 0.8617886178861789,
+       "previous_escalation_rate": null,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 6,
+       "accuracy": 1.0,
+       "low": 0.7855048177628822,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 342,
+       "keep_rate": 0.1783625730994152,
+       "net": -0.0034523740569200787,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.8163203001022339,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8644986449864499,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8571428571428571
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 5,
+      "messages": 300,
+      "accuracy": 0.8,
+      "answered_by": {
+       "tier 0": 0.15,
+       "tier 1": 0.0,
+       "system2": 0.85
+      },
+      "accuracy_by": {
+       "tier 0": 0.9555555555555556,
+       "tier 1": null,
+       "system2": 0.7725490196078432
+      },
+      "cost": 0.862834411,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.14875343819651843,
+      "latency_ms_mean": 899.6493083333334,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 5,
+       "confident": 9,
+       "disagreement": 16,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 31,
+       "accuracy": 0.8709677419354839,
+       "low": 0.7416390851559354,
+       "high": 0.9407314999249219,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": true,
+       "threshold": 0.7062551975250244,
+       "escalation_rate": 0.6216814159292036,
+       "previous_escalation_rate": 0.8783185840707964,
+       "kept": null
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 7,
+       "accuracy": 1.0,
+       "low": 0.8103352472680125,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 357,
+       "keep_rate": 0.17366946778711484,
+       "net": -0.0035130240956115786,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7062551975250244,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.5770020533880903,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8771929824561403
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 6,
+      "messages": 300,
+      "accuracy": 0.85,
+      "answered_by": {
+       "tier 0": 0.37,
+       "tier 1": 0.0,
+       "system2": 0.63
+      },
+      "accuracy_by": {
+       "tier 0": 0.9459459459459459,
+       "tier 1": null,
+       "system2": 0.7936507936507936
+      },
+      "cost": 0.6630693833333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.34583562546434565,
+      "latency_ms_mean": 702.4853095555555,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 11,
+       "confident": 9,
+       "disagreement": 10,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 42,
+       "accuracy": 0.8809523809523809,
+       "low": 0.774949417751772,
+       "high": 0.9408377720062081,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": 0.7075471698113207,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 7,
+       "accuracy": 1.0,
+       "low": 0.8103352472680125,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 367,
+       "keep_rate": 0.16893732970027248,
+       "net": -0.003574178563487739,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7317514419555664,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.5712050078247262,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8955223880597015
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 7,
+      "messages": 300,
+      "accuracy": 0.7933333333333333,
+      "answered_by": {
+       "tier 0": 0.3233333333333333,
+       "tier 1": 0.0,
+       "system2": 0.6766666666666666
+      },
+      "accuracy_by": {
+       "tier 0": 0.9381443298969072,
+       "tier 1": null,
+       "system2": 0.7241379310344828
+      },
+      "cost": 0.7138342587333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.29575252134411356,
+      "latency_ms_mean": 752.098922111111,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 4,
+       "confident": 7,
+       "disagreement": 19,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 46,
+       "accuracy": 0.8913043478260869,
+       "low": 0.7930450037032384,
+       "high": 0.9460832663619126,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": 0.8420221169036335,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 7,
+       "accuracy": 1.0,
+       "low": 0.8103352472680125,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 378,
+       "keep_rate": 0.164021164021164,
+       "net": -0.0036377112606701947,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7989702224731445,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6836734693877551,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.9102564102564102
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 8,
+      "messages": 300,
+      "accuracy": 0.7766666666666666,
+      "answered_by": {
+       "tier 0": 0.23333333333333334,
+       "tier 1": 0.0,
+       "system2": 0.7666666666666667
+      },
+      "accuracy_by": {
+       "tier 0": 0.9428571428571428,
+       "tier 1": null,
+       "system2": 0.7260869565217392
+      },
+      "cost": 0.7946705765333333,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.21600183370480985,
+      "latency_ms_mean": 822.7818604444444,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 11,
+       "confident": 9,
+       "disagreement": 10,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 57,
+       "accuracy": 0.8947368421052632,
+       "low": 0.8091066877922218,
+       "high": 0.9445860927939921,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": 0.8518518518518519,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 7,
+       "accuracy": 1.0,
+       "low": 0.8103352472680125,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 386,
+       "keep_rate": 0.16321243523316062,
+       "net": -0.003648162641796201,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7989702224731445,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6640883977900552,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.9069767441860465
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 9,
+      "messages": 300,
+      "accuracy": 0.82,
+      "answered_by": {
+       "tier 0": 0.19,
+       "tier 1": 0.0,
+       "system2": 0.81
+      },
+      "accuracy_by": {
+       "tier 0": 0.9824561403508771,
+       "tier 1": null,
+       "system2": 0.7818930041152263
+      },
+      "cost": 0.8320890854,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.17908585467744675,
+      "latency_ms_mean": 863.4515621111111,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 5,
+       "confident": 2,
+       "disagreement": 23,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 62,
+       "accuracy": 0.8709677419354839,
+       "low": 0.7851645666796673,
+       "high": 0.9257429570014737,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": 0.8642297650130548,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 7,
+       "accuracy": 1.0,
+       "low": 0.8103352472680125,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 397,
+       "keep_rate": 0.16120906801007556,
+       "net": -0.0036740525998320748,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7989702224731445,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6519607843137255,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.9072164948453608
+        },
+        "baseline": null
+       }
+      }
+     },
+     {
+      "day": 10,
+      "messages": 300,
+      "accuracy": 0.81,
+      "answered_by": {
+       "tier 0": 0.24666666666666667,
+       "tier 1": 0.0,
+       "system2": 0.7533333333333333
+      },
+      "accuracy_by": {
+       "tier 0": 0.9594594594594594,
+       "tier 1": null,
+       "system2": 0.7610619469026548
+      },
+      "cost": 0.7713565528,
+      "always_system2_cost": 1.0136128,
+      "savings": 0.23900275055721465,
+      "latency_ms_mean": 808.0755426666666,
+      "labels_tonight": 30,
+      "review_reasons": {
+       "sample": 4,
+       "confident": 4,
+       "disagreement": 22,
+       "audit_disagreement": 0,
+       "unresolved": 0
+      },
+      "accuracy_on_sample": {
+       "graded": 66,
+       "accuracy": 0.8787878787878788,
+       "low": 0.7974017543508154,
+       "high": 0.9303364607474967,
+       "target": 0.95,
+       "below_target": true
+      },
+      "retrain": {
+       "promoted": false,
+       "threshold": null,
+       "escalation_rate": null,
+       "previous_escalation_rate": 0.874251497005988,
+       "kept": "rechecked"
+      },
+      "recheck": {
+       "threshold": 0.9999999987682839,
+       "target": 0.95,
+       "graded": 8,
+       "accuracy": 1.0,
+       "low": 0.8300132802124833,
+       "high": 1.0,
+       "failed": false,
+       "confirmed": false
+      },
+      "prune": {
+       "answers": 409,
+       "keep_rate": 0.16136919315403422,
+       "net": -0.003671983267155665,
+       "skipped": true
+      },
+      "calibrated": {},
+      "tier1_threshold": 0.9999999987682839,
+      "tier1_unconfirmed": true,
+      "tier0_threshold": 0.7983387112617493,
+      "drift": {
+       "0": {
+        "flags": [],
+        "unchecked": [
+         "escalation_rate",
+         "distribution",
+         "accuracy",
+         "change_escalation_rate",
+         "change_distribution",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.6360485268630849,
+         "since": null
+        },
+        "baseline": null
+       },
+       "1": {
+        "flags": [],
+        "unchecked": [
+         "accuracy",
+         "change_accuracy"
+        ],
+        "escalation_rate": {
+         "at_calibration": 0.8166666666666667,
+         "since": 0.8990825688073395
+        },
+        "baseline": null
+       }
+      }
+     }
+    ],
+    "router": {
+     "accuracy": 0.7946666666666666,
+     "cost": 8.7211139746,
+     "latency_ms_mean": 931.3087279222221,
+     "labels": 296,
+     "recalibrated_on": [
+      [
+       1,
+       [
+        1
+       ]
+      ]
+     ]
+    },
+    "always_gpt-4o-mini": {
+     "accuracy": 0.69,
+     "cost": 0.2527062,
+     "latency_ms_mean": 567.3157666666667
+    },
+    "always_gpt-4.1": {
+     "accuracy": 0.7933333333333333,
+     "cost": 10.136128,
+     "latency_ms_mean": 954.4512
+    },
+    "per_call": {
+     "cost": {
+      "gpt-4o-mini": 8.42354e-05,
+      "gpt-4.1": 0.0033787093333333333
+     },
+     "latency_ms": {
+      "gpt-4o-mini": 567.3157666666667,
+      "gpt-4.1": 954.4512
+     }
+    }
+   }
+  }
  }
 }
