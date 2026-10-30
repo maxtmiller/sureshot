@@ -453,8 +453,16 @@ evaluate(store, {"qwen-8b": ChatDecider("Qwen/Qwen3-8B", "http://localhost:8000/
   - `"not enough evidence"`: the target is not ruled out, but the data cannot show it yet. Grade more.
   - `"target unreachable"`: even the optimistic end of the estimate is below the target at every threshold that keeps
     a tenth of the answers. Lower the target, or change or drop this tier.
+  - `"below target on labels"` (with `calibrate(store, sample=0.02)`, the rate given to `review_queue`): a threshold
+    was found, but your labels on the random sample show the tier below the target there.
 
-  The last two fail closed: `calibrate` saves a threshold nothing can reach, so that tier is not trusted for the
+  Where nobody labeled, an answer is graded by System 2's, so a threshold certifies agreement with System 2. That
+  overstates the tier when System 2 is often wrong: in the banking77 case study `gpt-4o-mini` was certified at 95%
+  against `gpt-4.1`, and was 89% to 94% right against the dataset's labels. `graded_by` says how many grades at or
+  above the threshold came from your labels and how many from System 2, and `sample=` checks the threshold against
+  the labeled sample (a confidence sequence, so calibrating every night adds no false rejections).
+
+  The last three fail closed: `calibrate` saves a threshold nothing can reach, so that tier is not trusted for the
   question and everything passes to the next tier or System 2 until a later calibration finds a threshold. The tier
   is then only asked about a random `probe` share of those questions (`Router(probe=0.05)`), so you stop paying for
   answers that are thrown away while the sample keeps data coming. Calibrate a failed tier again on a schedule: with
