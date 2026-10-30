@@ -320,7 +320,8 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     CUSUM that watches for the rate to move by the same minimums (accuracy: for the error rate to double), starting
     from the edge of the calibration's interval; "change" gives when the change started and when it was flagged.
     Together they raise a false flag within n answers at most n / false_alarm_every of the time, however often you
-    call stats; a flag stays until the next calibration. Each check needs min_samples answers (audited ones, for
+    call stats; a flag stays until that tier's next snapshot (calibrate(store, tier=...), or a retrain that promotes
+    a new classifier). Each check needs min_samples answers (audited ones, for
     accuracy) since the calibration; "unchecked" names the checks that could not run yet, so no flag is not mistaken
     for no drift. Snapshots from before the distribution check have no bins, so it is unchecked until the next
     calibration. A flag means: grade a fresh sample and calibrate

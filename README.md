@@ -348,7 +348,10 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   the edge of the calibration's interval, so noise in the calibration's own answers is not taken for a change.
   Together they raise a false flag within n answers at most n / `false_alarm_every` (default 100,000) of the time,
   however often you call `stats`. `change` gives when each change started and when it was flagged, and a flag
-  stays until the next calibration.
+  stays until that tier's next snapshot: `calibrate(store, tier=...)` for the flagged tier, or a `retrain` that
+  promotes a new classifier. A `retrain` that keeps the current one leaves the flag, so on a flagged classifier run
+  `calibrate(store, tier=0)` after grading a fresh sample. In the banking77 case study, recalibrating only the LLM
+  tier left a classifier flag up for four days.
 - Each check needs `min_samples` (default 30) answers since the calibration (audited ones, for accuracy), and
   `unchecked` names the checks that could not run yet, so an empty `flags` is not read as no drift. Snapshots saved
   before the distribution check have no bins, so it is `unchecked` until you calibrate.
