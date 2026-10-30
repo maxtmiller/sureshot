@@ -702,7 +702,7 @@ def test_review_queue_lists_disagreements_and_clears_when_graded(tmp_path):
     assert first["id"] == ids[0] and first["answer"] is False and first["source"] == "system2" and first["question"] == q["needs_prep"]
     assert [c["who"] for c in first["candidates"]] == ["tier 0", "system2"] and first["candidates"][1]["reason"] == "because"
     assert [i["state"] for i in review_queue(store, reasons=("unresolved",))] == ["five"] and len(review_queue(store, limit=1)) == 1
-    assert stats(store)["review_queue"] == {"sample": 0, "disagreement": 1, "audit_disagreement": 1, "unresolved": 1}
+    assert stats(store)["review_queue"] == {"sample": 0, "kept": 0, "disagreement": 1, "audit_disagreement": 1, "unresolved": 1}
     store.label(ids[0], "needs_prep", True)
     assert [i["state"] for i in review_queue(store)] == ["three", "five"]
     # A System 2 answer with no System 1 answer to compare against is not queued.
@@ -1642,3 +1642,23 @@ def test_a_seeded_store_logs_the_same_ids_and_labeling_sample(tmp_path):
         runs.append((ids, [item["id"] for item in review_queue(router.log, reasons=("sample",), sample=0.2)]))
     assert runs[0] == runs[1] and runs[0][1]
     assert Store(tmp_path / "c.db").log("x", q, {}) != Store(tmp_path / "d.db").log("x", q, {})
+
+
+def test_recheck_counts_labels_on_a_share_of_the_kept_answers(tmp_path):
+    from hunch import Store, recheck, review_queue
+
+    store = Store(tmp_path / "s.db", seed=1)
+    store.save_thresholds({"needs_prep": 0.9})
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store)
+    for _ in range(1000):
+        router.decide("event", q)
+    queue = review_queue(store, limit=None, sample=0.02, kept=0.3)
+    assert {item["reason"] for item in queue} == {"sample", "kept"}
+    # The tier is right 80% of the time against a 90% target.
+    for i, item in enumerate(queue):
+        store.label(item["id"], "needs_prep", i % 5 != 0)
+    few = recheck(store, sample=0.02, target_accuracy=0.9)["needs_prep"]
+    assert not few["failed"] and few["graded"] < 40
+    many = recheck(store, sample=0.02, target_accuracy=0.9, kept=0.3)["needs_prep"]
+    assert many["failed"] and many["graded"] == len(queue) and many["accuracy"] == pytest.approx(0.8, abs=0.01)

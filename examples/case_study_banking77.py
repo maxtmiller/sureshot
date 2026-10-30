@@ -30,9 +30,10 @@ from datasets import load_dataset
 
 import hunch.adapters.base as base
 from hunch import Cache, ChatDecider, ChatReasoner, LocalDecider, Router, Store, calibrate, prune, recheck, retrain, review_queue, stats
+from hunch.review import REASONS
 
 PRICES = {"gpt-4o-mini": (0.15, 0.60), "gpt-4.1": (2.00, 8.00)}  # $ per million input and output tokens; check yours
-TARGET, AUDIT, PROBE, SAMPLE, LABELS_PER_NIGHT, WORKERS = 0.95, 0.05, 0.05, 0.02, 30, 8
+TARGET, AUDIT, PROBE, SAMPLE, KEPT, LABELS_PER_NIGHT, WORKERS = 0.95, 0.05, 0.05, 0.02, 0.1, 30, 8
 LOCAL_MS = 60  # the classifier's typical time per message on one laptop; measuring it live breaks when runs share a CPU
 SHIFTED = ["compromised_card", "lost_or_stolen_card", "card_payment_not_recognised", "cash_withdrawal_not_recognised",
            "direct_debit_payment_not_recognised", "transaction_charged_twice", "card_swallowed", "lost_or_stolen_phone"]
@@ -169,7 +170,7 @@ def simulate(work, days, seed=0, per_second=0.0):
             latency.append((LOCAL_MS if 0 in tiers else 0) + (ms["gpt-4o-mini"] if 1 in tiers else 0)
                            + (ms["gpt-4.1"] if result["latency_ms"]["system2"] is not None else 0))
         # Night: a person labels what the review queue asks for most.
-        queue = review_queue(store, limit=LABELS_PER_NIGHT, sample=SAMPLE)
+        queue = review_queue(store, limit=LABELS_PER_NIGHT, sample=SAMPLE, kept=KEPT)
         for item in queue:
             store.label(item["id"], item["key"], gold[item["id"]], source="human")
         trained = retrain(store, current=local, tier=0, target_accuracy=TARGET, min_samples=30)
@@ -183,7 +184,7 @@ def simulate(work, days, seed=0, per_second=0.0):
         cal = cals.get(1)
         if due:
             recalibrated.append([day, sorted(due)])
-        rechecked = recheck(store, tier=1, sample=SAMPLE).get("intent")
+        rechecked = recheck(store, tier=1, sample=SAMPLE, kept=KEPT).get("intent")
         pruned = prune(store, worth, tier=1).get("intent")
         n = len(messages)
         day_report = {
@@ -193,7 +194,7 @@ def simulate(work, days, seed=0, per_second=0.0):
             "accuracy_by": {who: (r[1] / r[0] if r[0] else None) for who, r in right.items()},
             "cost": s["cost"]["total"], "always_system2_cost": s["cost"]["always_system2"], "savings": s["cost"]["savings"],
             "latency_ms_mean": statistics.mean(latency),
-            "labels_tonight": len(queue), "review_reasons": {r: sum(i["reason"] == r for i in queue) for r in ("sample", "disagreement", "audit_disagreement", "unresolved")},
+            "labels_tonight": len(queue), "review_reasons": {r: sum(i["reason"] == r for i in queue) for r in REASONS},
             "accuracy_on_sample": whole["questions"]["intent"]["accuracy_on_sample"],
             "retrain": trained["report"].get("intent"), "recheck": rechecked, "prune": pruned, "calibrated": {t: {k: c.get(k) for k in ("threshold", "trusted_accuracy", "escalation_rate", "reason", "best_target", "graded_by", "sample_check")}
                            for t, c in cals.items()},
