@@ -1628,3 +1628,17 @@ def test_retrain_learns_from_questions_no_tier_answered(tmp_path):
         store.label(router.decide(text, q)["id"], "needs_prep", prep)
     assert store.labeled() == [] and len(store.graded()) == 160
     assert retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]["needs_prep"]["promoted"]
+
+
+def test_a_seeded_store_logs_the_same_ids_and_labeling_sample(tmp_path):
+    from hunch import Store
+    from hunch.review import review_queue
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    runs = []
+    for name in ("a.db", "b.db"):
+        router = Router(FakeDecider(), FakeClaude(), log=Store(tmp_path / name, seed=3))
+        ids = [router.decide(f"meeting {i}", q)["id"] for i in range(50)]
+        runs.append((ids, [item["id"] for item in review_queue(router.log, reasons=("sample",), sample=0.2)]))
+    assert runs[0] == runs[1] and runs[0][1]
+    assert Store(tmp_path / "c.db").log("x", q, {}) != Store(tmp_path / "d.db").log("x", q, {})
