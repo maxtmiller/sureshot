@@ -1158,10 +1158,10 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     drift = stats(store)["drift"][0]
     assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["accuracy_since"] is None
     # Now the tier is unsure about everything: the share escalated moved.
-    for _ in range(60):
+    for _ in range(240):
         Router(Tier({"needs_prep": (True, 0.7)}), None, log=store).decide("event", q)
     drift = stats(store)["drift"][0]
-    assert drift["flags"] == ["escalation_rate", "distribution"] and drift["answers_since"] == 120 and drift["escalation_rate"]["since"] == pytest.approx(0.75)
+    assert drift["flags"] == ["escalation_rate", "distribution"] and drift["answers_since"] == 300 and drift["escalation_rate"]["since"] == pytest.approx(0.9)
 
     # Audits say the confident answers are wrong: accuracy fell below the target, once there are enough of them.
     wrong = calibrated(tmp_path / "b.db")
@@ -1170,7 +1170,7 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     for _ in range(20):
         audited.decide("event", q), unsure.decide("event", q)
     drift = stats(wrong)["drift"][0]
-    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["accuracy_since"] == {"graded": 20, "accuracy": 0.0}
+    assert drift["flags"] == [] and drift["unchecked"] == ["accuracy"] and drift["accuracy_since"] == {"graded": 20, "human": 0, "accuracy": 0.0}
     for _ in range(20):
         audited.decide("event", q), unsure.decide("event", q)
     drift = stats(wrong)["drift"][0]
@@ -1179,7 +1179,7 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
     for decision_id, _, _, result in wrong.results(drift["calibrated_at"]):
         if "audit" in result["answers"]["needs_prep"]:
             wrong.label(decision_id, "needs_prep", True)
-    assert stats(wrong)["drift"][0]["flags"] == [] and stats(wrong)["drift"][0]["accuracy_since"]["accuracy"] == 1.0
+    assert stats(wrong)["drift"][0]["flags"] == [] and stats(wrong)["drift"][0]["accuracy_since"] == {"graded": 40, "human": 40, "accuracy": 1.0}
 
     # A recalibration that fails closed drops the snapshot, since the tier is no longer trusted for the question.
     for _ in range(200):
@@ -1258,13 +1258,36 @@ def test_drift_needs_a_change_big_enough_to_act_on(tmp_path):
     # A calibration on a large log: half the answers at 0.7, below the threshold of 0.95.
     store.save_calibrations({"needs_prep": {"threshold": 0.95, "target": 0.95, "escalation_rate": 0.5, "answers": 100000,
                                             "histogram": {"edges": [0.7, 0.95], "counts": [0, 50000, 50000]}}}, 0, ["needs_prep"])
-    # Now 54% fall below it: too many answers for that to be chance, too small a change to act on.
+    # Now 60% fall below it: too many answers for that to be chance, but smaller than these minimums ask for.
     for i in range(2000):
-        Router(Tier({"needs_prep": (True, 0.7 if i % 50 < 27 else 0.95)}), None, log=store).decide("event", q)
+        Router(Tier({"needs_prep": (True, 0.7 if i % 50 < 30 else 0.95)}), None, log=store).decide("event", q)
     drift = stats(store)["drift"][0]
-    assert drift["escalation_rate"]["since"] == pytest.approx(0.54) and drift["distribution_change"] == pytest.approx(0.04)
-    assert drift["flags"] == []
-    assert stats(store, min_escalation_change=0, min_distribution_change=0)["drift"][0]["flags"] == ["escalation_rate", "distribution"]
+    assert drift["escalation_rate"]["since"] == pytest.approx(0.6) and drift["distribution_change"] == pytest.approx(0.1)
+    assert stats(store, min_escalation_change=0.15, min_distribution_change=0.15)["drift"][0]["flags"] == []
+    assert stats(store, min_escalation_change=0, min_distribution_change=0)["drift"][0]["flags"] == [
+        "escalation_rate", "distribution", "recent_escalation_rate", "recent_distribution"]
+
+
+def test_anytime_bounds_hold_over_every_look():
+    import random
+    from hunch.stats import _rate_moved, _sequence
+
+    # A rate that never changes, checked after every answer for 1000 answers in 100 runs, at a 5% budget: a one-off
+    # test checked this often would flag most runs; this flags at most about 5 of them.
+    random.seed(0)
+    false_alarms = 0
+    for _ in range(100):
+        before = sum(random.random() < 0.3 for _ in range(200)) / 200
+        seen = 0
+        for n in range(1, 1001):
+            seen += random.random() < 0.3
+            if n >= 30 and _rate_moved(seen / n, n, before, 200, 0.05):
+                false_alarms += 1
+                break
+    assert false_alarms <= 8
+    low, high = _sequence(30, 100, 0.01)
+    assert low < 0.3 < high and high - low > _sequence(300, 1000, 0.01)[1] - _sequence(300, 1000, 0.01)[0]
+    assert _sequence(0, 50, 0.01)[0] == 0.0 and _sequence(50, 50, 0.01)[1] == 1.0
 
 
 def test_holm_shares_one_false_alarm_budget():

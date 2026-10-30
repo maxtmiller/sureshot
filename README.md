@@ -315,14 +315,20 @@ The output above is from a run of 200 decisions (100 per question) on public dat
   `"distribution"` (how its confidences spread over five quantile bins, which catches a slide that stays above the
   threshold, such as 0.99 becoming 0.96 with the threshold at 0.95, before it moves the escalation rate or the
   accuracy) and `"accuracy"` (its audited answers since then, graded by your label where there is one, else by the
-  audit, are below the target). A flag means grade a fresh sample and calibrate again.
-- A flag needs both evidence and size. Every check in one `stats` report shares one false alarm budget, `alpha`
-  (default 0.01, split with Holm's method), so a report has about a 1% chance of any false flag however many
-  questions it covers. The change must also be big enough to act on: the escalation rate must move at least
-  `min_escalation_change` (default 0.05), and the bins must differ by at least `min_distribution_change` (default
-  0.1, the share of answers that would have to change bins), so a large log does not flag a move from 20% to 21%.
-  Accuracy below the target is already worth acting on, so it has no minimum. The budget covers one report:
-  checking every hour still adds up false alarms over time.
+  audit, are below the target). A flag means grade a fresh sample and calibrate again. `accuracy_since` (and
+  `recent["accuracy"]`) also gives `human`, how many of the graded answers have your label: the others are graded
+  by System 2's audit answer, so with few labels the accuracy mostly measures agreement with System 2.
+- A flag needs both evidence and size. Half of `alpha` (default 0.01) goes to the checks on everything since the
+  calibration, split evenly across them, and they use confidence sequences (with a one-off interval for the
+  calibration's own fixed sample), which hold at every sample size at once: however often you
+  call `stats`, they raise a false flag at most that often, ever. The price is that they need more answers to flag
+  the same change than a one-off test would. The other half goes to the `recent_` checks, split with Holm's method
+  within each report. A window keeps taking in new answers, so polling it often still adds up false `recent_` flags
+  over weeks: treat them as an early hint and confirm by grading a sample. The change must also be big enough to
+  act on: the escalation rate must move at least `min_escalation_change` (default 0.05), and the bins must differ by
+  at least `min_distribution_change` (default 0.1, the share of answers that would have to change bins), so a large
+  log does not flag a move from 20% to 21%. Accuracy below the target is already worth acting on, so it has no
+  minimum.
 - Each check needs `min_samples` (default 30) answers since the calibration (audited ones, for accuracy), and
   `unchecked` names the checks that could not run yet, so an empty `flags` is not read as no drift. Once there are
   more than `window` (default 500) answers since the calibration, the checks also run on the latest `window` alone,
