@@ -226,8 +226,11 @@ local.save("local.joblib")                     # LocalDecider.load("local.joblib
   question, only if on held-out decisions it reaches the accuracy target and passes on fewer questions than `current`.
   It saves the promoted questions' thresholds to the store and returns `{"decider", "report"}`, so the escalation rate
   falls as labels and System 2 answers accumulate. Where it keeps `current`, it checks it again on the held-out
-  decisions, which include everything graded since: `"kept": "rechecked"` updates its threshold, and `"failed"` stops
-  trusting it (as `calibrate` fails closed). So a nightly `retrain` also recalibrates the classifier. Use it rather
+  decisions, which include everything graded since: `"kept": "rechecked"` updates its threshold, `"failed"` stops
+  trusting it when they rule the target out (as `calibrate` fails closed), and `"unproven"` leaves its threshold as
+  it was when they can no longer show the target but do not rule it out. Without that last case, a classifier near
+  the target was switched off and on night after night in the banking77 case study. So a nightly `retrain` also
+  recalibrates the classifier. Use it rather
   than `calibrate(store, tier=0)`, which grades only the answers the classifier has given since it was promoted:
   in the banking77 case study, one day of those was too little, and calibrating killed a classifier that `retrain`
   had just certified.

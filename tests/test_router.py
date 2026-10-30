@@ -1511,6 +1511,10 @@ def test_retrain_rechecks_the_classifier_it_keeps(tmp_path):
     second = retrain(store, current=first["decider"], target_accuracy=0.8, min_samples=5, embed=_bag)
     assert second["decider"] is first["decider"] and second["report"]["needs_prep"]["kept"] == "rechecked"
     assert store.calibrations()[0]["ts"] > snapshot["ts"] and store.thresholds(0)["needs_prep"] < float("inf")
+    # A target its held-out decisions are too few to show (0.99) but do not rule out leaves its threshold alone.
+    before = store.thresholds(0)["needs_prep"]
+    unproven = retrain(store, current=first["decider"], target_accuracy=0.99, min_samples=5, embed=_bag)
+    assert unproven["report"]["needs_prep"]["kept"] == "unproven" and store.thresholds(0)["needs_prep"] == before
     # The world changes: every label is now the opposite, and the target is 0.99. The old classifier fails its
     # recheck, so it is no longer trusted; a new one has too few held-out decisions to certify 0.99 yet.
     for i, (_, prep) in zip(ids, docs):

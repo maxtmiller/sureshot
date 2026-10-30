@@ -45,10 +45,12 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
 
     Where `current` is kept it is checked again on the same held-out decisions, which include everything graded since
     it was trained: "kept" is "rechecked" when it still meets the target there (its threshold is updated to what they
-    support), "failed" when they rule the target out or cannot show it any more (it is not trusted, as when
-    calibrate fails closed, until a later retrain finds one that is), and None otherwise ("not enough data", or no
-    current classifier). So running retrain every night also recalibrates the classifier, and clears a drift flag on
-    it once it has passed again.
+    support), "failed" when they rule the target out (it is not trusted, as when calibrate fails closed, until a later
+    retrain certifies it or a new one), "unproven" when they can no longer show the target but do not rule it out
+    (its threshold, trusted or not, is left as it was), and None when there is no current classifier for the
+    question. The "unproven" case keeps a classifier near the target from being switched off and on night after
+    night as one check passes and the next does not. So running retrain every night also recalibrates the
+    classifier, and clears a drift flag on it once it has passed again.
 
     Decisions are split by id into train and held-out (the same split every time, so repeated runs compare like with
     like, and `current` never trained on the held-out ones if it came from an earlier retrain). Held-out rows keep
@@ -82,9 +84,11 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
             heads[key], promoted_at[key] = candidate.heads[key], r["threshold"]
         elif o.get("threshold") is not None:
             kept, kept_at[key] = "rechecked", o["threshold"]
-        elif o.get("reason") in ("not enough evidence", "target unreachable"):
+        elif o.get("reason") == "target unreachable":
             kept = "failed"
             closed.append(key)
+        elif o:
+            kept = "unproven"
         report[key] = {"promoted": promoted, "threshold": r and r["threshold"], "escalation_rate": r and r["escalation_rate"],
                        "previous_escalation_rate": before, "kept": kept}
     store.save_thresholds(promoted_at | kept_at | {key: float("inf") for key in closed}, tier)
