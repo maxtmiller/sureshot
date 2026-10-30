@@ -1591,3 +1591,16 @@ def test_recheck_fails_a_certified_tier_its_labeled_sample_rules_out(tmp_path):
     assert store.thresholds() == {"needs_prep": float("inf")} and store.issues()[0]["reason"] == "below target on labels"
     # A tier that already failed closed is not rechecked.
     assert recheck(store, sample=0.1) == {}
+
+
+def test_retrain_learns_from_questions_no_tier_answered(tmp_path):
+    from hunch import LocalDecider, retrain
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # Every tier is skipped (a classifier with no heads answers nothing), so System 2 answers every question.
+    router = Router(LocalDecider({}, _bag), FakeClaude(), log=store)
+    for text, prep in [("server meeting", True), ("meeting about server", True), ("invoice sale", False), ("sale invoice due", False)] * 40:
+        store.label(router.decide(text, q)["id"], "needs_prep", prep)
+    assert store.labeled() == [] and len(store.graded()) == 160
+    assert retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]["needs_prep"]["promoted"]
