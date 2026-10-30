@@ -1387,7 +1387,7 @@ def test_drift_watches_questions_without_a_calibration(tmp_path):
     assert drift["flags"] == [] and drift["escalation_rate"] == {"at_calibration": 1.0, "since": 1.0} and drift["answers_since"] == 40
 
 
-def test_retrain_resets_the_drift_snapshot_of_what_it_promotes(tmp_path):
+def test_retrain_saves_a_drift_snapshot_for_what_it_promotes(tmp_path):
     from hunch import calibrate, retrain, stats
 
     store = _calibration_store(tmp_path)
@@ -1398,12 +1398,13 @@ def test_retrain_resets_the_drift_snapshot_of_what_it_promotes(tmp_path):
     calibrate(store, 0.4, 30)
     assert [d["calibrated_at"] is not None for d in stats(store)["drift"]] == [True]
     assert retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag)["report"]["needs_prep"]["promoted"]
-    # The promoted classifier has a new threshold, so drift relearns a baseline instead of using the old snapshot.
-    assert store.calibrations() == [] and (0, "needs_prep") in store.resets()
-    for _ in range(5):
-        Router(FakeDecider(), None, log=store).decide("server meeting", q)
+    # The promoted classifier replaces the old snapshot with its own: its threshold, the target, and its confidences
+    # on the 160 logged decisions, so drift checks its accuracy too.
+    (snapshot,) = store.calibrations()
+    assert snapshot["target"] == 0.8 and snapshot["threshold"] == store.thresholds(0)["needs_prep"] and snapshot["answers"] == 160
+    assert store.resets() == {} and sum(snapshot["histogram"]["counts"]) == 160
     drift = stats(store)["drift"]
-    assert len(drift) == 1 and drift[0]["calibrated_at"] is None and drift[0]["baseline"] == {"answers": 5}
+    assert len(drift) == 1 and drift[0]["calibrated_at"] == snapshot["ts"] and drift[0]["baseline"] is None
 
 
 def test_stats_prices_each_stage_and_what_it_saves(tmp_path):
