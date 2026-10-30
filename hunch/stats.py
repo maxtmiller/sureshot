@@ -3,7 +3,7 @@ import math
 import statistics
 from bisect import bisect_right
 from hunch.calibrate import histogram, tier_confidences, wilson_lower
-from hunch.review import REASONS, pending
+from hunch.review import REASONS, in_sample, pending
 
 
 def _percentile(values, p):
@@ -283,7 +283,19 @@ def _costs(costs, n_decisions, questions_asked, asked, system2_asked, kept, tota
             "savings": 1 - total / always if always else None, "tiers": tiers}
 
 
-def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_000, min_escalation_change=0.05, min_distribution_change=0.1, costs=None):
+def _on_sample(graded, right, target, z=1.645):
+    """The router's accuracy on the labeled random sample, with a 90% interval, and whether even its top is below the
+    target (the latest calibration's, for this question)."""
+    if not graded:
+        return {"graded": 0, "accuracy": None, "low": None, "high": None, "target": target, "below_target": None}
+    accuracy = right / graded
+    high = 1 - wilson_lower(1 - accuracy, graded, z)
+    return {"graded": graded, "accuracy": accuracy, "low": wilson_lower(accuracy, graded, z), "high": high, "target": target,
+            "below_target": target is not None and high < target}
+
+
+def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_000, min_escalation_change=0.05, min_distribution_change=0.1, costs=None,
+          sample=0.0):
     """Summarizes the log since a unix time. Returns:
 
     decisions, degraded (how many had a model down), cache (model answers served from the cache against asked of
@@ -329,7 +341,13 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     answers avoided) and net. A negative net means the tier costs more than it saves. Questions served from the
     cache are counted as asked, so with a cache this is an upper bound.
 
-    review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue).
+    review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue), with
+    `sample` the share of decisions in the random labeling sample, as given to review_queue.
+
+    In questions, accuracy_on_sample (None unless `sample` is given) is the accuracy of the final answers on the
+    labeled decisions of that random sample, which unlike your other labels says how often the router is right
+    overall: {graded, accuracy, low, high (a 90% interval), target (the latest calibration's), below_target (even the
+    top of the interval is below the target: no threshold fixes that, since System 2 or the labels are the limit)}.
 
     questions: for each question, how many times it was asked, answered_by (the share each tier and System 2 gave),
     and accuracy against your labels. Per tier, accuracy is of the answers that tier gave and kept (not the ones it
@@ -337,7 +355,7 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     audit rate; that is what to look at to decide whether a tier is earning its place."""
     labels = store.labels()
     decisions = store.results(since)
-    queue = pending(store, since, decisions, labels)
+    queue = pending(store, since, decisions, labels, sample)
     latency = {"total": [], "tiers": {}, "system2": []}
     questions, degraded, hits, misses = {}, 0, 0, 0
     asked, kept, system2_asked = {}, {}, 0
@@ -351,7 +369,7 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
         if result["latency_ms"]["system2"] is not None:
             latency["system2"].append(result["latency_ms"]["system2"])
         for key, answer in result["answers"].items():
-            q = questions.setdefault(key, {"asked": 0, "answered_by": {}, "human": [0, 0], "tiers": {}})
+            q = questions.setdefault(key, {"asked": 0, "answered_by": {}, "human": [0, 0], "sampled": [0, 0], "tiers": {}})
             q["asked"] += 1
             who = "system2" if answer["source"] == "system2" else f"tier {answer.get('tier', 0)}"
             for entry in answer.get("tried", []):
@@ -364,6 +382,9 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
             if human is not None:
                 q["human"][0] += 1
                 q["human"][1] += answer["answer"] == human
+                if in_sample(decision_id, sample):
+                    q["sampled"][0] += 1
+                    q["sampled"][1] += answer["answer"] == human
             if who == "system2":
                 continue
             truth = human if human is not None else answer.get("audit", {}).get("answer")
@@ -373,11 +394,15 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
                 t[0] += 1
                 t[1] += weight * (answer["answer"] == truth)
                 t[2] += weight
+    targets = {}
+    for c in store.calibrations() + store.issues():
+        targets[c["key"]] = max(targets.get(c["key"], 0.0), c["target"])
     for key, q in questions.items():
         q["answered_by"] = {who: n / q["asked"] for who, n in sorted(q["answered_by"].items())}
         q["accuracy_vs_labels"] = {"graded": q["human"][0], "accuracy": q["human"][1] / q["human"][0]} if q["human"][0] else None
         q["tier_accuracy"] = {who: {"graded": n, "accuracy": right / weight} for who, (n, right, weight) in sorted(q["tiers"].items())}
-        del q["human"], q["tiers"]
+        q["accuracy_on_sample"] = _on_sample(*q["sampled"], targets.get(key)) if sample else None
+        del q["human"], q["sampled"], q["tiers"]
     cost = None
     if costs is not None:
         cost = _costs(costs, len(decisions), sum(q["asked"] for q in questions.values()), asked, system2_asked, kept,

@@ -702,7 +702,7 @@ def test_review_queue_lists_disagreements_and_clears_when_graded(tmp_path):
     assert first["id"] == ids[0] and first["answer"] is False and first["source"] == "system2" and first["question"] == q["needs_prep"]
     assert [c["who"] for c in first["candidates"]] == ["tier 0", "system2"] and first["candidates"][1]["reason"] == "because"
     assert [i["state"] for i in review_queue(store, reasons=("unresolved",))] == ["five"] and len(review_queue(store, limit=1)) == 1
-    assert stats(store)["review_queue"] == {"disagreement": 1, "audit_disagreement": 1, "unresolved": 1}
+    assert stats(store)["review_queue"] == {"sample": 0, "disagreement": 1, "audit_disagreement": 1, "unresolved": 1}
     store.label(ids[0], "needs_prep", True)
     assert [i["state"] for i in review_queue(store)] == ["three", "five"]
     # A System 2 answer with no System 1 answer to compare against is not queued.
@@ -1427,3 +1427,27 @@ def test_stats_prices_each_stage_and_what_it_saves(tmp_path):
     assert stats(store, costs=costs)["cost"]["total"] == 110 + 20
     with pytest.raises(ValueError, match="system2"):
         stats(store, costs={"tier 0": 1.0})
+
+
+def test_a_random_labeling_sample_measures_the_router_against_its_target(tmp_path):
+    from hunch import review_queue, stats
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store)
+    for _ in range(300):
+        router.decide("event", q)
+    # Nothing disagrees, so without a sample nothing is queued; with one, a fixed random share is, first.
+    assert review_queue(store) == []
+    queue = review_queue(store, limit=None, sample=0.1)
+    assert 15 <= len(queue) <= 45 and {i["reason"] for i in queue} == {"sample"}
+    assert [i["id"] for i in review_queue(store, limit=None, sample=0.1)] == [i["id"] for i in queue]
+    assert stats(store, sample=0.1)["review_queue"]["sample"] == len(queue)
+    # A person says nine in ten of the sampled answers were wrong: the router is far below the target.
+    store.save_issues({"needs_prep": {"reason": "target unreachable", "best_target": 0.5, "target": 0.95}}, 0, ["needs_prep"])
+    for n, item in enumerate(queue):
+        store.label(item["id"], "needs_prep", n % 10 == 0)
+    on_sample = stats(store, sample=0.1)["questions"]["needs_prep"]["accuracy_on_sample"]
+    assert on_sample["graded"] == len(queue) and on_sample["accuracy"] == pytest.approx(sum(n % 10 == 0 for n in range(len(queue))) / len(queue))
+    assert on_sample["low"] < on_sample["accuracy"] < on_sample["high"] < 0.95 and on_sample["target"] == 0.95 and on_sample["below_target"] is True
+    assert stats(store)["questions"]["needs_prep"]["accuracy_on_sample"] is None

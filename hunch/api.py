@@ -92,7 +92,7 @@ def feedback(request: FeedbackRequest, authorization: str = Header(default="")):
 @app.get("/stats")
 def usage_stats(since: float = 0.0, min_samples: int = Query(30, ge=1), alpha: float = Query(0.01, gt=0, lt=1),
                 false_alarm_every: float = Query(100_000, gt=1), min_escalation_change: float = Query(0.05, ge=0, le=1),
-                min_distribution_change: float = Query(0.1, ge=0, le=1), costs: str | None = None,
+                min_distribution_change: float = Query(0.1, ge=0, le=1), costs: str | None = None, sample: float = Query(0.0, ge=0, le=1),
                 authorization: str = Header(default="")):
     """costs is JSON, e.g. {"tier 0": 0, "tier 1": 0.0002, "system2": 0.004}: a cost per question of each stage."""
     authorize(authorization)
@@ -106,15 +106,15 @@ def usage_stats(since: float = 0.0, min_samples: int = Query(30, ge=1), alpha: f
             raise HTTPException(422, "costs must map each stage to a number")
         if "system2" not in prices:
             raise HTTPException(422, 'costs needs a "system2" cost per question')
-    return stats(log(), since, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change, prices)
+    return stats(log(), since, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change, prices, sample)
 
 
 @app.get("/review")
-def review(limit: int = 50, reason: str | None = None, authorization: str = Header(default="")):
+def review(limit: int = 50, reason: str | None = None, sample: float = Query(0.0, ge=0, le=1), authorization: str = Header(default="")):
     authorize(authorization)
     if reason is not None and reason not in REASONS:
         raise HTTPException(422, f"reason must be one of {list(REASONS)}")
-    return review_queue(log(), limit, (reason,) if reason else REASONS)
+    return review_queue(log(), limit, (reason,) if reason else REASONS, sample=sample)
 
 
 @app.post("/calibrate")
