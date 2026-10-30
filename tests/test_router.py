@@ -1566,3 +1566,28 @@ def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_
     assert checked["reason"] == "below target on labels" and checked["threshold"] is None and store.thresholds() == {"needs_prep": float("inf")}
     assert checked["sample_check"]["graded"] == len(sample) and checked["sample_check"]["high"] < 0.9
     assert checked["graded_by"] == {"human": len(sample), "system2": 300 - len(sample)}
+
+
+def test_recheck_fails_a_certified_tier_its_labeled_sample_rules_out(tmp_path):
+    from hunch import calibrate, recheck, review_queue, stats
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # The tier always agrees with System 2 (the audits), so calibration certifies it.
+    router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store, audit=1.0)
+    for _ in range(300):
+        router.decide("event", q)
+    assert calibrate(store, 0.9, 30)["needs_prep"]["threshold"] == 0.99
+    # Nothing labeled yet: nothing to go on, nothing changes.
+    assert recheck(store, sample=0.1)["needs_prep"] == {"threshold": 0.99, "target": 0.9, "graded": 0, "accuracy": None, "high": None, "failed": False}
+    # A few wrong labels are not enough to rule the target out; many are.
+    sample = review_queue(store, limit=None, sample=0.1)
+    store.label(sample[0]["id"], "needs_prep", False)
+    assert not recheck(store, sample=0.1)["needs_prep"]["failed"] and store.thresholds() == {"needs_prep": 0.99}
+    for item in sample:
+        store.label(item["id"], "needs_prep", False)
+    report = recheck(store, sample=0.1)["needs_prep"]
+    assert report["failed"] and report["graded"] == len(sample) and report["accuracy"] == 0.0
+    assert store.thresholds() == {"needs_prep": float("inf")} and store.issues()[0]["reason"] == "below target on labels"
+    # A tier that already failed closed is not rechecked.
+    assert recheck(store, sample=0.1) == {}
