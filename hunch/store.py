@@ -155,7 +155,8 @@ class Store:
 
     def _graded(self):
         """(row, answer, result) for each graded question of each logged decision; row has id, key, state, question,
-        images, truth, kind and weight.
+        images, truth, kind, weight and any_confident (whether some tier was confident about it, which decides its
+        chance of being in review_queue's `confident` sample).
 
         The truth is a human label ("human"), else System 2's answer ("proxy"). System 2 saw every escalated question
         (weight 1) and a random audit_rate share of the confident ones (weight 1/audit_rate), so weighting by the
@@ -174,7 +175,8 @@ class Store:
                     weight = 1.0 if escalated else 1 / result["audit_rate"]
                 else:
                     continue
-                row = {"id": decision_id, "key": key, "state": state, "question": questions[key], "images": images, "truth": truth, "kind": kind, "weight": weight}
+                row = {"id": decision_id, "key": key, "state": state, "question": questions[key], "images": images, "truth": truth, "kind": kind, "weight": weight,
+                       "any_confident": any(t.get("confident") for t in answer.get("tried", []))}
                 yield row, answer, result
 
     def graded(self):

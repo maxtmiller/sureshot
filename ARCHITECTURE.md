@@ -289,7 +289,8 @@ accurate, so everything above it can skip System 2.
   so labels on its confident answers would stop coming and it could never be confirmed. *Why the `confident` share
   rather than the answers the tier kept:* an unconfirmed tier keeps nothing. Each label is weighted by the inverse of
   its chance of being picked, with the effective count in both bounds. Without either rate, nothing needs confirming,
-  and a threshold can rest on System 2's grades alone. `retrain` does not ask for confirmation yet.
+  and a threshold can rest on System 2's grades alone. `retrain` applies the same rule to the classifier (see
+  below).
 - **`recheck`** runs the same check on a schedule, since a certified tier is rarely calibrated again: it confirms an
   unconfirmed threshold once the labels show the target, and fails one they rule out. With a 2% sample and a tier
   keeping 15% of messages, the sample alone gives about one label per 330 messages; the `confident` share is what
@@ -322,6 +323,14 @@ accurate, so everything above it can skip System 2.
   recalibrated by `retrain`, not `calibrate(tier=0)`, which sees only its answers since promotion: one day of those
   killed a classifier `retrain` had just certified. `retrain` also saves a drift snapshot from the classifier's
   confidences on decisions it was not trained on.
+- **Confirming the classifier.** It learns mostly from System 2's answers and is graded on held-out decisions that
+  are mostly System 2's answers too, so it inherits System 2's mistakes and the grading can't see them. With
+  `sample=` or `confident=`, `retrain` confirms it with your labels as `calibrate` does, with one difference: the
+  classifier is free to run, so instead of waiting for labels on its own deployed answers, it is run on every
+  held-out decision a person labeled at random. A decision is in the `confident` sample only if some tier was
+  confident about it, which `graded()` rows record (`any_confident`), so each label is weighted by its chance of
+  being picked. Labels that rule the target out stop a promotion or fail the current classifier closed; labels that
+  don't yet show it leave the threshold unconfirmed.
 - Measured on public datasets (200 held-out items per question, 300 training labels): a classifier then
   `gpt-4o-mini` scored 92% on a topic question (the classifier answered 71%, p50 12 ms) and 89% on sentiment (trusted
   for only 12%, p50 461 ms), against 82% and 90% for the LLM alone.
@@ -426,6 +435,7 @@ What load testing found, with fake models that take 20 ms (so these show hunch's
 - A CLI is not built (#8).
 - `recheck` needs a few hundred labels on a tier's confident answers to rule out a target the tier misses by a few
   points, and about 31 all-right labels to confirm a 95% threshold.
-- `retrain` certifies the classifier on held-out decisions that are mostly graded by System 2, without confirmation.
+- Confirmation only counts held-out labels, so a classifier needs roughly three times the random labels a
+  deployed tier does before it is trusted.
 - The guard and `LocalDecider` run in-process and are not wrapped in outage fallback.
 - Only the ordering of tiers is fixed by you; the router does not learn which tier to try first.

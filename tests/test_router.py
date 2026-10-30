@@ -1690,3 +1690,44 @@ def test_labels_must_confirm_a_threshold_system2_certified(tmp_path):
     assert checked["confirmed"] and not checked["failed"] and checked["graded"] == len(queue)
     assert store.unconfirmed() == set() and store.issues() == []
     assert router.decide("event", q)["escalated"] == []
+
+
+class TopicClaude:
+    """A System 2 that says a question needs prep when the text mentions a server."""
+
+    def answer(self, state, questions, images=()):
+        return {k: {"answer": "server" in state, "reason": "because"} for k in questions}
+
+
+def test_retrain_needs_labels_to_confirm_the_classifier(tmp_path):
+    from hunch import LocalDecider, Store, retrain, review_queue
+
+    def run(name):
+        store = Store(tmp_path / name, seed=0)
+        router = Router(LocalDecider({}, _bag), TopicClaude(), log=store)
+        for text in ["server meeting", "meeting about server", "invoice sale", "sale invoice due"] * 100:
+            router.decide(text, q)
+        return store
+
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    # People agree with System 2, but few of them have labeled: the classifier is certified on System 2's answers
+    # and saved, unconfirmed, until labels on the random sample show the target.
+    store = run("agree.db")
+    for item in review_queue(store, limit=None, sample=0.02):
+        store.label(item["id"], "needs_prep", "server" in item["state"])
+    report = retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag, sample=0.02)["report"]["needs_prep"]
+    assert report["promoted"] and not report["label_check"]["confirmed"] and store.unconfirmed() == {"needs_prep"}
+    assert store.issues()[0]["reason"] == "not enough labels"
+    for item in review_queue(store, limit=None, sample=0.5):
+        store.label(item["id"], "needs_prep", "server" in item["state"])
+    report = retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag, sample=0.5)["report"]["needs_prep"]
+    assert report["label_check"]["confirmed"] and store.unconfirmed() == set() and store.issues() == []
+    # People say every invoice needs prep too. The classifier learned mostly from System 2 and gets them wrong, and
+    # graded mostly by System 2 it still looks right; the labels rule it out, so it is not promoted.
+    store = run("disagree.db")
+    for item in review_queue(store, limit=None, sample=0.2):
+        store.label(item["id"], "needs_prep", True)
+    result = retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag, sample=0.2)
+    report = result["report"]["needs_prep"]
+    assert not report["promoted"] and report["label_check"]["ruled_out"] and result["decider"] is None
+    assert store.thresholds() == {} and store.issues()[0]["reason"] == "below target on labels"
