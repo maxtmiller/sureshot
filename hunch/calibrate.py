@@ -2,6 +2,7 @@
 import logging
 from bisect import bisect_right
 from math import ceil, lgamma, log as ln, sqrt
+from statistics import NormalDist
 from hunch.review import in_sample
 
 log = logging.getLogger("hunch")
@@ -125,12 +126,14 @@ def histogram(confidences, bins=5):
 
 def _label_check(rows, threshold, target, sample, confident):
     """Your labels on the random samples at or above a threshold (rows are store.labeled() rows of one tier and
-    question): {graded, accuracy, low, confirmed, graded_all, high, ruled_out}.
+    question): {graded, accuracy, low, confirmed, next_check, graded_all, high, ruled_out}.
 
     Confirming asks whether the tier was right when it said it was sure: it counts the labels on the answers the tier
     flagged as confident while held to this threshold or a lower one (see _flagged), which were all picked at the
-    same rate, so each counts fully. graded, accuracy and low are theirs; confirmed is low reaching the target on the bound calibration
-    certifies with.
+    same rate, so each counts fully. graded and accuracy are theirs. The check runs every night, so it has to hold
+    however often it is run: it is only tested when the labels reach fixed counts (see _confirmations), each test on
+    the first that many labels in the order they were given, with the 10% of a one-sided 90% bound split across the
+    tests. low is the bound at the last count reached, and next_check the count of the next test.
 
     Ruling out also looks at every random label at or above the threshold, flagged or not, each weighted by the
     inverse of its chance of being picked (the `sample` share, or the `confident` share where the tier was
@@ -142,7 +145,7 @@ def _label_check(rows, threshold, target, sample, confident):
             continue
         rate = max(sample, confident) if row["confident"] else sample
         if in_sample(row["id"], rate):
-            labels.append((row["answer"] == row["truth"], 1 / rate, _flagged(row["confident"], row["held_to"], threshold)))
+            labels.append((row["answer"] == row["truth"], 1 / rate, _flagged(row["confident"], row["held_to"], threshold), row["labeled_at"]))
     return _check(labels, target)
 
 
@@ -164,20 +167,38 @@ def _hold(threshold, saved, check_at):
     return threshold, check
 
 
+def _confirmations(target, alpha=0.1):
+    """The tests that confirm a threshold, [(labels, z)]: the j-th uses the first `labels` labels and a one-sided bound
+    at alpha / 2 ** (j + 1), so all of them together are wrong at most alpha of the time however long they run. The
+    first is at the fewest labels that could pass with none wrong; each later one doubles it."""
+    tests, n = [], 1
+    for j in range(20):
+        z = NormalDist().inv_cdf(1 - alpha / 2 ** (j + 1))
+        n = max(n * 2 if tests else 1, ceil(z * z * target / (1 - target)) if target < 1 else 10 ** 9)
+        tests.append((n, z))
+    return tests
+
+
 def _check(labels, target):
-    """_label_check on labels already picked: [(right, weight, flagged)]."""
-    flagged = [right for right, _, f in labels if f]
+    """_label_check on labels already picked: [(right, weight, flagged, labeled_at)]."""
+    flagged = [right for right, _, f, at in sorted(labels, key=lambda label: (label[3] is None, label[3] or 0)) if f]
     accuracy = sum(flagged) / len(flagged) if flagged else None
-    low = wilson_lower(accuracy, len(flagged)) if flagged else None
+    low, confirmed, next_check = None, False, None
+    for n, z in _confirmations(target) if target is not None else []:
+        if n > len(flagged):
+            next_check = n
+            break
+        low = wilson_lower(sum(flagged[:n]) / n, n, z)
+        confirmed = confirmed or low >= target
     # Either set of labels can rule the target out; each gets half of the 5%.
     highs = [confidence_sequence(sum(flagged), len(flagged), 0.025)[1]] if flagged else []
     if labels:
-        weight, weight_sq = sum(w for _, w, _ in labels), sum(w * w for _, w, _ in labels)
+        weight, weight_sq = sum(w for _, w, _, _ in labels), sum(w * w for _, w, _, _ in labels)
         # The effective count of the weighted labels: as much evidence as that many equally weighted ones.
         effective = weight * weight / weight_sq
-        highs.append(confidence_sequence(sum(w for right, w, _ in labels if right) / weight * effective, effective, 0.025)[1])
+        highs.append(confidence_sequence(sum(w for right, w, _, _ in labels if right) / weight * effective, effective, 0.025)[1])
     high = min(highs) if highs else None
-    return {"graded": len(flagged), "accuracy": accuracy, "low": low, "confirmed": target is not None and low is not None and low >= target,
+    return {"graded": len(flagged), "accuracy": accuracy, "low": low, "confirmed": confirmed, "next_check": next_check,
             "graded_all": len(labels), "high": high, "ruled_out": target is not None and high is not None and high < target}
 
 

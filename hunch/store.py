@@ -32,6 +32,12 @@ class Store:
                 except sqlite3.OperationalError as e:
                     if "duplicate column" not in str(e):  # another process added it first
                         raise
+            if "ts" not in {row[1] for row in db.execute("PRAGMA table_info(labels)")}:
+                try:  # a log made before labels were timed
+                    db.execute("ALTER TABLE labels ADD COLUMN ts REAL")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column" not in str(e):
+                        raise
             db.execute("PRAGMA journal_mode=WAL")  # readers (stats, review) stop blocking the writers that log decisions
 
     @contextmanager
@@ -61,7 +67,7 @@ class Store:
             if key not in questions:
                 raise ValueError(f"decision {decision_id} has no question {key!r}")
             check_answer(questions[key], answer)
-            db.execute("INSERT OR REPLACE INTO labels VALUES (?, ?, ?, ?)", (decision_id, key, json.dumps(answer), source))
+            db.execute("INSERT OR REPLACE INTO labels (decision_id, key, answer, source, ts) VALUES (?, ?, ?, ?, ?)", (decision_id, key, json.dumps(answer), source, time.time()))
 
     def thresholds(self, tier=0):
         """The calibrated thresholds of one tier, {key: value}."""
@@ -157,20 +163,22 @@ class Store:
         """(row, answer, result) for each graded question of each logged decision; row has id, key, state, question,
         images, truth, kind, weight, any_confident (whether some tier was confident about it, which decides its
         chance of being in review_queue's `confident` sample), confident_by ({tier: whether it was confident} for the
-        tiers that answered it) and held_by ({tier: the threshold it was held to}).
+        tiers that answered it), held_by ({tier: the threshold it was held to}) and labeled_at (when a person labeled
+        it; None for System 2's answers and labels from before labels were timed).
 
         The truth is a human label ("human"), else System 2's answer ("proxy"). System 2 saw every escalated question
         (weight 1) and a random audit_rate share of the confident ones (weight 1/audit_rate), so weighting by the
         inverse of that chance makes the rows represent all of System 1's answers, not only the unsure ones."""
         with self._db() as db:
             decisions = db.execute("SELECT id, state, questions, images, result FROM decisions").fetchall()
-            labels = {(i, k): json.loads(a) for i, k, a in db.execute("SELECT decision_id, key, answer FROM labels")}
+            labels = {(i, k): (json.loads(a), ts) for i, k, a, ts in db.execute("SELECT decision_id, key, answer, ts FROM labels")}
         for decision_id, state, questions, images, result in decisions:
             questions, result = json.loads(questions), json.loads(result)
             for key, answer in result["answers"].items():
                 escalated = answer["source"] == "system2"
+                labeled_at = None
                 if (decision_id, key) in labels:
-                    truth, kind, weight = labels[(decision_id, key)], "human", 1.0
+                    (truth, labeled_at), kind, weight = labels[(decision_id, key)], "human", 1.0
                 elif escalated or "audit" in answer:
                     truth, kind = answer["answer"] if escalated else answer["audit"]["answer"], "proxy"
                     weight = 1.0 if escalated else 1 / result["audit_rate"]
@@ -179,7 +187,7 @@ class Store:
                 row = {"id": decision_id, "key": key, "state": state, "question": questions[key], "images": images, "truth": truth, "kind": kind, "weight": weight,
                        "any_confident": any(t.get("confident") for t in answer.get("tried", [])),
                        "confident_by": {t["tier"]: t.get("confident", False) for t in answer.get("tried", [])},
-                       "held_by": {t["tier"]: t.get("threshold") for t in answer.get("tried", [])}}
+                       "held_by": {t["tier"]: t.get("threshold") for t in answer.get("tried", [])}, "labeled_at": labeled_at}
                 yield row, answer, result
 
     def graded(self):

@@ -159,6 +159,20 @@ next two days. One reason it can happen: the confirmation check runs every night
 nights a lucky streak is more likely to pass than the bound says; ruling out already uses a bound that holds however
 often it is checked, and confirming should too.
 
+So confirming is now only tested at fixed label counts (25, 50, 100... for 90%), with the error rate split across the
+tests, which holds however many nights it runs. The same six runs:
+
+| Run | Classifier confirmed | Then answered | Right on what it kept | Cost (`gpt-4.1` alone) |
+|---|---|---|---|---|
+| trec 0 | night 10, no traffic after | | | $2.23 ($2.22) |
+| trec 1 | night 9 | 30% | 94% | $2.16 |
+| trec 2 | night 8 | 25% to 27% | 95% | $2.12 |
+| banking77 0, 1, 2 | no: 17 to 22 labels of the 25 the first test needs | | | $10.39 ($10.14) |
+
+Every trusted period now met the target, and accuracy stayed at `gpt-4.1`'s. The price is time: the first test
+needs 25 labels where the old bound passed at 15 to 26, so banking77's classifiers, 86% to 100% right on 17 to 22
+labels, were not confirmed within ten days.
+
 ## Caveats
 
 One dataset with its own label conventions ("Who is Stephen Hawking?" asks for a description, not a person), which
