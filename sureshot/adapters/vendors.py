@@ -6,7 +6,7 @@ endpoint), so what a vendor supports is up to the vendor: a System 1 needs a mod
 one that follows a JSON schema. Run `.check()` on a decider before relying on it. There is no `GroqDecider` because Groq
 is reported not to return logprobs. Gemini and Claude have their own protocols and live in `gemini.py` and
 `anthropic.py`."""
-from hunch.adapters.chat import ChatDecider, ChatReasoner
+from sureshot.adapters.chat import ChatDecider, ChatReasoner
 
 
 def _decider(name, provider, vendor):

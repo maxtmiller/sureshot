@@ -1,7 +1,7 @@
 # Case study: routing bank support messages (banking77)
 
-An end-to-end test of hunch on a realistic job: routing a bank's support messages to one of 77 intents, over ten
-simulated days. Each round turned up problems in hunch; they were fixed and the study run again. The script is
+An end-to-end test of sureshot on a realistic job: routing a bank's support messages to one of 77 intents, over ten
+simulated days. Each round turned up problems in sureshot; they were fixed and the study run again. The script is
 `case_study.py` (`--dataset banking77`, the default); every round's numbers are in `case_study_banking77_results.json`.
 
 ## Setup
@@ -32,16 +32,16 @@ simulated days. Each round turned up problems in hunch; they were fixed and the 
 
 | | Accuracy | Cost | Mean latency |
 |---|---|---|---|
-| hunch, first run | 78.8% | $8.42 | 1.31 s |
-| hunch, after the first fixes (one run) | 79.4% | $8.52 | 1.15 s |
-| hunch, after the second fixes (three runs) | 79.2% to 79.5% | $7.94 to $8.98 | 1.26 to 1.39 s |
-| hunch, final, money only (three runs) | 79.2% to 79.3% | $8.59 to $9.14 | 1.34 to 1.40 s |
-| hunch, final, waiting at $0.01 a second (three runs) | 79.2% to 79.5% | $8.57 to $9.04 | 0.93 to 0.97 s |
+| sureshot, first run | 78.8% | $8.42 | 1.31 s |
+| sureshot, after the first fixes (one run) | 79.4% | $8.52 | 1.15 s |
+| sureshot, after the second fixes (three runs) | 79.2% to 79.5% | $7.94 to $8.98 | 1.26 to 1.39 s |
+| sureshot, final, money only (three runs) | 79.2% to 79.3% | $8.59 to $9.14 | 1.34 to 1.40 s |
+| sureshot, final, waiting at $0.01 a second (three runs) | 79.2% to 79.5% | $8.57 to $9.04 | 0.93 to 0.97 s |
 | `gpt-4.1` alone | 79.3% | $10.14 | 0.95 s |
 | `gpt-4o-mini` alone | 69.0% | $0.25 | 0.57 s |
 
-With waiting priced, hunch matches `gpt-4.1`'s accuracy for 11% to 15% less at the same speed, and from day 7 it is
-faster (0.86 to 0.91 s). No model here gets near the 95% target, and hunch says so: the labeled random sample put the
+With waiting priced, sureshot matches `gpt-4.1`'s accuracy for 11% to 15% less at the same speed, and from day 7 it is
+faster (0.86 to 0.91 s). No model here gets near the 95% target, and sureshot says so: the labeled random sample put the
 router below its target from day 2 or 3 in five runs of six, and day 9 in the sixth.
 
 The final round with waiting priced, by run:
@@ -99,11 +99,11 @@ Third round, and the fixes it led to (#53, #54, #55):
 
 1. **Nothing rechecked a certified tier** (`gpt-4o-mini` was certified on night 1 and never checked again).
    `recheck(store, tier, sample=)` now tests saved thresholds against the labeled sample on a schedule.
-2. **A tier that keeps little still cost latency on every message**, which made hunch slower than `gpt-4.1` alone.
+2. **A tier that keeps little still cost latency on every message**, which made sureshot slower than `gpt-4.1` alone.
    `prune(store, costs, tier)` now stops asking a tier, apart from the probe sample, where it costs more than it
    saves; waiting counts if it is priced into `costs`.
 3. **Skipping a tier starved the classifier.** `retrain` learned only from questions some tier had answered, so once
-   `gpt-4o-mini` was skipped it had nothing new to learn from, was never promoted, and hunch cost as much as
+   `gpt-4o-mini` was skipped it had nothing new to learn from, was never promoted, and sureshot cost as much as
    `gpt-4.1` alone. It now learns from every graded question (`Store.graded()`).
 
 Fifth round, after the [trec case study](case_study_trec.md) found a tier certified on System 2's grades alone:
@@ -118,7 +118,7 @@ router trusts it, and the review queue offers a random share of the answers a ti
 
 `gpt-4o-mini` was certified on night 1 from 3 to 6 labels and about 50 System 2 grades, and stayed unconfirmed in
 all six runs: by day 10 its labels were 91% to 93% right (27 to 49 of them, money only), short of 95%. Before, it
-kept 340 to 396 answers at 90% to 91% accuracy; now it keeps none, the classifier carries the savings, and hunch
+kept 340 to 396 answers at 90% to 91% accuracy; now it keeps none, the classifier carries the savings, and sureshot
 costs 4% to 14% less than `gpt-4.1` alone instead of 10% to 22%. Accuracy did not move.
 
 Sixth round: `retrain(sample=, confident=)` holds the classifier to the same rule, checking it on every held-out
@@ -131,13 +131,13 @@ decision a person labeled at random.
 
 The classifier was promoted from day 3 or 4 and stayed unconfirmed in all six runs: by day 10 its random labels were
 93% to 99% right (35 to 48 of them), and the lower bound reached 0.84 to 0.91, short of 0.95. With nothing
-confirmed, hunch costs 0% to 3% more than `gpt-4.1` alone and is slower. Before, the classifier's kept answers were
-90% to 96% right; hunch was cheaper by claiming a 95% it did not have.
+confirmed, sureshot costs 0% to 3% more than `gpt-4.1` alone and is slower. Before, the classifier's kept answers were
+90% to 96% right; sureshot was cheaper by claiming a 95% it did not have.
 
 Seventh round, waiting priced, with 30% of confident answers queued for labels: confirmation now counts only the
 labels on answers the tier flagged as confident (all picked at the same rate, so each counts fully). By day 10 the
 classifier had 35 to 48 of them and was 85% to 94% right on them, so it stayed unconfirmed: where it says it is sure
-it really is below 95%, and hunch now says so with labels rather than missing it. Cost and speed were unchanged
+it really is below 95%, and sureshot now says so with labels rather than missing it. Cost and speed were unchanged
 ($10.17 to $10.18, 1.07 to 1.08 s).
 
 ## What still needs to change
@@ -154,7 +154,7 @@ it really is below 95%, and hunch now says so with labels rather than missing it
    the router's accuracy on day 10 ranged from 68% to 88% (50 to 71 labels) against a true 79%, depending on which
    answers happened to be audited and labeled.
 3. **The target is out of reach.** No setup gets near 95% here, because `gpt-4.1` itself is at 79%. Better option
-   descriptions, examples in the prompt, or a stronger System 2 are what would move it; hunch can only say so.
+   descriptions, examples in the prompt, or a stronger System 2 are what would move it; sureshot can only say so.
 
 ## Caveats
 

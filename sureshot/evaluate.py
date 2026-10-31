@@ -1,6 +1,6 @@
 """Replay the graded decisions in the log through candidate System 1 models and compare them."""
 from itertools import groupby
-from hunch.calibrate import summarize
+from sureshot.calibrate import summarize
 
 
 def evaluate(store, candidates, target_accuracy=0.95, min_samples=30):

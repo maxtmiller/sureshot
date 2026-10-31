@@ -2,8 +2,8 @@
 (System 2). Its OpenAI-compatible endpoint is not used: it is reported not to return logprobs."""
 import json
 import os
-from hunch.adapters import base
-from hunch.adapters.base import PROMPT_VERSION, SYSTEM_PROMPT, OptionDecider, check_reply, prompt
+from sureshot.adapters import base
+from sureshot.adapters.base import PROMPT_VERSION, SYSTEM_PROMPT, OptionDecider, check_reply, prompt
 
 DEFAULT_URL = "https://generativelanguage.googleapis.com/v1beta"
 

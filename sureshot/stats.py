@@ -2,8 +2,8 @@
 import math
 import statistics
 from bisect import bisect_right
-from hunch.calibrate import confidence_sequence as _sequence, histogram, tier_confidences, wilson_lower
-from hunch.review import REASONS, in_sample, pending
+from sureshot.calibrate import confidence_sequence as _sequence, histogram, tier_confidences, wilson_lower
+from sureshot.review import REASONS, in_sample, pending
 
 
 def _percentile(values, p):
@@ -178,7 +178,7 @@ def _passed_down(rows, tier, key):
     for _, _, _, result in rows:
         answer = result["answers"].get(key)
         if answer and any(e["tier"] == tier for e in answer.get("tried", [])):
-            shares.append(not (answer["source"] == "hunch" and answer.get("tier", 0) == tier and key not in result["unsure"]))
+            shares.append(not (answer["source"] == "sureshot" and answer.get("tier", 0) == tier and key not in result["unsure"]))
     return shares
 
 
@@ -285,7 +285,7 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     tier took, and how often System 2 was called (and its mean time when it was).
 
     uncalibrated: the questions whose latest calibration found no threshold, with the reason and the best target
-    their data supports (see hunch.calibrate); until one is found, a tier whose data could not certify the target is not trusted for that question (it escalates), and a tier with too little data keeps its default threshold.
+    their data supports (see sureshot.calibrate); until one is found, a tier whose data could not certify the target is not trusted for that question (it escalates), and a tier with too little data keeps its default threshold.
 
     drift: for each question and tier with a calibrated threshold, how its answers since that calibration (and since
     `since`) compare with it, and "flags" naming what has moved: "escalation_rate" (the share of the tier's answers
@@ -323,7 +323,7 @@ def stats(store, since=0.0, min_samples=30, alpha=0.01, false_alarm_every=100_00
     answers avoided) and net. A negative net means the tier costs more than it saves. Questions served from the
     cache are counted as asked, so with a cache this is an upper bound.
 
-    review_queue: how many ungraded questions are waiting for a person, by reason (see hunch.review_queue), with
+    review_queue: how many ungraded questions are waiting for a person, by reason (see sureshot.review_queue), with
     `sample` and `confident` the rates given to review_queue.
 
     In questions, accuracy_on_sample (None unless `sample` is given) is the accuracy of the final answers on the

@@ -1,8 +1,8 @@
-"""Load-test a running hunch API: many clients at once, each sending /decide requests with a fresh text.
+"""Load-test a running sureshot API: many clients at once, each sending /decide requests with a fresh text.
 
     python examples/loadtest.py http://localhost:8000 questions.json --clients 32 --requests 500
 
-Reads HUNCH_API_KEY (from the environment or .env). Every request uses a different text, so the response cache never
+Reads SURESHOT_API_KEY (from the environment or .env). Every request uses a different text, so the response cache never
 answers for the models. Prints throughput, latency percentiles and the errors by kind."""
 import argparse
 import collections
@@ -23,7 +23,7 @@ parser.add_argument("--requests", type=int, default=200, help="in total")
 parser.add_argument("--text", default="Hi, can you send me the Q3 numbers before our 3pm call today?")
 args = parser.parse_args()
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-headers = {"Authorization": f"Bearer {os.environ['HUNCH_API_KEY']}"}
+headers = {"Authorization": f"Bearer {os.environ['SURESHOT_API_KEY']}"}
 questions = json.loads(Path(args.questions).read_text())
 errors, latencies = collections.Counter(), []
 

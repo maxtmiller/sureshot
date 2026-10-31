@@ -1,8 +1,8 @@
 import pytest
-import hunch.adapters.base as backends
-from hunch.adapters.base import normalize
-from hunch.questions import answer_schema, validate
-from hunch.router import Router
+import sureshot.adapters.base as backends
+from sureshot.adapters.base import normalize
+from sureshot.questions import answer_schema, validate
+from sureshot.router import Router
 
 QUESTIONS = {
     "needs_prep": {"type": "noul", "instructions": "Does this event need preparation?"},
@@ -43,7 +43,7 @@ def test_normalize_each_type():
 
 def test_http_decider_adapts_any_api(monkeypatch):
     import httpx
-    from hunch import HTTPDecider
+    from sureshot import HTTPDecider
 
     seen = {}
 
@@ -62,7 +62,7 @@ def test_http_decider_adapts_any_api(monkeypatch):
 
 def test_http_reasoner_adapts_any_api(monkeypatch):
     import httpx
-    from hunch import HTTPReasoner, prompt
+    from sureshot import HTTPReasoner, prompt
 
     seen = {}
 
@@ -82,8 +82,8 @@ def test_only_unsure_questions_escalate():
     result = Router(FakeDecider(), claude, threshold=0.8).decide("event", QUESTIONS)
     assert result["unsure"] == ["importance"] and result["escalated"] == ["importance"] and claude.asked == ["importance"]
     assert result["answers"]["importance"]["source"] == "system2" and result["answers"]["importance"]["answer"] == 4
-    assert result["answers"]["importance"]["hunch"]["answer"] == 3
-    assert result["answers"]["event_type"]["source"] == "hunch"
+    assert result["answers"]["importance"]["sureshot"]["answer"] == 3
+    assert result["answers"]["event_type"]["source"] == "sureshot"
 
 
 def test_per_question_threshold_and_no_escalation():
@@ -91,7 +91,7 @@ def test_per_question_threshold_and_no_escalation():
     result = Router(FakeDecider(), claude, threshold=0.8).decide("event", QUESTIONS, thresholds={"importance": 0.4, "event_type": 0.99})
     assert result["unsure"] == ["event_type"] and claude.asked == ["event_type"]
     kept = Router(FakeDecider(), claude, threshold=0.8).decide("event", QUESTIONS, escalate=False)
-    assert kept["unsure"] == ["importance"] and kept["escalated"] == [] and kept["answers"]["importance"]["source"] == "hunch"
+    assert kept["unsure"] == ["importance"] and kept["escalated"] == [] and kept["answers"]["importance"]["source"] == "sureshot"
     assert Router(FakeDecider(), None).decide("event", QUESTIONS)["escalated"] == []
 
 
@@ -106,9 +106,9 @@ def test_schema_and_validation():
 
 def test_api_requires_token(monkeypatch):
     from fastapi.testclient import TestClient
-    import hunch.api as api
+    import sureshot.api as api
 
-    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    monkeypatch.setenv("SURESHOT_API_KEY", "secret")
     monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude()))
     client = TestClient(api.app)
     body = {"state": "event", "questions": QUESTIONS}
@@ -130,7 +130,7 @@ def _logprob_response(url, tops):
 def test_chat_decider_turns_logprobs_into_confidence(monkeypatch):
     import math
     import httpx
-    from hunch import ChatDecider
+    from sureshot import ChatDecider
 
     sent = []
 
@@ -153,7 +153,7 @@ def test_chat_decider_turns_logprobs_into_confidence(monkeypatch):
 
 def test_chat_decider_numbers_the_options_past_26(monkeypatch):
     import math
-    from hunch import ChatDecider
+    from sureshot import ChatDecider
 
     intents = {f"intent_{i}": f"Intent {i}" for i in range(77)}
     sent = []
@@ -171,7 +171,7 @@ def test_chat_decider_numbers_the_options_past_26(monkeypatch):
 
 def test_chat_reasoner_uses_structured_outputs(monkeypatch):
     import httpx
-    from hunch import ChatReasoner
+    from sureshot import ChatReasoner
 
     seen = {}
 
@@ -187,25 +187,25 @@ def test_chat_reasoner_uses_structured_outputs(monkeypatch):
 
 
 def test_router_from_env(monkeypatch):
-    from hunch import ChatDecider, ChatReasoner, router_from_env
+    from sureshot import ChatDecider, ChatReasoner, router_from_env
 
-    for k, v in {"HUNCH_SYSTEM1_MODEL": "a", "HUNCH_SYSTEM1_URL": "http://one/v1",
-                 "HUNCH_SYSTEM2": "chat", "HUNCH_SYSTEM2_MODEL": "b", "HUNCH_SYSTEM2_URL": "http://two/v1", "HUNCH_THRESHOLD": "0.9"}.items():
+    for k, v in {"SURESHOT_SYSTEM1_MODEL": "a", "SURESHOT_SYSTEM1_URL": "http://one/v1",
+                 "SURESHOT_SYSTEM2": "chat", "SURESHOT_SYSTEM2_MODEL": "b", "SURESHOT_SYSTEM2_URL": "http://two/v1", "SURESHOT_THRESHOLD": "0.9"}.items():
         monkeypatch.setenv(k, v)
     router = router_from_env()
     assert isinstance(router.system1, ChatDecider) and router.system1.url == "http://one/v1/chat/completions"
     assert isinstance(router.system2, ChatReasoner) and router.threshold == 0.9
-    monkeypatch.setenv("HUNCH_SYSTEM2", "none")
+    monkeypatch.setenv("SURESHOT_SYSTEM2", "none")
     assert router_from_env().system2 is None
-    monkeypatch.setenv("HUNCH_SYSTEM2", "bogus")
+    monkeypatch.setenv("SURESHOT_SYSTEM2", "bogus")
     with pytest.raises(ValueError):
         router_from_env()
 
 
 def _calibration_store(tmp_path):
-    from hunch import Store
+    from sureshot import Store
 
-    return Store(tmp_path / "hunch.db", seed=0)
+    return Store(tmp_path / "sureshot.db", seed=0)
 
 
 class Scripted:
@@ -228,7 +228,7 @@ def test_log_label_and_audit(tmp_path):
             return {k: {"answer": False, "reason": "no"} for k in questions}
 
     result = Router(Scripted(0.9), Slow(), log=store, audit=1.0).decide("event", q)
-    assert result["escalated"] == [] and result["answers"]["needs_prep"]["source"] == "hunch"
+    assert result["escalated"] == [] and result["answers"]["needs_prep"]["source"] == "sureshot"
     assert result["answers"]["needs_prep"]["audit"]["answer"] is False
     row = store.labeled()[0]
     assert row["kind"] == "proxy" and row["weight"] == 1.0 and row["truth"] is False and row["answer"] is True
@@ -241,7 +241,7 @@ def test_log_label_and_audit(tmp_path):
 
 
 def test_calibrate_finds_threshold_and_router_uses_it(tmp_path):
-    from hunch import calibrate
+    from sureshot import calibrate
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -261,7 +261,7 @@ def test_calibrate_finds_threshold_and_router_uses_it(tmp_path):
 
 
 def test_evaluate_compares_candidates(tmp_path):
-    from hunch import evaluate
+    from sureshot import evaluate
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -279,9 +279,9 @@ class FlippedScripted:
 
 def test_api_feedback_and_calibrate(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
-    import hunch.api as api
+    import sureshot.api as api
 
-    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    monkeypatch.setenv("SURESHOT_API_KEY", "secret")
     store = _calibration_store(tmp_path)
     monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude(), log=store))
     client, auth = TestClient(api.app), {"Authorization": "Bearer secret"}
@@ -333,7 +333,7 @@ def test_golden_run(tmp_path):
 
 def test_extra_fields_reach_the_request(monkeypatch):
     import httpx
-    from hunch import ChatDecider
+    from sureshot import ChatDecider
 
     seen = {}
 
@@ -348,7 +348,7 @@ def test_extra_fields_reach_the_request(monkeypatch):
 
 def test_check_explains_what_is_wrong(monkeypatch):
     import httpx
-    from hunch import ChatDecider
+    from sureshot import ChatDecider
 
     def respond(status=200, tops=None, logprobs=True):
         def post(url, json, headers, timeout):
@@ -380,36 +380,36 @@ def test_check_explains_what_is_wrong(monkeypatch):
 
 
 def test_vllm_decider_and_env_option(monkeypatch):
-    from hunch import ChatDecider, VLLMDecider, router_from_env
+    from sureshot import ChatDecider, VLLMDecider, router_from_env
 
     local = VLLMDecider("Qwen/Qwen3-8B", extra={"top_p": 1})
     assert local.url == "http://localhost:8000/v1/chat/completions" and local.headers == {}
     assert local.extra == {"chat_template_kwargs": {"enable_thinking": False}, "top_p": 1}
-    monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
-    monkeypatch.setenv("HUNCH_SYSTEM2", "none")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_MODEL", "m")
+    monkeypatch.setenv("SURESHOT_SYSTEM2", "none")
     with pytest.raises(ValueError, match="base_url"):
         router_from_env()  # no OpenAI (or any) endpoint is assumed
-    monkeypatch.setenv("HUNCH_SYSTEM1_URL", "http://one/v1")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_URL", "http://one/v1")
     assert type(router_from_env().system1) is ChatDecider
-    monkeypatch.delenv("HUNCH_SYSTEM1_URL")
-    monkeypatch.setenv("HUNCH_SYSTEM1", "vllm")
+    monkeypatch.delenv("SURESHOT_SYSTEM1_URL")
+    monkeypatch.setenv("SURESHOT_SYSTEM1", "vllm")
     assert isinstance(router_from_env().system1, VLLMDecider) and router_from_env().system1.url.startswith("http://localhost:8000")
-    monkeypatch.setenv("HUNCH_SYSTEM1_URL", "http://gpu-box:8000/v1")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_URL", "http://gpu-box:8000/v1")
     assert router_from_env().system1.url == "http://gpu-box:8000/v1/chat/completions"
-    monkeypatch.setenv("HUNCH_SYSTEM1", "bogus")
+    monkeypatch.setenv("SURESHOT_SYSTEM1", "bogus")
     with pytest.raises(ValueError):
         router_from_env()
 
 
 def test_api_reports_an_unready_system1(monkeypatch):
     from fastapi.testclient import TestClient
-    import hunch.api as api
+    import sureshot.api as api
 
     class Down(FakeDecider):
         def check(self):
             raise RuntimeError("cannot reach http://vllm:8000/v1/chat/completions")
 
-    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    monkeypatch.setenv("SURESHOT_API_KEY", "secret")
     monkeypatch.setattr(api, "_router", None)
     monkeypatch.setattr(api, "router_from_env", lambda: Router(Down()))
     response = TestClient(api.app).post("/decide", json={"state": "x", "questions": QUESTIONS}, headers={"Authorization": "Bearer secret"})
@@ -462,7 +462,7 @@ def test_system1_outage_sends_everything_to_system2():
     result = router.decide("event", QUESTIONS)
     assert result["degraded"][0]["system"] == 1 and "refused" in result["degraded"][0]["error"]
     assert claude.asked == list(QUESTIONS) and result["escalated"] == list(QUESTIONS) and result["unsure"] == list(QUESTIONS)
-    assert all(a["source"] == "system2" and a["hunch"] is None for a in result["answers"].values())
+    assert all(a["source"] == "system2" and a["sureshot"] is None for a in result["answers"].values())
     with pytest.raises(httpx.ConnectError):
         Router(Flaky(FakeDecider(), [httpx.ConnectError("refused")] * 9), claude, retries=1, backoff=0).decide("event", QUESTIONS, escalate=False)
     with pytest.raises(httpx.ConnectError):
@@ -471,13 +471,13 @@ def test_system1_outage_sends_everything_to_system2():
 
 def test_system2_outage_keeps_system1_answers(tmp_path):
     import httpx
-    from hunch import calibrate
+    from sureshot import calibrate
 
     store = _calibration_store(tmp_path)
     router = Router(FakeDecider(), Flaky(FakeClaude(), [_status_error(500)] * 9), retries=0, backoff=0, log=store)
     result = router.decide("event", QUESTIONS)
     assert result["degraded"][-1]["system"] == 2 and result["escalated"] == [] and result["unsure"] == ["importance"]
-    assert result["answers"]["importance"]["source"] == "hunch" and result["answers"]["importance"]["answer"] == 3
+    assert result["answers"]["importance"]["source"] == "sureshot" and result["answers"]["importance"]["answer"] == 3
     # A System 1 outage logs answers that have no confidence; calibration skips them instead of crashing.
     down = Router(Flaky(FakeDecider(), [httpx.ConnectError("x")] * 9), FakeClaude(), retries=0, backoff=0, log=store).decide("event", QUESTIONS)
     assert down["degraded"][0]["system"] == 1 and calibrate(store, min_samples=1) == {}
@@ -501,7 +501,7 @@ def _bag(texts):
 
 
 def test_local_decider_trains_on_the_log_and_answers_in_the_same_shape(tmp_path):
-    from hunch import LocalDecider
+    from sureshot import LocalDecider
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"], "event_type": QUESTIONS["event_type"]}
@@ -544,12 +544,12 @@ def test_chain_passes_only_unsure_questions_down():
     result = Router([fast, llm], claude, threshold=[0.9, 0.8]).decide("event", QUESTIONS)
     assert fast.asked == [["needs_prep", "importance", "event_type"]] and llm.asked == [["importance", "event_type"]]
     a = result["answers"]
-    assert (a["needs_prep"]["source"], a["needs_prep"]["tier"]) == ("hunch", 0)
-    assert (a["importance"]["source"], a["importance"]["tier"], a["importance"]["answer"]) == ("hunch", 1, 3)
+    assert (a["needs_prep"]["source"], a["needs_prep"]["tier"]) == ("sureshot", 0)
+    assert (a["importance"]["source"], a["importance"]["tier"], a["importance"]["answer"]) == ("sureshot", 1, 3)
     assert [t["tier"] for t in a["importance"]["tried"]] == [0, 1] and a["importance"]["tried"][0]["confidence"] == 0.5
     # event_type is still below the second tier's threshold, so only it reaches System 2, with the last tier's answer kept.
     assert result["unsure"] == ["event_type"] and claude.asked == ["event_type"]
-    assert a["event_type"]["source"] == "system2" and a["event_type"]["hunch"]["tier"] == 1 and a["event_type"]["hunch"]["answer"] == "interview"
+    assert a["event_type"]["source"] == "system2" and a["event_type"]["sureshot"]["tier"] == 1 and a["event_type"]["sureshot"]["answer"] == "interview"
     assert len(result["latency_ms"]["tiers"]) == 2 and result["degraded"] is None
 
 
@@ -560,7 +560,7 @@ def test_a_tier_that_cannot_answer_a_question_passes_it_down():
     assert result["answers"]["importance"]["tier"] == 1 and result["answers"]["needs_prep"]["tier"] == 0
     with pytest.raises(ValueError, match="no System 1 tier answered 'importance'"):
         Router([fast], None).decide("event", QUESTIONS)
-    assert Router([fast], FakeClaude()).decide("event", QUESTIONS)["answers"]["importance"]["hunch"] is None
+    assert Router([fast], FakeClaude()).decide("event", QUESTIONS)["answers"]["importance"]["sureshot"] is None
     with pytest.raises(ValueError, match="2 tiers but 3 thresholds"):
         Router([fast, llm], None, threshold=[0.5, 0.5, 0.5])
 
@@ -578,7 +578,7 @@ def test_a_tier_outage_is_skipped():
 
 
 def test_each_tier_is_calibrated_on_its_own(tmp_path):
-    from hunch import calibrate
+    from sureshot import calibrate
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -607,7 +607,7 @@ def test_golden_run_reports_who_answered(tmp_path):
 
 def test_stats_reports_who_answers_and_how_accurate_each_tier_is(tmp_path):
     import httpx
-    from hunch import stats
+    from sureshot import stats
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -651,9 +651,9 @@ def test_stats_reports_who_answers_and_how_accurate_each_tier_is(tmp_path):
 
 def test_api_stats(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
-    import hunch.api as api
+    import sureshot.api as api
 
-    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    monkeypatch.setenv("SURESHOT_API_KEY", "secret")
     monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude(), log=_calibration_store(tmp_path)))
     client = TestClient(api.app)
     api._router.decide("event", QUESTIONS)
@@ -669,7 +669,7 @@ def test_api_stats(tmp_path, monkeypatch):
 
 
 def test_review_queue_lists_disagreements_and_clears_when_graded(tmp_path):
-    from hunch import review_queue, stats
+    from sureshot import review_queue, stats
 
     store = _calibration_store(tmp_path)
 
@@ -714,9 +714,9 @@ def test_review_queue_lists_disagreements_and_clears_when_graded(tmp_path):
 
 def test_api_review_queue(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
-    import hunch.api as api
+    import sureshot.api as api
 
-    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    monkeypatch.setenv("SURESHOT_API_KEY", "secret")
     store = _calibration_store(tmp_path)
     monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude(), log=store))
     client, auth = TestClient(api.app), {"Authorization": "Bearer secret"}
@@ -745,7 +745,7 @@ class Counting:
 
 
 def test_cache_skips_repeated_questions_and_rescoring_is_free(tmp_path):
-    from hunch import Cache
+    from sureshot import Cache
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
     cache = Cache(tmp_path / "cache.db")
@@ -758,7 +758,7 @@ def test_cache_skips_repeated_questions_and_rescoring_is_free(tmp_path):
     assert again["answers"]["needs_prep"]["answer"] == first["answers"]["needs_prep"]["answer"] and again["escalated"] == ["needs_prep"]
     # The cache holds what the models said, not the decision: a new threshold is applied with no new calls.
     trusting = router.decide("event", q, thresholds={"needs_prep": 0.5})
-    assert trusting["escalated"] == [] and trusting["answers"]["needs_prep"]["source"] == "hunch" and len(tier.asked) == 1
+    assert trusting["escalated"] == [] and trusting["answers"]["needs_prep"]["source"] == "sureshot" and len(tier.asked) == 1
     # A different text, question definition, question name or image is a different question.
     router.decide("another event", q)
     router.decide("event", {"needs_prep": QUESTIONS["needs_prep"] | {"instructions": "Different?"}})
@@ -774,7 +774,7 @@ def test_cache_skips_repeated_questions_and_rescoring_is_free(tmp_path):
 
 
 def test_cache_is_per_model_and_only_for_models_with_an_identity(tmp_path):
-    from hunch import Cache
+    from sureshot import Cache
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
     cache = Cache(tmp_path / "cache.db")
@@ -791,7 +791,7 @@ def test_cache_is_per_model_and_only_for_models_with_an_identity(tmp_path):
 
 
 def test_partial_hits_call_the_model_only_for_what_is_missing(tmp_path):
-    from hunch import Cache
+    from sureshot import Cache
 
     cache = Cache(tmp_path / "cache.db")
     claude = Counting("c1")
@@ -802,8 +802,8 @@ def test_partial_hits_call_the_model_only_for_what_is_missing(tmp_path):
 
 
 def test_cache_ttl_clear_and_identities(tmp_path):
-    from hunch import Cache, ChatDecider, ChatReasoner, ClaudeAPI, LocalDecider
-    from hunch.cache import cache_key
+    from sureshot import Cache, ChatDecider, ChatReasoner, ClaudeAPI, LocalDecider
+    from sureshot.cache import cache_key
 
     cache = Cache(tmp_path / "ttl.db", ttl=0.05)
     cache.put_many({"k": {"a": 1}})
@@ -826,7 +826,7 @@ def test_cache_ttl_clear_and_identities(tmp_path):
 
 
 def test_cache_hit_rate_in_stats_and_env_config(tmp_path, monkeypatch):
-    from hunch import Cache, Store, router_from_env, stats
+    from sureshot import Cache, Store, router_from_env, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
     store = _calibration_store(tmp_path)
@@ -835,19 +835,19 @@ def test_cache_hit_rate_in_stats_and_env_config(tmp_path, monkeypatch):
         router.decide("event", q)
     assert stats(store)["cache"] == {"hits": 3, "misses": 1, "hit_rate": 0.75}
     assert stats(Store(tmp_path / "empty.db"))["cache"] is None
-    monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
-    monkeypatch.setenv("HUNCH_SYSTEM1_URL", "http://one/v1")
-    monkeypatch.setenv("HUNCH_SYSTEM2", "none")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_MODEL", "m")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_URL", "http://one/v1")
+    monkeypatch.setenv("SURESHOT_SYSTEM2", "none")
     assert router_from_env().cache is None
-    monkeypatch.setenv("HUNCH_CACHE", str(tmp_path / "env.db"))
-    monkeypatch.setenv("HUNCH_CACHE_TTL", "60")
+    monkeypatch.setenv("SURESHOT_CACHE", str(tmp_path / "env.db"))
+    monkeypatch.setenv("SURESHOT_CACHE_TTL", "60")
     assert router_from_env().cache.ttl == 60.0
 
 
 
 def test_summarize_says_why_there_is_no_threshold():
     import random
-    from hunch.calibrate import summarize
+    from sureshot.calibrate import summarize
 
     few = summarize([(0.9, True, 1.0)] * 10, 0.9, 30)
     assert few["threshold"] is None and few["reason"] == "not enough data" and few["best_target"] is None
@@ -870,14 +870,14 @@ def test_summarize_says_why_there_is_no_threshold():
 
 def test_calibrate_logs_stats_flags_and_clears_an_unreachable_target(tmp_path, caplog):
     import logging
-    from hunch import Store, calibrate, stats
+    from sureshot import Store, calibrate, stats
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
     for i in range(60):  # 70% right whatever the confidence
         decision = Router(Tier({"needs_prep": (True, 0.6 + (i % 4) / 10)}), None, log=store).decide("event", q)
         store.label(decision["id"], "needs_prep", i % 10 < 7)
-    with caplog.at_level(logging.WARNING, logger="hunch"):
+    with caplog.at_level(logging.WARNING, logger="sureshot"):
         report = calibrate(store, 0.9, 30)["needs_prep"]
     assert report["reason"] == "target unreachable" and store.thresholds() == {"needs_prep": float("inf")}
     # Failing closed: the tier is no longer trusted for this question, so even a confident answer escalates.
@@ -899,7 +899,7 @@ def test_calibrate_logs_stats_flags_and_clears_an_unreachable_target(tmp_path, c
 
 
 def test_retrain_promotes_a_classifier_that_escalates_less_and_keeps_it_otherwise(tmp_path):
-    from hunch import retrain
+    from sureshot import retrain
 
     # Decision ids are random, so the train/held-out split varies by run: use enough decisions that any split can pass.
     store = _calibration_store(tmp_path)
@@ -931,8 +931,8 @@ def test_guard_vetoes_a_confident_answer_it_confidently_disagrees_with(tmp_path)
     result = Router(fast, claude, guard=guard, guard_threshold=0.9, log=_calibration_store(tmp_path)).decide("event", QUESTIONS)
     a = result["answers"]
     assert result["unsure"] == ["needs_prep"] and result["escalated"] == ["needs_prep"] and claude.asked == ["needs_prep"]
-    assert a["needs_prep"]["source"] == "system2" and a["needs_prep"]["hunch"]["answer"] is True and a["needs_prep"]["guard"]["answer"] is False
-    assert a["importance"]["source"] == "hunch" and a["event_type"]["source"] == "hunch" and "guard" not in a["event_type"]
+    assert a["needs_prep"]["source"] == "system2" and a["needs_prep"]["sureshot"]["answer"] is True and a["needs_prep"]["guard"]["answer"] is False
+    assert a["importance"]["source"] == "sureshot" and a["event_type"]["source"] == "sureshot" and "guard" not in a["event_type"]
     assert guard.asked == [["needs_prep", "importance", "event_type"]]
     # Without a System 2 the vetoed answer stands, flagged as unsure.
     alone = Router(fast, None, guard=guard).decide("event", QUESTIONS)
@@ -945,12 +945,12 @@ def test_guard_vetoes_a_confident_answer_it_confidently_disagrees_with(tmp_path)
 
 
 def test_a_guard_that_is_down_vetoes_nothing_and_a_broken_one_raises():
-    from hunch import Outage
+    from sureshot import Outage
 
     fast =Tier({"needs_prep": (True, 0.99), "importance": (3, 0.99), "event_type": ("meeting", 0.99)})
     claude = FakeClaude()
     result = Router(fast, claude, guard=Flaky(fast, [Outage("overloaded")] * 9), retries=0, backoff=0).decide("event", QUESTIONS)
-    assert result["unsure"] == [] and claude.asked is None and all(a["source"] == "hunch" for a in result["answers"].values())
+    assert result["unsure"] == [] and claude.asked is None and all(a["source"] == "sureshot" for a in result["answers"].values())
     assert result["degraded"] == [{"system": "guard", "tier": None, "error": result["degraded"][0]["error"]}] and "overloaded" in result["degraded"][0]["error"]
     with pytest.raises(RuntimeError, match="bad key"):
         Router(fast, claude, guard=Flaky(fast, [RuntimeError("bad key")] * 9), retries=0, backoff=0).decide("event", QUESTIONS)
@@ -961,9 +961,9 @@ def test_the_core_needs_no_anthropic_sdk():
     import sys
 
     code = ("import sys; sys.modules['anthropic'] = None\n"
-            "import hunch\n"
-            "from hunch import Router, ChatReasoner\n"
-            "try:\n    hunch.ClaudeAPI()\nexcept ImportError as e:\n    assert 'hunch[claude]' in str(e)\nelse:\n    raise SystemExit('ClaudeAPI built without the SDK')\n")
+            "import sureshot\n"
+            "from sureshot import Router, ChatReasoner\n"
+            "try:\n    sureshot.ClaudeAPI()\nexcept ImportError as e:\n    assert 'sureshot[claude]' in str(e)\nelse:\n    raise SystemExit('ClaudeAPI built without the SDK')\n")
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
@@ -971,7 +971,7 @@ def test_the_core_needs_no_anthropic_sdk():
 def test_any_adapter_can_mark_an_outage_and_claude_errors_become_one():
     import anthropic
     import httpx
-    from hunch import ClaudeAPI, Outage
+    from sureshot import ClaudeAPI, Outage
 
     # An Outage from any System 2 falls back like a network error; a mistake still raises.
     down = Router(FakeDecider(), Flaky(FakeClaude(), [Outage("overloaded")] * 9), retries=0, backoff=0).decide("event", QUESTIONS)
@@ -991,7 +991,7 @@ def test_any_adapter_can_mark_an_outage_and_claude_errors_become_one():
 
 
 def test_providers_fill_in_the_url_and_key_but_nothing_is_assumed(monkeypatch):
-    from hunch import PROVIDERS, ChatDecider, ChatReasoner, router_from_env
+    from sureshot import PROVIDERS, ChatDecider, ChatReasoner, router_from_env
 
     monkeypatch.setenv("GROQ_API_KEY", "from-env")
     groq = ChatDecider("m", provider="groq")
@@ -1006,10 +1006,10 @@ def test_providers_fill_in_the_url_and_key_but_nothing_is_assumed(monkeypatch):
         ChatDecider("m", provider="nope")
     assert {"openai", "xai", "mistral", "deepseek", "groq", "together", "fireworks", "openrouter", "ollama", "vllm"} <= set(PROVIDERS)
     # The environment can name a provider for either system, and that alone selects a chat System 2 under auto.
-    monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "m")
-    monkeypatch.setenv("HUNCH_SYSTEM1_PROVIDER", "ollama")
-    monkeypatch.setenv("HUNCH_SYSTEM2_MODEL", "big")
-    monkeypatch.setenv("HUNCH_SYSTEM2_PROVIDER", "openrouter")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_MODEL", "m")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_PROVIDER", "ollama")
+    monkeypatch.setenv("SURESHOT_SYSTEM2_MODEL", "big")
+    monkeypatch.setenv("SURESHOT_SYSTEM2_PROVIDER", "openrouter")
     router = router_from_env()
     assert router.system1.url.startswith("http://localhost:11434") and isinstance(router.system2, ChatReasoner)
     assert router.system2.url.startswith("https://openrouter.ai")
@@ -1025,7 +1025,7 @@ def _gemini_logprobs(url, tops):
 
 def test_gemini_decider_reads_logprobs_from_its_own_api(monkeypatch):
     import math
-    from hunch import GeminiDecider
+    from sureshot import GeminiDecider
 
     seen = {}
 
@@ -1053,7 +1053,7 @@ def test_gemini_decider_reads_logprobs_from_its_own_api(monkeypatch):
 def test_gemini_reasoner_uses_a_gemini_schema_and_checks_the_reply(monkeypatch):
     import json
     import httpx
-    from hunch import GeminiReasoner
+    from sureshot import GeminiReasoner
 
     seen = {}
     reply = {"needs_prep": {"answer": True, "reason": "r"}, "importance": {"answer": 3, "reason": "r"}, "event_type": {"answer": "interview", "reason": "r"}}
@@ -1085,8 +1085,8 @@ def test_gemini_reasoner_uses_a_gemini_schema_and_checks_the_reply(monkeypatch):
 
 
 def test_vendor_classes_carry_their_endpoint_and_quirks(monkeypatch):
-    import hunch
-    from hunch import ChatDecider, ChatReasoner, DeepSeekReasoner, GroqReasoner, OllamaDecider, OpenAIDecider, OpenAIReasoner
+    import sureshot
+    from sureshot import ChatDecider, ChatReasoner, DeepSeekReasoner, GroqReasoner, OllamaDecider, OpenAIDecider, OpenAIReasoner
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
     decider = OpenAIDecider("gpt-4o-mini")
@@ -1096,7 +1096,7 @@ def test_vendor_classes_carry_their_endpoint_and_quirks(monkeypatch):
     assert OpenAIDecider("m", base_url="http://proxy/v1").url == "http://proxy/v1/chat/completions"
     assert OllamaDecider("llama3.1:8b").url == "http://localhost:11434/v1/chat/completions" and OllamaDecider("m").headers == {}
     assert isinstance(OpenAIReasoner("m"), ChatReasoner) and GroqReasoner("m", api_key="k").url.startswith("https://api.groq.com")
-    assert not hasattr(hunch, "GroqDecider")
+    assert not hasattr(sureshot, "GroqDecider")
     assert OpenAIReasoner("m").identity != DeepSeekReasoner("m").identity
     # DeepSeek only offers JSON mode, so the schema goes in the prompt and the reply is checked here.
     seen = {}
@@ -1113,19 +1113,19 @@ def test_vendor_classes_carry_their_endpoint_and_quirks(monkeypatch):
         DeepSeekReasoner("deepseek-chat", api_key="k").answer("event", {"needs_prep": QUESTIONS["needs_prep"]})
     assert seen["response_format"] == {"type": "json_object"} and "JSON Schema" in seen["messages"][0]["content"]
     for name in ("OpenAIDecider", "MistralReasoner", "XAIDecider", "TogetherDecider", "FireworksReasoner", "OpenRouterDecider", "GeminiDecider", "GeminiReasoner"):
-        assert name in hunch.__all__ and hasattr(hunch, name)
+        assert name in sureshot.__all__ and hasattr(sureshot, name)
     with pytest.raises(ValueError, match="json_mode"):
         ChatReasoner("m", "http://x/v1", json_mode="bogus")
 
 
 def test_env_can_select_gemini(monkeypatch):
-    from hunch import GeminiDecider, GeminiReasoner, router_from_env
+    from sureshot import GeminiDecider, GeminiReasoner, router_from_env
 
-    monkeypatch.setenv("HUNCH_SYSTEM1", "gemini")
-    monkeypatch.setenv("HUNCH_SYSTEM1_MODEL", "gemini-2.5-flash")
-    monkeypatch.setenv("HUNCH_SYSTEM1_EXTRA", '{"thinkingConfig": {"thinkingBudget": 0}}')
-    monkeypatch.setenv("HUNCH_SYSTEM2", "gemini")
-    monkeypatch.setenv("HUNCH_SYSTEM2_MODEL", "gemini-2.5-pro")
+    monkeypatch.setenv("SURESHOT_SYSTEM1", "gemini")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("SURESHOT_SYSTEM1_EXTRA", '{"thinkingConfig": {"thinkingBudget": 0}}')
+    monkeypatch.setenv("SURESHOT_SYSTEM2", "gemini")
+    monkeypatch.setenv("SURESHOT_SYSTEM2_MODEL", "gemini-2.5-pro")
     router = router_from_env()
     assert isinstance(router.system1, GeminiDecider) and router.system1.extra == {"thinkingConfig": {"thinkingBudget": 0}}
     assert isinstance(router.system2, GeminiReasoner) and router.system2.url.endswith("models/gemini-2.5-pro:generateContent")
@@ -1133,7 +1133,7 @@ def test_env_can_select_gemini(monkeypatch):
 
 def test_http_errors_carry_the_servers_explanation(monkeypatch):
     import httpx
-    from hunch import GeminiDecider
+    from sureshot import GeminiDecider
 
     def post(url, json, headers, timeout):
         return httpx.Response(400, text='{"error": {"message": "Logprobs is not enabled for this model"}}', request=httpx.Request("POST", url))
@@ -1145,7 +1145,7 @@ def test_http_errors_carry_the_servers_explanation(monkeypatch):
 
 
 def test_stats_flags_drift_from_the_last_calibration(tmp_path):
-    from hunch import Store, calibrate, stats
+    from sureshot import Store, calibrate, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
 
@@ -1217,10 +1217,10 @@ def test_stats_flags_drift_from_the_last_calibration(tmp_path):
 
 
 def test_change_detector_catches_a_late_change_the_cumulative_check_dilutes(tmp_path):
-    from hunch import Store, calibrate, stats
+    from sureshot import Store, calibrate, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
-    store = Store(tmp_path / "hunch.db")
+    store = Store(tmp_path / "sureshot.db")
     for i in range(100):
         sure = i % 2 == 0
         result = Router(Tier({"needs_prep": (sure, 0.95 if sure else 0.7)}), None, log=store).decide("event", q)
@@ -1239,10 +1239,10 @@ def test_change_detector_catches_a_late_change_the_cumulative_check_dilutes(tmp_
 
 
 def test_drift_sees_confidence_sliding_while_still_above_the_threshold(tmp_path):
-    from hunch import Store, calibrate, stats
+    from sureshot import Store, calibrate, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
-    store = Store(tmp_path / "hunch.db")
+    store = Store(tmp_path / "sureshot.db")
     # Right at 0.99 and 0.97, wrong at 0.7, a third each: the threshold is 0.97 and a third falls below it.
     for i in range(99):
         confidence = (0.99, 0.97, 0.7)[i % 3]
@@ -1259,7 +1259,7 @@ def test_drift_sees_confidence_sliding_while_still_above_the_threshold(tmp_path)
 
 def test_a_log_saved_before_the_distribution_check_still_opens(tmp_path):
     import sqlite3
-    from hunch import Store, stats
+    from sureshot import Store, stats
 
     path = tmp_path / "old.db"
     db = sqlite3.connect(path)
@@ -1275,10 +1275,10 @@ def test_a_log_saved_before_the_distribution_check_still_opens(tmp_path):
 
 
 def test_drift_needs_a_change_big_enough_to_act_on(tmp_path):
-    from hunch import Store, stats
+    from sureshot import Store, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
-    store = Store(tmp_path / "hunch.db")
+    store = Store(tmp_path / "sureshot.db")
     # A calibration on a large log: half the answers at 0.7, below the threshold of 0.95.
     store.save_calibrations({"needs_prep": {"threshold": 0.95, "target": 0.95, "escalation_rate": 0.5, "answers": 100000,
                                             "histogram": {"edges": [0.7, 0.95], "counts": [0, 50000, 50000]}}}, 0, ["needs_prep"])
@@ -1294,7 +1294,7 @@ def test_drift_needs_a_change_big_enough_to_act_on(tmp_path):
 
 def test_anytime_bounds_hold_over_every_look():
     import random
-    from hunch.stats import _rate_moved, _sequence
+    from sureshot.stats import _rate_moved, _sequence
 
     # A rate that never changes, checked after every answer for 1000 answers in 100 runs, at a 5% budget: a one-off
     # test checked this often would flag most runs; this flags at most about 5 of them.
@@ -1317,7 +1317,7 @@ def test_anytime_bounds_hold_over_every_look():
 def test_cusum_rarely_raises_a_false_alarm_and_dates_a_real_change():
     import math
     import random
-    from hunch.stats import _cusum
+    from sureshot.stats import _cusum
 
     random.seed(1)
     h = math.log(20000)
@@ -1330,10 +1330,10 @@ def test_cusum_rarely_raises_a_false_alarm_and_dates_a_real_change():
 
 
 def test_drift_points_at_the_upstream_tier(tmp_path):
-    from hunch import Store, calibrate, stats
+    from sureshot import Store, calibrate, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
-    store = Store(tmp_path / "hunch.db")
+    store = Store(tmp_path / "sureshot.db")
     # Each tier is right when sure (0.95) and wrong when not (0.7), half each, so both calibrate to 0.95.
     for i in range(200):
         fast = Tier({"needs_prep": (True, 0.95) if i % 2 == 0 else (False, 0.7)})
@@ -1357,10 +1357,10 @@ def test_drift_points_at_the_upstream_tier(tmp_path):
 
 
 def test_drift_watches_questions_without_a_calibration(tmp_path):
-    from hunch import Store, calibrate, stats
+    from sureshot import Store, calibrate, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
-    store = Store(tmp_path / "hunch.db")
+    store = Store(tmp_path / "sureshot.db")
     # Never calibrated: its first 30 answers are the baseline (all sure, so all kept at the default 0.8).
     for _ in range(30):
         Router(Tier({"needs_prep": (True, 0.95)}), None, log=store).decide("event", q)
@@ -1388,7 +1388,7 @@ def test_drift_watches_questions_without_a_calibration(tmp_path):
 
 
 def test_retrain_saves_a_drift_snapshot_for_what_it_promotes(tmp_path):
-    from hunch import calibrate, retrain, stats
+    from sureshot import calibrate, retrain, stats
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1411,7 +1411,7 @@ def test_retrain_saves_a_drift_snapshot_for_what_it_promotes(tmp_path):
 
 
 def test_stats_prices_each_stage_and_what_it_saves(tmp_path):
-    from hunch import stats
+    from sureshot import stats
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"], "importance": QUESTIONS["importance"]}
@@ -1434,7 +1434,7 @@ def test_stats_prices_each_stage_and_what_it_saves(tmp_path):
 
 
 def test_a_random_labeling_sample_measures_the_router_against_its_target(tmp_path):
-    from hunch import review_queue, stats
+    from sureshot import review_queue, stats
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1463,7 +1463,7 @@ def test_trust_uncalibrated_false_escalates_until_there_is_a_threshold(tmp_path)
     sure = Tier({"needs_prep": (True, 0.99)})
     cautious = Router(sure, FakeClaude(), log=store, trust_uncalibrated=False)
     result = cautious.decide("event", q)
-    assert result["escalated"] == ["needs_prep"] and result["answers"]["needs_prep"]["hunch"]["confidence"] == 0.99
+    assert result["escalated"] == ["needs_prep"] and result["answers"]["needs_prep"]["sureshot"]["confidence"] == 0.99
     # A threshold passed per call, or saved by calibrate or retrain, counts as calibrated.
     assert cautious.decide("event", q, thresholds={"needs_prep": 0.9})["escalated"] == []
     store.save_thresholds({"needs_prep": 0.9}, 0)
@@ -1495,7 +1495,7 @@ def test_a_tier_that_failed_closed_is_only_probed(tmp_path):
 
 
 def test_retrain_rechecks_the_classifier_it_keeps(tmp_path):
-    from hunch import retrain, stats
+    from sureshot import retrain, stats
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1525,10 +1525,10 @@ def test_retrain_rechecks_the_classifier_it_keeps(tmp_path):
 
 
 def test_drift_accuracy_counts_labels_on_the_random_sample(tmp_path):
-    from hunch import Store, calibrate, review_queue, stats
+    from sureshot import Store, calibrate, review_queue, stats
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
-    store = Store(tmp_path / "hunch.db")
+    store = Store(tmp_path / "sureshot.db")
     for i in range(100):
         sure = i % 2 == 0
         store.label(Router(Tier({"needs_prep": (sure, 0.95 if sure else 0.7)}), None, log=store).decide("event", q)["id"], "needs_prep", True)
@@ -1546,7 +1546,7 @@ def test_drift_accuracy_counts_labels_on_the_random_sample(tmp_path):
 
 
 def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_path):
-    from hunch import calibrate, review_queue
+    from sureshot import calibrate, review_queue
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1569,7 +1569,7 @@ def test_calibration_checks_a_threshold_against_labels_on_the_random_sample(tmp_
 
 
 def test_prune_stops_asking_a_tier_that_costs_more_than_it_saves(tmp_path):
-    from hunch import prune
+    from sureshot import prune
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1593,7 +1593,7 @@ def test_prune_stops_asking_a_tier_that_costs_more_than_it_saves(tmp_path):
 
 
 def test_recheck_fails_a_certified_tier_its_labeled_sample_rules_out(tmp_path):
-    from hunch import calibrate, recheck, review_queue, stats
+    from sureshot import calibrate, recheck, review_queue, stats
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1618,7 +1618,7 @@ def test_recheck_fails_a_certified_tier_its_labeled_sample_rules_out(tmp_path):
 
 
 def test_retrain_learns_from_questions_no_tier_answered(tmp_path):
-    from hunch import LocalDecider, retrain
+    from sureshot import LocalDecider, retrain
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1631,8 +1631,8 @@ def test_retrain_learns_from_questions_no_tier_answered(tmp_path):
 
 
 def test_a_seeded_store_logs_the_same_ids_and_labeling_sample(tmp_path):
-    from hunch import Store
-    from hunch.review import review_queue
+    from sureshot import Store
+    from sureshot.review import review_queue
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
     runs = []
@@ -1645,7 +1645,7 @@ def test_a_seeded_store_logs_the_same_ids_and_labeling_sample(tmp_path):
 
 
 def test_recheck_counts_labels_on_a_share_of_the_confident_answers(tmp_path):
-    from hunch import Store, recheck, review_queue
+    from sureshot import Store, recheck, review_queue
 
     store = Store(tmp_path / "s.db", seed=1)
     store.save_thresholds({"needs_prep": 0.9})
@@ -1665,7 +1665,7 @@ def test_recheck_counts_labels_on_a_share_of_the_confident_answers(tmp_path):
 
 
 def test_labels_must_confirm_a_threshold_system2_certified(tmp_path):
-    from hunch import calibrate, recheck, review_queue
+    from sureshot import calibrate, recheck, review_queue
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1700,7 +1700,7 @@ class TopicClaude:
 
 
 def test_retrain_needs_labels_to_confirm_the_classifier(tmp_path):
-    from hunch import LocalDecider, Store, retrain, review_queue
+    from sureshot import LocalDecider, Store, retrain, review_queue
 
     q = {"needs_prep": QUESTIONS["needs_prep"]}
     texts = ["server meeting", "meeting about server", "invoice sale", "sale invoice due"] * 100
@@ -1733,7 +1733,7 @@ def test_retrain_needs_labels_to_confirm_the_classifier(tmp_path):
     assert store.thresholds()["needs_prep"] == float("inf") and store.issues()[0]["reason"] == "below target on labels"
 
 def test_labels_held_to_a_higher_threshold_cannot_confirm_a_lower_one(tmp_path):
-    from hunch import recheck, review_queue
+    from sureshot import recheck, review_queue
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1766,7 +1766,7 @@ class Alternating:
 
 
 def test_an_unconfirmed_lower_threshold_is_held_at_the_saved_one(tmp_path):
-    from hunch import calibrate, recheck, review_queue
+    from sureshot import calibrate, recheck, review_queue
 
     store = _calibration_store(tmp_path)
     q = {"needs_prep": QUESTIONS["needs_prep"]}
@@ -1786,7 +1786,7 @@ def test_an_unconfirmed_lower_threshold_is_held_at_the_saved_one(tmp_path):
 
 
 def test_confirmation_is_only_tested_at_fixed_label_counts():
-    from hunch.calibrate import _check
+    from sureshot.calibrate import _check
 
     def labels(rights):
         return [(right, 1.0, True, float(i)) for i, right in enumerate(rights)]

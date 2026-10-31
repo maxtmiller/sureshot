@@ -1,6 +1,6 @@
 """Adapters for any model behind an HTTP API that you describe with two functions."""
-from hunch.adapters import base
-from hunch.adapters.base import normalize
+from sureshot.adapters import base
+from sureshot.adapters.base import normalize
 
 class HTTPDecider:
     """Any System 1 model behind an HTTP API. You supply two functions:
@@ -12,7 +12,7 @@ class HTTPDecider:
     HTTPDecider POSTs, then normalizes every answer to {answer, confidence, probabilities}."""
 
     def __init__(self, url, request, parse, api_key=None, headers=None, timeout=600, identity=None):
-        """identity names this model and your request/parse functions for the response cache (see hunch.Cache); without
+        """identity names this model and your request/parse functions for the response cache (see sureshot.Cache); without
         one, its answers are not cached. Change it whenever the model or the functions change."""
         self.url, self.request, self.parse, self.timeout, self.identity = url, request, parse, timeout, identity
         self.headers = ({"Authorization": f"Bearer {api_key}"} if api_key else {}) | (headers or {})
@@ -38,7 +38,7 @@ class HTTPReasoner:
     index or a boolean."""
 
     def __init__(self, url, request, parse, api_key=None, headers=None, timeout=600, identity=None):
-        """identity names this model and your request/parse functions for the response cache (see hunch.Cache); without
+        """identity names this model and your request/parse functions for the response cache (see sureshot.Cache); without
         one, its answers are not cached. Change it whenever the model or the functions change."""
         self.url, self.request, self.parse, self.timeout, self.identity = url, request, parse, timeout, identity
         self.headers = ({"Authorization": f"Bearer {api_key}"} if api_key else {}) | (headers or {})

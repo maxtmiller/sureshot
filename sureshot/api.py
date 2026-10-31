@@ -1,4 +1,4 @@
-"""HTTP API: POST /decide, /feedback and /calibrate with a bearer token (HUNCH_API_KEY). Run locally with `uvicorn hunch.api:app`."""
+"""HTTP API: POST /decide, /feedback and /calibrate with a bearer token (SURESHOT_API_KEY). Run locally with `uvicorn sureshot.api:app`."""
 import os
 import hmac
 import json
@@ -6,13 +6,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
-from hunch.calibrate import calibrate
-from hunch.review import REASONS, review_queue
-from hunch.stats import stats
-from hunch.config import router_from_env
+from sureshot.calibrate import calibrate
+from sureshot.review import REASONS, review_queue
+from sureshot.stats import stats
+from sureshot.config import router_from_env
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-app = FastAPI(title="hunch")
+app = FastAPI(title="sureshot")
 _router = None
 
 
@@ -44,7 +44,7 @@ def health():
 
 
 def authorize(authorization):
-    expected = os.environ.get("HUNCH_API_KEY")
+    expected = os.environ.get("SURESHOT_API_KEY")
     if not expected or not hmac.compare_digest(authorization, f"Bearer {expected}"):
         raise HTTPException(401, "missing or wrong bearer token")
 
@@ -52,7 +52,7 @@ def authorize(authorization):
 def log():
     store = router().log
     if store is None:
-        raise HTTPException(400, "set HUNCH_DB to log decisions")
+        raise HTTPException(400, "set SURESHOT_DB to log decisions")
     return store
 
 

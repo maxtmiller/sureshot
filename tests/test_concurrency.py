@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 import pytest
 import uvicorn
-from hunch import Cache, Router, Store, review_queue, stats
+from sureshot import Cache, Router, Store, review_queue, stats
 
 Q = {"q": {"type": "noul", "instructions": "?"}}
 
@@ -123,9 +123,9 @@ def test_reads_do_not_block_writes(tmp_path):
 
 
 def test_http_server_handles_concurrent_clients(tmp_path, monkeypatch):
-    import hunch.api as api
+    import sureshot.api as api
 
-    monkeypatch.setenv("HUNCH_API_KEY", "secret")
+    monkeypatch.setenv("SURESHOT_API_KEY", "secret")
     store = Store(tmp_path / "s.db")
     monkeypatch.setattr(api, "_router", Router(Model("tier"), Model("claude"), threshold=0.8, log=store, audit=0.3, cache=Cache(tmp_path / "c.db")))
     with socket.socket() as sock:
@@ -162,8 +162,8 @@ def test_http_server_handles_concurrent_clients(tmp_path, monkeypatch):
 def test_model_calls_share_one_connection_pool(monkeypatch):
     # httpx.post builds a client per call, which holds the GIL for ~10 ms and capped a process near 30 model calls a
     # second. Every backend must go through the shared client instead.
-    import hunch.adapters.base as backends
-    from hunch import ChatDecider
+    import sureshot.adapters.base as backends
+    from sureshot import ChatDecider
 
     seen = []
 

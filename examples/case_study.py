@@ -1,4 +1,4 @@
-"""Case study: hunch answering one multiple-choice question about a stream of texts for ten simulated days.
+"""Case study: sureshot answering one multiple-choice question about a stream of texts for ten simulated days.
 
 Two datasets, each labeled by people:
 - banking77 (PolyAI/banking77): about 13,000 bank customer messages, each with one of 77 intents. From day 6 half the
@@ -32,9 +32,9 @@ from pathlib import Path
 
 from datasets import load_dataset
 
-import hunch.adapters.base as base
-from hunch import Cache, ChatDecider, ChatReasoner, LocalDecider, Router, Store, calibrate, prune, recheck, retrain, review_queue, stats
-from hunch.review import REASONS
+import sureshot.adapters.base as base
+from sureshot import Cache, ChatDecider, ChatReasoner, LocalDecider, Router, Store, calibrate, prune, recheck, retrain, review_queue, stats
+from sureshot.review import REASONS
 
 PRICES = {"gpt-4o-mini": (0.15, 0.60), "gpt-4.1": (2.00, 8.00)}  # $ per million input and output tokens; check yours
 AUDIT, PROBE, SAMPLE, LABELS_PER_NIGHT, WORKERS = 0.05, 0.05, 0.02, 30, 8
@@ -126,7 +126,7 @@ def baseline(work, dataset, days):
     def one(m):
         result = router.decide(m["text"], q)
         a = result["answers"][key]
-        return {"text": m["text"], "gold": m["gold"], "mini": a["hunch"]["answer"], "mini_confidence": a["hunch"]["confidence"],
+        return {"text": m["text"], "gold": m["gold"], "mini": a["sureshot"]["answer"], "mini_confidence": a["sureshot"]["confidence"],
                 "big": a["answer"], "mini_ms": result["latency_ms"]["tiers"][0], "big_ms": result["latency_ms"]["system2"],
                 "cached": result["cache"]["hits"] > 0}
 

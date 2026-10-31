@@ -5,7 +5,7 @@ import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
-from hunch.questions import check_answer
+from sureshot.questions import check_answer
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts REAL, state TEXT, questions TEXT, images INTEGER, result TEXT);
@@ -75,7 +75,7 @@ class Store:
             return dict(db.execute("SELECT key, value FROM tier_thresholds WHERE tier = ?", (tier,)).fetchall())
 
     def skipped(self, tier=0):
-        """The questions a tier is only probed on, since asking it costs more than it saves (see hunch.prune)."""
+        """The questions a tier is only probed on, since asking it costs more than it saves (see sureshot.prune)."""
         with self._db() as db:
             return {key for (key,) in db.execute("SELECT key FROM skips WHERE tier = ?", (tier,))}
 
@@ -86,7 +86,7 @@ class Store:
             db.executemany("DELETE FROM skips WHERE tier = ? AND key = ?", [(tier, key) for key in ask])
 
     def unconfirmed(self, tier=0):
-        """The questions whose saved threshold for a tier your labels have not confirmed yet (see hunch.calibrate): the
+        """The questions whose saved threshold for a tier your labels have not confirmed yet (see sureshot.calibrate): the
         tier is asked, but its answers are not kept."""
         with self._db() as db:
             return {key for (key,) in db.execute("SELECT key FROM unconfirmed WHERE tier = ?", (tier,))}
@@ -204,8 +204,8 @@ class Store:
         for row, answer, result in self._graded():
             escalated = answer["source"] == "system2"
             # Decisions logged before tiers existed have no "tried": their only System 1 answer is the one itself.
-            tried = answer.get("tried") or ([{"tier": 0, **{k: (answer["hunch"] if escalated else answer)[k] for k in ("answer", "confidence")}}]
-                                            if (answer["hunch"] if escalated else answer) else [])
+            tried = answer.get("tried") or ([{"tier": 0, **{k: (answer["sureshot"] if escalated else answer)[k] for k in ("answer", "confidence")}}]
+                                            if (answer["sureshot"] if escalated else answer) else [])
             for entry in tried:
                 # Logs from before the router recorded "confident" have only whether the answer stood.
                 confident = entry.get("confident", not escalated and answer.get("tier", 0) == entry["tier"] and row["key"] not in result["unsure"])

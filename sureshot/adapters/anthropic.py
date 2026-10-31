@@ -1,10 +1,10 @@
-"""Claude as System 2, through the Anthropic API or the local `claude` CLI. Optional: `pip install "hunch[claude]"`."""
+"""Claude as System 2, through the Anthropic API or the local `claude` CLI. Optional: `pip install "sureshot[claude]"`."""
 import json
 import shutil
 import subprocess
 from pathlib import Path
-from hunch.adapters.base import PROMPT_VERSION, SYSTEM_PROMPT, Outage, prompt
-from hunch.questions import answer_schema
+from sureshot.adapters.base import PROMPT_VERSION, SYSTEM_PROMPT, Outage, prompt
+from sureshot.questions import answer_schema
 
 
 def _image_block(data_uri):
@@ -20,7 +20,7 @@ class ClaudeAPI:
         try:
             import anthropic
         except ImportError as e:
-            raise ImportError('ClaudeAPI needs the Anthropic SDK: pip install "hunch[claude]"') from e
+            raise ImportError('ClaudeAPI needs the Anthropic SDK: pip install "sureshot[claude]"') from e
         self.model, self.effort = model, effort
         self.identity = f"claude-api|{model}|{effort}|v{PROMPT_VERSION}"
         self.client = client or anthropic.Anthropic()

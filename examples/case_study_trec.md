@@ -1,6 +1,6 @@
 # Case study: what kind of answer does a question want? (TREC)
 
-The second end-to-end test of hunch, on a different kind of task from [banking77](case_study_banking77.md): six
+The second end-to-end test of sureshot, on a different kind of task from [banking77](case_study_banking77.md): six
 options instead of 77, short questions, and labels that follow the dataset's own conventions. The script is
 `case_study.py --dataset trec`; every run's numbers are in `case_study_trec_results.json`.
 
@@ -28,12 +28,12 @@ The same as banking77 apart from the data:
 
 | | Accuracy | Cost | Mean latency |
 |---|---|---|---|
-| hunch, money only (three runs) | 85.9% to 86.0% | $1.93 to $2.07 | 1.17 to 1.32 s |
-| hunch, waiting at $0.01 a second (three runs) | 85.8% to 86.0% | $1.98 to $2.17 | 0.88 to 0.93 s |
+| sureshot, money only (three runs) | 85.9% to 86.0% | $1.93 to $2.07 | 1.17 to 1.32 s |
+| sureshot, waiting at $0.01 a second (three runs) | 85.8% to 86.0% | $1.98 to $2.17 | 0.88 to 0.93 s |
 | `gpt-4.1` alone | 86.0% | $2.22 | 0.85 s |
 | `gpt-4o-mini` alone | 72.8% | $0.04 | 0.53 s |
 
-hunch matches `gpt-4.1`'s accuracy for 2% to 13% less, and only from days 7 to 10 does it beat `gpt-4.1` on speed
+sureshot matches `gpt-4.1`'s accuracy for 2% to 13% less, and only from days 7 to 10 does it beat `gpt-4.1` on speed
 (0.77 to 0.87 s with waiting priced). The savings are smaller than on banking77, because here the cheap model is
 rarely trustworthy. As on banking77 the 95% target is out of reach (`gpt-4.1` itself is 86% right), and the labeled
 random sample says so in every run, from day 2 in two and for good from day 6 in the third.
@@ -47,14 +47,14 @@ By run, waiting priced:
 | 3 | from day 4, 12% to 19% | 84% to 96% | skipped from night 1 | classifier's escalation rate, day 10 |
 
 With money only, `gpt-4o-mini` was asked about every question, since keeping 2% to 12% of them for $0.000014 each
-paid against $0.00074 for `gpt-4.1`. That made hunch slower than `gpt-4.1` alone.
+paid against $0.00074 for `gpt-4.1`. That made sureshot slower than `gpt-4.1` alone.
 
 ## What worked
 
 - **The local classifier** again carried the savings: 96%, 99% and 91% right on the answers it kept (money-only
   runs), close to the target that `gpt-4.1` can't reach. In one run `retrain` failed it closed on day 7, after the
   shift, and no new one met the target by day 10.
-- **`prune`** skipped `gpt-4o-mini` from night 1 when waiting was priced, which is what kept hunch near `gpt-4.1`'s
+- **`prune`** skipped `gpt-4o-mini` from night 1 when waiting was priced, which is what kept sureshot near `gpt-4.1`'s
   speed.
 - **The labeled random sample** showed the router below target in every run, and `stats` put it at 79% to 89% on day
   10 (63 to 76 labels) against a true 86%.
@@ -66,7 +66,7 @@ paid against $0.00074 for `gpt-4.1`. That made hunch slower than `gpt-4.1` alone
    the rest were graded by `gpt-4.1`. They all agreed, and 35 of 35 clears 95% on the one-sided 90% bound. Across
    all 3,000 questions, the 184 at or above that threshold agree with `gpt-4.1` every time, yet only 87.5% are right:
    both models make the same mistakes there, which grading by System 2 can never see. Its kept answers in the runs
-   were 81% to 87% right. hunch reported it (`graded_by` says `{"human": 0, "system2": 35}`), but nothing acted on
+   were 81% to 87% right. sureshot reported it (`graded_by` says `{"human": 0, "system2": 35}`), but nothing acted on
    it. On banking77 the same thing happened more mildly (certified at 95%, 89% to 94% right). Fixed: see below.
 2. **`recheck` still had too few labels.** With a 10% share of the kept answers queued for labels, it had 14 to 23 labels on `gpt-4o-mini`'s kept answers by
    day 10, 84% to 88% right, which leaves the upper bound at 99%. It never failed the tier.
@@ -97,7 +97,7 @@ not (`confident=0.1`, replacing the share of kept answers). The same six runs ag
   19 labels by day 10, 89% right, short of what 95% needs. Without waiting priced it was still asked every question
   while unconfirmed, which cost 9% more and 0.1 s for nothing. That is the price of collecting the labels that could
   confirm it.
-- Accuracy did not change, because `gpt-4o-mini`'s kept answers were few; what changed is that hunch no longer
+- Accuracy did not change, because `gpt-4o-mini`'s kept answers were few; what changed is that sureshot no longer
   claims 95% for answers that were 81% to 87% right.
 
 ## Then the classifier too
@@ -116,7 +116,7 @@ to 27 random labels where it was confident, all right, and the lower bound reach
 straight right answers on the equal-weight bound, more when labels from the 2% sample (each standing for five times
 as many decisions) are mixed in. Before this change it was trusted and its kept answers were 92% to 98% right.
 
-So with nothing confirmed, hunch here is `gpt-4.1` plus the cost and latency of asking tiers whose answers it can't
+So with nothing confirmed, sureshot here is `gpt-4.1` plus the cost and latency of asking tiers whose answers it can't
 yet keep. That is the honest result at 30 labels a night over ten days: no tier has shown 95% on labels. Getting
 there takes more labels on what the tiers are confident about, a longer run, or a lower target.
 

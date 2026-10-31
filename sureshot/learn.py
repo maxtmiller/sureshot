@@ -1,8 +1,8 @@
 """Retrain the cheap tier on the log's graded decisions, and keep the new classifier only where it escalates less."""
 import zlib
-from hunch.calibrate import _check, _flagged, _hold, histogram, summarize
-from hunch.local import DEFAULT_EMBEDDING, LocalDecider
-from hunch.review import in_sample
+from sureshot.calibrate import _check, _flagged, _hold, histogram, summarize
+from sureshot.local import DEFAULT_EMBEDDING, LocalDecider
+from sureshot.review import in_sample
 
 
 def _samples(decider, rows):

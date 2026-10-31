@@ -1,9 +1,9 @@
 """Does calibration do what it claims? Simulate models whose accuracy at each confidence is known, then check what
-hunch estimates and picks against the truth. Seeds are fixed, so these are deterministic."""
+sureshot estimates and picks against the truth. Seeds are fixed, so these are deterministic."""
 import random
 import pytest
-from hunch import Router, Store, calibrate
-from hunch.calibrate import summarize
+from sureshot import Router, Store, calibrate
+from sureshot.calibrate import summarize
 
 CONF = lambda rng: 0.5 + 0.5 * rng.random() ** 0.5  # confidence, skewed high
 Q = {"q": {"type": "noul", "instructions": "?"}}
@@ -129,7 +129,7 @@ def test_a_threshold_picked_from_audited_logs_meets_the_target(tmp_path):
 
 
 def test_reasons_match_what_the_simulated_model_can_do():
-    from hunch.calibrate import summarize
+    from sureshot.calibrate import summarize
 
     rng = random.Random(4)
     # Never above 80% right: at a 90% target, 300 answers are enough to see it is out of reach.
@@ -139,7 +139,7 @@ def test_reasons_match_what_the_simulated_model_can_do():
 
 
 def test_unreachable_is_only_claimed_when_the_data_rules_the_target_out():
-    from hunch.calibrate import summarize
+    from sureshot.calibrate import summarize
 
     def reasons(curve, n, target, trials=200):
         rng, out = random.Random(5), []
