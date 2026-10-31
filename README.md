@@ -370,6 +370,10 @@ mistakes and still look right. Pass `sample=` and `confident=`, as for `calibrat
 samples must confirm it: retrain runs the classifier on every held-out decision a person labeled at random, and
 until those labels show the target its threshold is saved but not trusted.
 
+Confirming counts the labels on the answers a tier flagged as confident, and 95% takes at least 32 of them, all
+right (more if any are wrong). Size `confident=` so that many arrive in a reasonable time: in the case studies, 30
+labels a night with `confident=0.3` gave the classifier 2 to 48 of them in ten days.
+
 ### Recheck and prune
 
 - **`recheck(store, tier=1, sample=0.02, confident=0.1)`** tests each saved threshold against your labels on the

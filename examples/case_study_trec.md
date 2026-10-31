@@ -120,6 +120,17 @@ So with nothing confirmed, hunch here is `gpt-4.1` plus the cost and latency of 
 yet keep. That is the honest result at 30 labels a night over ten days: no tier has shown 95% on labels. Getting
 there takes more labels on what the tiers are confident about, a longer run, or a lower target.
 
+### Confirming on flagged answers only
+
+Two more rounds, waiting priced, with 30% of confident answers queued for labels (`--confident 0.3`):
+
+- Shifting labels to the confident share alone didn't help: those labels were mixed with the 2% sample's, each of
+  which stood for up to 15 times as many decisions, so 19 to 36 labels counted as 4 to 10.
+- Confirmation now counts only the labels on answers the tier flagged as confident, which were all picked at the same
+  rate, so each counts fully. By day 10 the classifier had 18, 2 and 27 such labels, 100%, 100% and 96% right, with
+  lower bounds of 0.92, 0.55 and 0.88. It needs about 32 straight right ones for 95%, so on trec it is now a
+  matter of days, not of weighting. Accuracy, cost and speed were unchanged ($2.23, 0.94 to 0.97 s).
+
 ## Caveats
 
 One dataset with its own label conventions ("Who is Stephen Hawking?" asks for a description, not a person), which
