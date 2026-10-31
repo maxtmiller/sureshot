@@ -9,6 +9,10 @@ license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = ["httpx"]
 
+[project.urls]
+Homepage = "https://github.com/maxtmiller/sureshot"
+Issues = "https://github.com/maxtmiller/sureshot/issues"
+
 [project.optional-dependencies]
 claude = ["anthropic"]
 api = ["fastapi", "uvicorn", "python-dotenv"]
