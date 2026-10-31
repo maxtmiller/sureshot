@@ -1,6 +1,6 @@
 """Retrain the cheap tier on the log's graded decisions, and keep the new classifier only where it escalates less."""
 import zlib
-from hunch.calibrate import _check, _flagged, histogram, summarize
+from hunch.calibrate import _check, _flagged, _hold, histogram, summarize
 from hunch.local import DEFAULT_EMBEDDING, LocalDecider
 from hunch.review import in_sample
 
@@ -85,8 +85,9 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
     is not promoted and the current one fails closed ("below target on labels"). Confirming counts only the decisions
     where this tier answered and was confident, so a first classifier is always unconfirmed: it has to be asked
     before there is anything to confirm it on. Until the labels show the target, the threshold is saved but
-    unconfirmed ("not enough labels"), and the router asks the classifier without keeping its answers. Each
-    question's report then has "label_check"."""
+    unconfirmed ("not enough labels"), and the router asks the classifier without keeping its answers. A threshold
+    lower than the saved one that the labels don't confirm is not saved: the saved one is kept ("held_at"), so labels
+    can gather at it. Each question's report then has "label_check"."""
     pairs = {}
     for row in store.graded():
         pairs.setdefault((row["id"], row["key"]), row)
@@ -122,10 +123,18 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
     issues, unconfirmed = {}, []
     if sample or confident:
         labels = {"new": _random_labels(candidate, held, sample, confident, tier), "old": _random_labels(current, held, sample, confident, tier) if current else []}
+        saved = store.thresholds(tier)
         for key, threshold in list(promoted_at.items()) + list(kept_at.items()):
             which = "new" if key in promoted_at else "old"
-            check = _check([(right, w, _flagged(confident, held, threshold)) for k, c, right, w, confident, held in labels[which]
-                            if k == key and c >= threshold], target_accuracy)
+
+            def check_at(t, key=key, which=which):
+                return _check([(right, w, _flagged(conf, held_to, t)) for k, c, right, w, conf, held_to in labels[which]
+                               if k == key and c >= t], target_accuracy)
+
+            chosen, check = _hold(threshold, saved.get(key), check_at)
+            if chosen != threshold:
+                (promoted_at if which == "new" else kept_at)[key] = chosen
+                report[key]["held_at"] = chosen
             report[key]["label_check"] = check
             if check["ruled_out"]:
                 issues[key] = "below target on labels"
