@@ -14,8 +14,8 @@ content + questions ─▶ System 1 ─▶ confident? ── yes ──▶ answe
 ```
 
 Around that handoff, sureshot logs every decision and uses your labels to learn how far to trust System 1, to train
-a cheaper tier, and to warn you when things change. [ARCHITECTURE.md](ARCHITECTURE.md) explains how each part works
-and why. [The banking77 case study](examples/case_study_banking77.md) runs the whole loop on real data.
+a cheaper tier, and to warn you when things change. [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md) explains how each part works
+and why. [The banking77 case study](https://github.com/maxtmiller/sureshot/blob/main/examples/case_study_banking77.md) runs the whole loop on real data.
 
 - [Install](#install)
 - [Quick start](#quick-start)
@@ -146,7 +146,7 @@ if keyed, else `ClaudeCLI` if installed.
 
 Each vendor class is the generic `Chat*` class with that vendor's URL and key variable; `api_key=` and `base_url=`
 override them. What each model supports is up to the vendor, so `.check()` first. Which of these were checked live
-is in [ARCHITECTURE.md](ARCHITECTURE.md#vendors).
+is in [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#vendors).
 
 ### Your own models
 
@@ -250,7 +250,7 @@ It helps when items are seen more than once, and above all when rescoring a gold
 then costs nothing. On a stream of unique items it saves nothing; check `stats(store)["cache"]`.
 
 A vendor can change a model behind the same name, which the cache can't see. Pin a dated model name, set a `ttl`, or
-`clear()` the cache when you change models. Details of the key are in [ARCHITECTURE.md](ARCHITECTURE.md#the-cache-cachepy).
+`clear()` the cache when you change models. Details of the key are in [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#the-cache-cachepy).
 
 ### Catching confident errors
 
@@ -258,7 +258,7 @@ A model's confidence can't reveal the mistakes it is sure about. `Router(..., gu
 each confident answer to a second System 1, and when it disagrees with probability at least 0.9, the answer escalates.
 The guard can be a `LocalDecider` trained on your labels (runs in-process) or a second LLM. On public datasets a
 second LLM caught about twice as many confident errors as the local guard, for a call per confident answer; the
-numbers are in [ARCHITECTURE.md](ARCHITECTURE.md#the-router-routerpy).
+numbers are in [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#the-router-routerpy).
 
 ## The feedback loop
 
@@ -345,7 +345,7 @@ In `not enough evidence`, `target unreachable` and `below target on labels` the 
 next tier or System 2, and the tier is only asked on a `probe` share. Calibrate again later; with more data it may
 pass. `fail_closed=False` keeps the old threshold instead. `stats(store)["uncalibrated"]` lists these questions.
 
-How the statistics work, and how often they are wrong in simulation: [ARCHITECTURE.md](ARCHITECTURE.md#calibration-calibratepy).
+How the statistics work, and how often they are wrong in simulation: [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#calibration-calibratepy).
 
 ### Retrain: a cheaper first tier
 
@@ -409,7 +409,7 @@ report["drift"]                                     # what changed since each ca
 - `examples/drift_alert.py sureshot.db` prints what moved and exits with status 1 when anything is flagged; run it on
   a schedule.
 
-How the drift checks keep false alarms rare however often you poll: [ARCHITECTURE.md](ARCHITECTURE.md#measuring-statspy-evaluatepy-goldenpy).
+How the drift checks keep false alarms rare however often you poll: [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#measuring-statspy-evaluatepy-goldenpy).
 
 ### Testing and comparing models
 
@@ -470,7 +470,7 @@ which you can also call yourself:
 - SQLite is for one machine: several workers on one disk are fine, separate machines are not supported.
 
 `examples/loadtest.py <url> questions.json --clients 32 --requests 1000` measures your own setup. What load testing
-found is in [ARCHITECTURE.md](ARCHITECTURE.md#concurrency).
+found is in [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#concurrency).
 
 ## Tests
 
