@@ -15,10 +15,11 @@ def _samples(decider, rows):
     return samples
 
 
-def _random_labels(decider, rows, sample, confident):
-    """[(key, confidence, right, weight)]: the decider's answers to the rows labeled by a person and picked at random
-    for review_queue (in the `sample` share, or in the `confident` share when some tier was confident), each weighted
-    by the inverse of its chance of being picked."""
+def _random_labels(decider, rows, sample, confident, tier):
+    """[(key, confidence, right, weight, flagged)]: the decider's answers to the rows labeled by a person and picked at
+    random for review_queue (in the `sample` share, or in the `confident` share when some tier was confident), each
+    weighted by the inverse of its chance of being picked; flagged when `tier` answered the decision and was confident
+    (see calibrate._label_check)."""
     out = []
     for row in rows:
         rate = max(sample, confident) if row["any_confident"] else sample
@@ -26,7 +27,7 @@ def _random_labels(decider, rows, sample, confident):
             continue
         answered = decider.decide(row["state"], {row["key"]: row["question"]}).get(row["key"])
         if answered:
-            out.append((row["key"], answered["confidence"], answered["answer"] == row["truth"], 1 / rate))
+            out.append((row["key"], answered["confidence"], answered["answer"] == row["truth"], 1 / rate, row["confident_by"].get(tier, False)))
     return out
 
 
@@ -79,11 +80,13 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
 
     The held-out grades are mostly System 2's answers, and the classifier learned mostly from them too, so it can
     share System 2's mistakes and still look right. With `sample` or `confident` (the rates given to review_queue),
-    your labels must confirm a threshold, as in calibrate: the classifier is run on every held-out decision a person
-    labeled in those random samples, and if its answers at or above the threshold rule the target out, a new
-    classifier is not promoted and the current one fails closed ("below target on labels"); if they don't yet show
-    the target, the threshold is saved but unconfirmed ("not enough labels"), so the router asks the classifier
-    without keeping its answers until a later retrain confirms it. Each question's report then has "label_check"."""
+    your labels must confirm a threshold, as in calibrate: the classifier is run on the held-out decisions a person
+    labeled in those random samples. If its answers at or above the threshold rule the target out, a new classifier
+    is not promoted and the current one fails closed ("below target on labels"). Confirming counts only the decisions
+    where this tier answered and was confident, so a first classifier is always unconfirmed: it has to be asked
+    before there is anything to confirm it on. Until the labels show the target, the threshold is saved but
+    unconfirmed ("not enough labels"), and the router asks the classifier without keeping its answers. Each
+    question's report then has "label_check"."""
     pairs = {}
     for row in store.graded():
         pairs.setdefault((row["id"], row["key"]), row)
@@ -118,10 +121,10 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
                        "previous_escalation_rate": before, "kept": kept}
     issues, unconfirmed = {}, []
     if sample or confident:
-        labels = {"new": _random_labels(candidate, held, sample, confident), "old": _random_labels(current, held, sample, confident) if current else []}
+        labels = {"new": _random_labels(candidate, held, sample, confident, tier), "old": _random_labels(current, held, sample, confident, tier) if current else []}
         for key, threshold in list(promoted_at.items()) + list(kept_at.items()):
             which = "new" if key in promoted_at else "old"
-            check = _check([(right, w) for k, c, right, w in labels[which] if k == key and c >= threshold], target_accuracy)
+            check = _check([(right, w, flagged) for k, c, right, w, flagged in labels[which] if k == key and c >= threshold], target_accuracy)
             report[key]["label_check"] = check
             if check["ruled_out"]:
                 issues[key] = "below target on labels"

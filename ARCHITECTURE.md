@@ -281,16 +281,25 @@ accurate, so everything above it can skip System 2.
   `gpt-4o-mini` was certified at 95% from about 35 answers all graded by `gpt-4.1`, and above that threshold the two
   agreed on every question while being right 87.5% of the time. Two models that share their mistakes look perfect
   graded by each other.
-- **Labels must confirm.** So with `sample=` or `confident=`, the labels on those random samples at or above a
-  threshold are checked two ways. If a confidence sequence rules the target out, the tier fails closed ("below target
-  on labels"). If they don't yet clear the target on the same Wilson bound the threshold was certified with (about 31
-  labels, all right, for 95%), the threshold is saved but unconfirmed ("not enough labels"): the router asks the tier
-  and logs its answers but doesn't keep them. *Why not fail closed:* a tier that is only probed is rarely confident,
-  so labels on its confident answers would stop coming and it could never be confirmed. *Why the `confident` share
-  rather than the answers the tier kept:* an unconfirmed tier keeps nothing. Each label is weighted by the inverse of
-  its chance of being picked, with the effective count in both bounds. Without either rate, nothing needs confirming,
-  and a threshold can rest on System 2's grades alone. `retrain` applies the same rule to the classifier (see
-  below).
+- **Labels must confirm.** So with `sample=` or `confident=`, a threshold needs your labels before it is trusted.
+  - *Confirming* asks whether the tier was right when it said it was sure. It counts the random labels on the answers
+    the tier flagged as confident (at or above the threshold in force when it answered; the router logs the flag), and
+    needs them to clear the target on the same Wilson bound the threshold was certified with: at least 32 labels, all
+    right, for 95%. Until then the threshold is saved but unconfirmed ("not enough labels"), and the router asks the
+    tier and logs its answers but doesn't keep them.
+  - *Ruling out* also uses every random label at or above the threshold, flagged or not, weighted by the inverse of
+    its chance of being picked. Either set can rule the target out, each with a confidence sequence at 2.5%; the tier
+    then fails closed ("below target on labels").
+  - *Why only flagged answers confirm:* every one of them was in the `confident` share at the same rate, so each label
+    counts fully. Mixing in the rest weights each label by its chance of being picked, and a label from the 2% sample
+    stands for up to 15 times as many decisions as one from a 30% `confident` share. In the case studies that made
+    dozens of labels count as 5 to 20, and nothing could be confirmed. Thresholds that move from night to night make
+    it worse: answers between the old and new threshold were never flagged.
+  - *Why not fail closed while unconfirmed:* a tier that is only probed is rarely confident, so labels on its
+    confident answers would stop coming and it could never be confirmed. *Why the `confident` share rather than the
+    answers the tier kept:* an unconfirmed tier keeps nothing.
+  - Without either rate nothing needs confirming, and a threshold can rest on System 2's grades alone. `retrain`
+    applies the same rule to the classifier (see below).
 - **`recheck`** runs the same check on a schedule, since a certified tier is rarely calibrated again: it confirms an
   unconfirmed threshold once the labels show the target, and fails one they rule out. With a 2% sample and a tier
   keeping 15% of messages, the sample alone gives about one label per 330 messages; the `confident` share is what
@@ -325,12 +334,11 @@ accurate, so everything above it can skip System 2.
   confidences on decisions it was not trained on.
 - **Confirming the classifier.** It learns mostly from System 2's answers and is graded on held-out decisions that
   are mostly System 2's answers too, so it inherits System 2's mistakes and the grading can't see them. With
-  `sample=` or `confident=`, `retrain` confirms it with your labels as `calibrate` does, with one difference: the
-  classifier is free to run, so instead of waiting for labels on its own deployed answers, it is run on every
-  held-out decision a person labeled at random. A decision is in the `confident` sample only if some tier was
-  confident about it, which `graded()` rows record (`any_confident`), so each label is weighted by its chance of
-  being picked. Labels that rule the target out stop a promotion or fail the current classifier closed; labels that
-  don't yet show it leave the threshold unconfirmed.
+  `sample=` or `confident=`, `retrain` confirms it with your labels as `calibrate` does. The classifier is free to
+  run, so a new one is scored on every held-out decision a person labeled at random, but only the decisions where the
+  deployed classifier answered and was confident (`graded()` rows record `confident_by`) can confirm it. So a first
+  classifier is always unconfirmed until it has been asked. Labels that rule the target out stop a promotion or fail
+  the current classifier closed.
 - Measured on public datasets (200 held-out items per question, 300 training labels): a classifier then
   `gpt-4o-mini` scored 92% on a topic question (the classifier answered 71%, p50 12 ms) and 89% on sentiment (trusted
   for only 12%, p50 461 ms), against 82% and 90% for the LLM alone.
@@ -435,7 +443,7 @@ What load testing found, with fake models that take 20 ms (so these show hunch's
 - A CLI is not built (#8).
 - `recheck` needs a few hundred labels on a tier's confident answers to rule out a target the tier misses by a few
   points, and about 31 all-right labels to confirm a 95% threshold.
-- Confirmation only counts held-out labels, so a classifier needs roughly three times the random labels a
+- Confirmation only counts held-out labels on flagged answers, so a classifier needs roughly three times the random labels a
   deployed tier does before it is trusted.
 - The guard and `LocalDecider` run in-process and are not wrapped in outage fallback.
 - Only the ordering of tiers is fixed by you; the router does not learn which tier to try first.

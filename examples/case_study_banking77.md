@@ -134,6 +134,12 @@ The classifier was promoted from day 3 or 4 and stayed unconfirmed in all six ru
 confirmed, hunch costs 0% to 3% more than `gpt-4.1` alone and is slower. Before, the classifier's kept answers were
 90% to 96% right; hunch was cheaper by claiming a 95% it did not have.
 
+Seventh round, waiting priced, with 30% of confident answers queued for labels: confirmation now counts only the
+labels on answers the tier flagged as confident (all picked at the same rate, so each counts fully). By day 10 the
+classifier had 35 to 48 of them and was 85% to 94% right on them, so it stayed unconfirmed: where it says it is sure
+it really is below 95%, and hunch now says so with labels rather than missing it. Cost and speed were unchanged
+($10.17 to $10.18, 1.07 to 1.08 s).
+
 ## What still needs to change
 
 1. **`recheck` needs far more labels than a 2% sample gives.** By day 10 it had 1 to 11 labeled answers from

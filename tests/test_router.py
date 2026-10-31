@@ -1702,32 +1702,32 @@ class TopicClaude:
 def test_retrain_needs_labels_to_confirm_the_classifier(tmp_path):
     from hunch import LocalDecider, Store, retrain, review_queue
 
-    def run(name):
-        store = Store(tmp_path / name, seed=0)
-        router = Router(LocalDecider({}, _bag), TopicClaude(), log=store)
-        for text in ["server meeting", "meeting about server", "invoice sale", "sale invoice due"] * 100:
-            router.decide(text, q)
-        return store
-
     q = {"needs_prep": QUESTIONS["needs_prep"]}
-    # People agree with System 2, but few of them have labeled: the classifier is certified on System 2's answers
-    # and saved, unconfirmed, until labels on the random sample show the target.
-    store = run("agree.db")
-    for item in review_queue(store, limit=None, sample=0.02):
-        store.label(item["id"], "needs_prep", "server" in item["state"])
-    report = retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag, sample=0.02)["report"]["needs_prep"]
-    assert report["promoted"] and not report["label_check"]["confirmed"] and store.unconfirmed() == {"needs_prep"}
-    assert store.issues()[0]["reason"] == "not enough labels"
-    for item in review_queue(store, limit=None, sample=0.5):
-        store.label(item["id"], "needs_prep", "server" in item["state"])
-    report = retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag, sample=0.5)["report"]["needs_prep"]
-    assert report["label_check"]["confirmed"] and store.unconfirmed() == set() and store.issues() == []
+    texts = ["server meeting", "meeting about server", "invoice sale", "sale invoice due"] * 100
+
+    def day(store, tier0, truth):
+        router = Router(tier0, TopicClaude(), log=store)
+        for text in texts:
+            router.decide(text, q)
+        for item in review_queue(store, limit=None, sample=0.02, confident=0.5):
+            store.label(item["id"], "needs_prep", truth(item["state"]))
+        return retrain(store, current=tier0 if tier0.heads else None, target_accuracy=0.8, min_samples=5, embed=_bag, sample=0.02, confident=0.5)
+
+    # People agree with System 2. The first classifier is certified on System 2's answers but has never been asked,
+    # so there is nothing to confirm it on yet: it is saved, unconfirmed, and the router asks it without keeping its
+    # answers. Once it has been asked, labels on its confident answers confirm it.
+    store = Store(tmp_path / "agree.db", seed=0)
+    first = day(store, LocalDecider({}, _bag), lambda text: "server" in text)
+    assert first["report"]["needs_prep"]["promoted"] and first["report"]["needs_prep"]["label_check"]["graded"] == 0
+    assert store.unconfirmed() == {"needs_prep"} and store.issues()[0]["reason"] == "not enough labels"
+    assert Router(first["decider"], TopicClaude(), log=store).decide("server meeting", q)["escalated"] == ["needs_prep"]
+    second = day(store, first["decider"], lambda text: "server" in text)
+    assert second["report"]["needs_prep"]["label_check"]["confirmed"] and store.unconfirmed() == set() and store.issues() == []
     # People say every invoice needs prep too. The classifier learned mostly from System 2 and gets them wrong, and
-    # graded mostly by System 2 it still looks right; the labels rule it out, so it is not promoted.
-    store = run("disagree.db")
-    for item in review_queue(store, limit=None, sample=0.2):
-        store.label(item["id"], "needs_prep", True)
-    result = retrain(store, target_accuracy=0.8, min_samples=5, embed=_bag, sample=0.2)
-    report = result["report"]["needs_prep"]
-    assert not report["promoted"] and report["label_check"]["ruled_out"] and result["decider"] is None
-    assert store.thresholds() == {} and store.issues()[0]["reason"] == "below target on labels"
+    # graded mostly by System 2 it still looks right; once it has been asked, the labels rule it out.
+    store = Store(tmp_path / "disagree.db", seed=0)
+    first = day(store, LocalDecider({}, _bag), lambda text: True)
+    second = day(store, first["decider"], lambda text: True)
+    report = second["report"]["needs_prep"]
+    assert report["label_check"]["ruled_out"] and not report["promoted"]
+    assert store.thresholds()["needs_prep"] == float("inf") and store.issues()[0]["reason"] == "below target on labels"
