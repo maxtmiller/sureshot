@@ -2,7 +2,7 @@
 import json
 import math
 from pathlib import Path
-from hunch.questions import check_answer
+from sureshot.questions import check_answer
 
 
 def load(path):
@@ -36,7 +36,7 @@ def run(router, cases, questions=None, thresholds=None):
                 latency[name].append(result["latency_ms"][name])
         for key, expected in case["expected"].items():
             answer = result["answers"][key]
-            fast = answer["hunch"] if answer["source"] == "system2" else answer
+            fast = answer["sureshot"] if answer["source"] == "system2" else answer
             fast_answer = fast and fast["answer"]
             t = tally.setdefault(key, {"n": 0, "final": 0, "system1": 0, "escalated": 0})
             t["n"] += 1

@@ -6,9 +6,9 @@ from contextlib import contextmanager
 import subprocess
 import time
 import httpx
-from hunch.adapters.base import Outage
-from hunch.cache import cache_key
-from hunch.questions import validate
+from sureshot.adapters.base import Outage
+from sureshot.cache import cache_key
+from sureshot.questions import validate
 
 RETRY_STATUS = (408, 429, 500, 502, 503, 504)
 
@@ -35,7 +35,7 @@ class Router:
         questions that also go to System 2, only to be graded: it keeps the log's labels unbiased for calibration.
         A failed call to either model is retried `retries` times, waiting backoff, 2x backoff... seconds between tries.
 
-        cache is a hunch.Cache: a model's answer to a question about a text is reused instead of asking again. It caches
+        cache is a sureshot.Cache: a model's answer to a question about a text is reused instead of asking again. It caches
         what the models said, not the decision, so changing a threshold or recalibrating needs no cache clearing. Only
         models with an `identity` are cached.
 
@@ -51,7 +51,7 @@ class Router:
         trust_uncalibrated says.
 
         probe is the share of questions still asked of a tier that failed closed on them (calibrate could not certify
-        the target, so nothing it says is kept), or that hunch.prune found costs more than it saves. The rest skip it and go straight to the next tier or System 2, which
+        the target, so nothing it says is kept), or that sureshot.prune found costs more than it saves. The rest skip it and go straight to the next tier or System 2, which
         saves its cost and latency; the sample keeps data coming for a later calibration to try again. A tier with
         nowhere to pass its questions to is always asked."""
         self.system1, self.system2, self.threshold, self.log, self.audit = system1, system2, threshold, log, audit
@@ -129,13 +129,13 @@ class Router:
         A tier's threshold is thresholds[key] (the same for every tier), else the log's calibrated one for that tier
         and question, else the router's. Questions no tier is confident about are "unsure". They go to System 2 when
         escalate is true and a System 2 is set; their answer then comes from it, with the last tier's answer kept under
-        "hunch". Otherwise the last tier's answer stands and the key is only listed in "unsure". An answer from a tier
-        has "source": "hunch" and "tier"; every answer lists what each tier said under "tried". A confident answer the
+        "sureshot". Otherwise the last tier's answer stands and the key is only listed in "unsure". An answer from a tier
+        has "source": "sureshot" and "tier"; every answer lists what each tier said under "tried". A confident answer the
         guard disagreed with is unsure, and carries the guard's answer under "guard".
 
         "degraded" is None unless a model was down (after retries): a list of {"system": 1, 2 or "guard", "tier",
         "error"}. A tier that is down is skipped. If every tier is down, System 2 answers every question (each answer
-        has "hunch": None). If System 2 is down, the last tier's answers stand and "escalated" is empty. If the guard
+        has "sureshot": None). If System 2 is down, the last tier's answers stand and "escalated" is empty. If the guard
         is down, nothing is vetoed. Only outages fall back this way: a bad key or an unknown model raises, so a
         misconfiguration is not hidden by silently using another model."""
         validate(questions)
@@ -176,7 +176,7 @@ class Router:
                 if fast[key]["confidence"] < limit[key] or (self.log and not self.trust_uncalibrated and not calibrated) or key in unconfirmed:
                     unsure.append(key)
                 else:
-                    answers[key] = fast[key] | {"source": "hunch", "tier": i}
+                    answers[key] = fast[key] | {"source": "sureshot", "tier": i}
             remaining = unsure
         vetoed = {}
         if self.guard and answers:
@@ -210,14 +210,14 @@ class Router:
                 escalated = []
             else:
                 for key in escalated:
-                    answers[key] = {"answer": slow[key]["answer"], "reason": slow[key]["reason"], "source": "system2", "hunch": latest.get(key)}
+                    answers[key] = {"answer": slow[key]["answer"], "reason": slow[key]["reason"], "source": "system2", "sureshot": latest.get(key)}
                 for key in audited:
                     answers[key]["audit"] = slow[key]
         for key in remaining:
             if key not in escalated:
                 if key not in latest:
                     raise ValueError(f"no System 1 tier answered {key!r}, and there is no System 2 to escalate it to")
-                answers[key] = latest[key] | {"source": "hunch"}
+                answers[key] = latest[key] | {"source": "sureshot"}
         answers = {key: answers[key] | {"tried": tried[key]} | ({"guard": vetoed[key]} if key in vetoed else {}) for key in questions}
         latency = {"system1": sum(tier_ms), "system2": system2_ms, "total": (time.perf_counter() - start) * 1000}
         result = {"answers": answers, "unsure": remaining, "escalated": escalated, "degraded": degraded or None, "cache": tally if self.cache else None,
@@ -227,9 +227,9 @@ class Router:
         return result
 
     def test(self, cases, questions=None, thresholds=None):
-        """Scores this router on a golden dataset (a list of cases or the path of a JSONL file; see hunch.golden.run)
+        """Scores this router on a golden dataset (a list of cases or the path of a JSONL file; see sureshot.golden.run)
         without writing to the log. The log's calibrated thresholds still apply."""
-        from hunch.golden import run
+        from sureshot.golden import run
 
         plain = copy.copy(self)
         plain.record = False

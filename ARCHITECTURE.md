@@ -1,6 +1,6 @@
 # Architecture
 
-hunch answers structured questions about a piece of content (an email, a ticket, an image) quickly and cheaply, and
+sureshot answers structured questions about a piece of content (an email, a ticket, an image) quickly and cheaply, and
 only asks a slower, smarter model when the fast one is not sure. This file explains what each part does, how the parts
 fit together, and why they are built the way they are.
 
@@ -48,26 +48,26 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 
 | Path | Role |
 |---|---|
-| `hunch/questions.py` | The question format (choice, score, noul), validation, JSON schema for System 2 |
-| `hunch/adapters/base.py` | What adapters share: the pooled HTTP client, `Outage`, the prompts, `normalize` (the System 1 answer shape) |
-| `hunch/adapters/chat.py` | Chat-completions (OpenAI-format) endpoints: `ChatDecider`, `VLLMDecider`, `ChatReasoner` |
-| `hunch/adapters/http.py` | Any API you describe with two functions: `HTTPDecider`, `HTTPReasoner` |
-| `hunch/adapters/gemini.py` | Gemini through its own `generateContent` API (logprobs for System 1, `responseSchema` for System 2): `GeminiDecider`, `GeminiReasoner` |
-| `hunch/adapters/vendors.py` | One System 1 and System 2 class per major OpenAI-format vendor (OpenAI, Mistral, DeepSeek, xAI, Groq, Together, Fireworks, OpenRouter, Ollama) with its endpoint and key built in |
-| `hunch/adapters/anthropic.py` | Claude, which has its own protocol and SDK: `ClaudeAPI`, `ClaudeCLI` (optional install) |
-| `hunch/providers.py` | URLs and key variables of common OpenAI-compatible services, so `provider="groq"` replaces a URL |
-| `hunch/local.py` | `LocalDecider`: an in-process classifier (embeddings + logistic regression) used as a System 1 tier or a guard |
-| `hunch/router.py` | `Router`: the cascade, thresholds, retries, outage fallback, guard, audit, cache use |
-| `hunch/cache.py` | `Cache`: SQLite cache of model answers |
-| `hunch/store.py` | `Store`: SQLite log of decisions, labels, thresholds, calibration issues, skips, drift snapshots |
-| `hunch/calibrate.py` | `calibrate` picks per-question thresholds that meet an accuracy target; `recheck` tests them against labels; `prune` skips tiers that don't pay |
-| `hunch/learn.py` | `retrain`: trains a better local tier from the log and promotes it only if it helps |
-| `hunch/review.py` | The queue of questions where a person's label would help most |
-| `hunch/stats.py` | Usage, accuracy, cost, latency and drift report from the log |
-| `hunch/evaluate.py`, `hunch/golden.py` | Replay logged decisions through candidate models; score a golden dataset |
-| `hunch/config.py` | `router_from_env()`: build a Router from `HUNCH_*` environment variables |
-| `hunch/api.py` | FastAPI app: `/decide`, `/feedback`, `/calibrate`, `/stats`, `/review` |
-| `serve/` | Dockerfile and compose file for serving a model with vLLM next to hunch |
+| `sureshot/questions.py` | The question format (choice, score, noul), validation, JSON schema for System 2 |
+| `sureshot/adapters/base.py` | What adapters share: the pooled HTTP client, `Outage`, the prompts, `normalize` (the System 1 answer shape) |
+| `sureshot/adapters/chat.py` | Chat-completions (OpenAI-format) endpoints: `ChatDecider`, `VLLMDecider`, `ChatReasoner` |
+| `sureshot/adapters/http.py` | Any API you describe with two functions: `HTTPDecider`, `HTTPReasoner` |
+| `sureshot/adapters/gemini.py` | Gemini through its own `generateContent` API (logprobs for System 1, `responseSchema` for System 2): `GeminiDecider`, `GeminiReasoner` |
+| `sureshot/adapters/vendors.py` | One System 1 and System 2 class per major OpenAI-format vendor (OpenAI, Mistral, DeepSeek, xAI, Groq, Together, Fireworks, OpenRouter, Ollama) with its endpoint and key built in |
+| `sureshot/adapters/anthropic.py` | Claude, which has its own protocol and SDK: `ClaudeAPI`, `ClaudeCLI` (optional install) |
+| `sureshot/providers.py` | URLs and key variables of common OpenAI-compatible services, so `provider="groq"` replaces a URL |
+| `sureshot/local.py` | `LocalDecider`: an in-process classifier (embeddings + logistic regression) used as a System 1 tier or a guard |
+| `sureshot/router.py` | `Router`: the cascade, thresholds, retries, outage fallback, guard, audit, cache use |
+| `sureshot/cache.py` | `Cache`: SQLite cache of model answers |
+| `sureshot/store.py` | `Store`: SQLite log of decisions, labels, thresholds, calibration issues, skips, drift snapshots |
+| `sureshot/calibrate.py` | `calibrate` picks per-question thresholds that meet an accuracy target; `recheck` tests them against labels; `prune` skips tiers that don't pay |
+| `sureshot/learn.py` | `retrain`: trains a better local tier from the log and promotes it only if it helps |
+| `sureshot/review.py` | The queue of questions where a person's label would help most |
+| `sureshot/stats.py` | Usage, accuracy, cost, latency and drift report from the log |
+| `sureshot/evaluate.py`, `sureshot/golden.py` | Replay logged decisions through candidate models; score a golden dataset |
+| `sureshot/config.py` | `router_from_env()`: build a Router from `SURESHOT_*` environment variables |
+| `sureshot/api.py` | FastAPI app: `/decide`, `/feedback`, `/calibrate`, `/stats`, `/review` |
+| `serve/` | Dockerfile and compose file for serving a model with vLLM next to sureshot |
 | `examples/` | Case studies, a drift alert, a real-model check and a load-testing script |
 | `tests/` | Router behavior, calibration simulations, concurrency, recorded real-model exchanges |
 
@@ -90,9 +90,9 @@ remote models never loads them.
 4. **Pick audits.** With `audit=0.1`, a random 10% of the still-confident answers are also sent to System 2, only to
    be graded (the answer returned still comes from System 1).
 5. **Ask System 2** about the unsure questions plus the audited ones, in a single call.
-6. **Assemble the result**: for each question the answer, its confidence, `source` (`hunch` or `system2`), which tier
+6. **Assemble the result**: for each question the answer, its confidence, `source` (`sureshot` or `system2`), which tier
    answered, what every tier said (`tried`), the guard's answer if it vetoed, and for escalated questions System 2's
-   reason with the tier's answer kept under `hunch`. Also latency per stage, cache hits, and `degraded`.
+   reason with the tier's answer kept under `sureshot`. Also latency per stage, cache hits, and `degraded`.
 7. **Log it** to the Store (if there is one) and return the decision id, so a label can be attached later.
 
 Threshold precedence for a tier and question: the `thresholds` passed to `decide`, else the threshold calibration saved
@@ -126,10 +126,10 @@ answered.
   option (a "thinking" model that spends its one token starting to think), and `extra` lets you turn thinking off.
 - **`VLLMDecider`** is a `ChatDecider` with local defaults (and thinking turned off where the model supports it), for
   a model you serve yourself. *Why:* the largest latency cost in practice was the network. A model co-located with
-  hunch answered in about 150 ms, against about 580 ms for a hosted API and about 1.1 s from a laptop to a cloud GPU.
+  sureshot answered in about 150 ms, against about 580 ms for a hosted API and about 1.1 s from a laptop to a cloud GPU.
   On an NVIDIA L4, Qwen2.5-7B-Instruct answered a three-question email in about 150 ms (p50 and p95), and zero-shot it
   was less accurate than `gpt-4o-mini` on a small labeled set (71% against 84%). `--max-logprobs 20` matches the 20
-  top logprobs hunch requests. The compose file in `serve/` has not been run as a whole (it needs Docker with an NVIDIA
+  top logprobs sureshot requests. The compose file in `serve/` has not been run as a whole (it needs Docker with an NVIDIA
   GPU); its pieces were: the official `vllm/vllm-openai` image with the compose flags on an L4, `serve/Dockerfile`, and
   `VLLMDecider`, `check()`, `router.test`, `/decide` and `/feedback` against that server. A pip-installed vLLM may need
   `nvcc` for FlashInfer; set `VLLM_USE_FLASHINFER_SAMPLER=0` or use the official image.
@@ -219,7 +219,7 @@ definition automatically misses. A model with no `identity` is not cached.
 
 - `ClaudeAPI`, `ChatDecider`, `VLLMDecider` and `ChatReasoner` have an identity (model, URL, `extra`); an API key is
   not part of it. A trained `LocalDecider`'s identity changes when it is retrained. `HTTPDecider` and `HTTPReasoner`
-  take an `identity=` string. Bump `PROMPT_VERSION` in `hunch/adapters/base.py` when a prompt changes.
+  take an `identity=` string. Bump `PROMPT_VERSION` in `sureshot/adapters/base.py` when a prompt changes.
 - System 2 is cached per question, so a repeat call asks it only about the questions it has not answered.
 - A vendor can update a model behind an alias (`gpt-4o-mini` rather than a dated snapshot). The key cannot see that,
   so cached answers keep the old behavior and drift only sees the change on texts that miss the cache.
@@ -400,8 +400,8 @@ accurate, so everything above it can skip System 2.
 
 ### Configuration and API (`config.py`, `api.py`)
 
-`router_from_env()` builds a Router from `HUNCH_SYSTEM1_*`, `HUNCH_SYSTEM2_*`, `HUNCH_LOCAL_MODEL`, `HUNCH_DB`,
-`HUNCH_CACHE`, `HUNCH_AUDIT` and `HUNCH_THRESHOLD`, so a deployment swaps models with no code change. The FastAPI app
+`router_from_env()` builds a Router from `SURESHOT_SYSTEM1_*`, `SURESHOT_SYSTEM2_*`, `SURESHOT_LOCAL_MODEL`, `SURESHOT_DB`,
+`SURESHOT_CACHE`, `SURESHOT_AUDIT` and `SURESHOT_THRESHOLD`, so a deployment swaps models with no code change. The FastAPI app
 wraps one shared Router, checks System 1 is reachable before serving (`ChatDecider.check`), and protects every route
 except `/health` with a bearer token. Labels arrive through `/feedback`; `/calibrate` recomputes thresholds.
 
@@ -427,7 +427,7 @@ The Router is thread-safe and meant to be shared. SQLite uses WAL with a busy ti
 not block writers (logging). Cache misses are single-flighted. One pooled HTTP client serves every model call.
 `examples/loadtest.py` drives a running API with many clients to check throughput and errors.
 
-What load testing found, with fake models that take 20 ms (so these show hunch's own limits), on a laptop:
+What load testing found, with fake models that take 20 ms (so these show sureshot's own limits), on a laptop:
 
 - One process handled `/decide` at roughly 90 requests a second with two model calls each, and in-process fakes at
   600+ a second at 128 clients with p99 under 250 ms. Four `uvicorn` workers sharing the SQLite log and cache reached

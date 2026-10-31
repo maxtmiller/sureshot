@@ -2,7 +2,7 @@
 import math
 from concurrent.futures import ThreadPoolExecutor
 import httpx
-from hunch.questions import check_answer, describe
+from sureshot.questions import check_answer, describe
 
 # One client for every model call. httpx.post builds a client per call, which costs about 10 ms of CPU that holds the GIL
 # (it capped a process at roughly 30 model calls a second however many threads it had) and drops the connection each time.

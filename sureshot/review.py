@@ -49,7 +49,7 @@ def pending(store, since=0.0, decisions=None, labels=None, sample=0.0, confident
             reason = None
             if answer["source"] == "system2":
                 candidates.append({"who": "system2", "answer": answer["answer"], "reason": answer["reason"]})
-                if answer.get("hunch") is not None and answer["hunch"]["answer"] != answer["answer"]:
+                if answer.get("sureshot") is not None and answer["sureshot"]["answer"] != answer["answer"]:
                     reason = "disagreement"
             elif "audit" in answer:
                 candidates.append({"who": "system2", "answer": answer["audit"]["answer"], "reason": answer["audit"]["reason"]})

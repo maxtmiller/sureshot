@@ -1,4 +1,4 @@
-# hunch
+# sureshot
 
 Fast, calibrated answers from a cheap model, with escalation to a stronger model only when the cheap one isn't sure.
 
@@ -8,12 +8,12 @@ that gives a probability for each option: a small LLM with logprobs, or a classi
 questions it is unsure about to System 2, so most decisions cost one cheap call.
 
 ```
-content + questions ─▶ System 1 ─▶ confident? ── yes ──▶ answer (source: hunch)
+content + questions ─▶ System 1 ─▶ confident? ── yes ──▶ answer (source: sureshot)
                                       │
                                       no ──▶ System 2 ──▶ answer + reason (source: system2)
 ```
 
-Around that handoff, hunch logs every decision and uses your labels to learn how far to trust System 1, to train
+Around that handoff, sureshot logs every decision and uses your labels to learn how far to trust System 1, to train
 a cheaper tier, and to warn you when things change. [ARCHITECTURE.md](ARCHITECTURE.md) explains how each part works
 and why. [The banking77 case study](examples/case_study_banking77.md) runs the whole loop on real data.
 
@@ -41,7 +41,7 @@ pip install -e ".[dev]"          # tests
 ## Quick start
 
 ```python
-from hunch import Router, OpenAIDecider, ClaudeAPI
+from sureshot import Router, OpenAIDecider, ClaudeAPI
 
 questions = {
     "category": {"type": "choice", "instructions": "What kind of email is this?",
@@ -52,7 +52,7 @@ questions = {
 router = Router(OpenAIDecider("gpt-4o-mini"), ClaudeAPI(), threshold=0.8)
 result = router.decide(email_text, questions)
 
-result["answers"]["category"]   # {"answer": "work", "confidence": 0.97, "source": "hunch", ...}
+result["answers"]["category"]   # {"answer": "work", "confidence": 0.97, "source": "sureshot", ...}
 result["escalated"]             # the questions System 2 answered, e.g. ["needs_reply"]
 ```
 
@@ -67,7 +67,7 @@ thresholds from your data, add a log and [calibrate](#calibrate-learn-each-quest
 | [System 1 deciders](#system-1) | Fast models with a confidence: `ChatDecider`, vendor classes, `VLLMDecider`, `HTTPDecider`, `LocalDecider` |
 | [System 2 reasoners](#system-2) | Stronger models that answer with a reason: `ClaudeAPI`, `ChatReasoner`, vendor classes, `HTTPReasoner` |
 | [`Router`](#the-router) | Tries the tiers in order, escalates what nobody is sure about, retries, and falls back when a model is down |
-| [`Store`](#log-and-label) | SQLite log of decisions, your labels, and the thresholds hunch learns |
+| [`Store`](#log-and-label) | SQLite log of decisions, your labels, and the thresholds sureshot learns |
 | [`Cache`](#cache) | Reuses a model's answer to the same question about the same text |
 | [`review_queue`](#review-queue-what-to-label-next) | The questions where a person's label helps most |
 | [`calibrate`](#calibrate-learn-each-questions-threshold) | Learns per-question thresholds that meet an accuracy target |
@@ -94,7 +94,7 @@ An object of named questions, each one of three types:
 
 - `choice`: one of named options. `score`: a level from an ordered list. `noul`: yes or no.
 - Every answer has the same shape: `answer` (an option key, a level index, or a boolean), `confidence` (0 to 1;
-  for `noul`, the distance from a coin flip), `probabilities` and `source` (`hunch` or `system2`).
+  for `noul`, the distance from a coin flip), `probabilities` and `source` (`sureshot` or `system2`).
 
 ## Models
 
@@ -105,7 +105,7 @@ the probability on the option labels is the confidence.
 
 | Class | Use it for |
 | --- | --- |
-| `ChatDecider(model, base_url, api_key)` | Any OpenAI-compatible endpoint that returns logprobs. `provider="groq"` (one of `hunch.PROVIDERS`) fills in the URL and key variable |
+| `ChatDecider(model, base_url, api_key)` | Any OpenAI-compatible endpoint that returns logprobs. `provider="groq"` (one of `sureshot.PROVIDERS`) fills in the URL and key variable |
 | `OpenAIDecider`, `MistralDecider`, ... | The same with a vendor's endpoint built in (table below) |
 | `VLLMDecider(model)` | A model you serve with vLLM, at `http://localhost:8000/v1` by default (see [self-hosting](#self-hosting-system-1-with-vllm)) |
 | `HTTPDecider(url, request, parse)` | Any other HTTP API: you write the request body and parse the probabilities |
@@ -125,7 +125,7 @@ turned off through `extra=`, e.g. `extra={"reasoning_effort": "none"}`.
 | `OpenAIReasoner`, `GroqReasoner`, ... | The same with a vendor's endpoint built in |
 | `HTTPReasoner(url, request, parse)` | Any other HTTP API. Build prompts with `prompt`, `SYSTEM_PROMPT` and `answer_schema` |
 
-`default_system2()` picks the first one configured: a `ChatReasoner` if `HUNCH_SYSTEM2_URL` is set, else `ClaudeAPI`
+`default_system2()` picks the first one configured: a `ChatReasoner` if `SURESHOT_SYSTEM2_URL` is set, else `ClaudeAPI`
 if keyed, else `ClaudeCLI` if installed.
 
 ### Vendors
@@ -164,12 +164,12 @@ system1 = HTTPDecider(
 )
 ```
 
-Raise `hunch.Outage` when your model is down or overloaded, so the router retries and falls back. Any other
+Raise `sureshot.Outage` when your model is down or overloaded, so the router retries and falls back. Any other
 exception is treated as a bug and raised.
 
 ### Self-hosting System 1 with vLLM
 
-A hosted API costs at least ~500 ms per call. A model served next to hunch answered a three-question email in about
+A hosted API costs at least ~500 ms per call. A model served next to sureshot answered a three-question email in about
 150 ms on an NVIDIA L4.
 
 ```bash
@@ -180,8 +180,8 @@ vllm serve Qwen/Qwen2.5-7B-Instruct --enable-prefix-caching --max-logprobs 20 --
 router = Router(VLLMDecider("Qwen/Qwen2.5-7B-Instruct").check(), ClaudeAPI())
 ```
 
-`serve/docker-compose.yml` runs vLLM and the hunch API together on one GPU machine: `cp .env.example .env`, set
-`HUNCH_SYSTEM1_MODEL`, `HUNCH_API_KEY` and a System 2 key, then `docker compose -f serve/docker-compose.yml up
+`serve/docker-compose.yml` runs vLLM and the sureshot API together on one GPU machine: `cp .env.example .env`, set
+`SURESHOT_SYSTEM1_MODEL`, `SURESHOT_API_KEY` and a System 2 key, then `docker compose -f serve/docker-compose.yml up
 --build`. A zero-shot 7B model is less accurate than `gpt-4o-mini`, so log decisions, calibrate, and keep a System 2
 behind it.
 
@@ -192,7 +192,7 @@ router = Router(
     [LocalDecider.load("local.joblib"), OpenAIDecider("gpt-4o-mini")],   # tiers, tried in order
     ClaudeAPI(),                                                         # System 2
     threshold=[0.95, 0.8],      # default threshold per tier, until calibration saves better ones
-    log=Store("hunch.db"),      # log every decision, and apply the thresholds it has learned
+    log=Store("sureshot.db"),      # log every decision, and apply the thresholds it has learned
     audit=0.05,                 # also send 5% of confident answers to System 2, to grade them
     cache=Cache("cache.db"),
 )
@@ -221,7 +221,7 @@ The result:
 ```python
 result["answers"]["urgency"]
 # {"answer": 2, "reason": "...", "source": "system2",
-#  "hunch": {"answer": 1, "confidence": 0.62, "tier": 1},              # the last tier's answer, when escalated
+#  "sureshot": {"answer": 1, "confidence": 0.62, "tier": 1},              # the last tier's answer, when escalated
 #  "tried": [{"tier": 0, "answer": 1, "confidence": 0.41}, {"tier": 1, "answer": 1, "confidence": 0.62}]}
 result["escalated"]    # questions System 2 answered
 result["unsure"]       # questions no tier was confident about
@@ -262,12 +262,12 @@ numbers are in [ARCHITECTURE.md](ARCHITECTURE.md#the-router-routerpy).
 
 ## The feedback loop
 
-With a log, hunch improves as you label. A typical setup runs the router all day and a short job each night:
+With a log, sureshot improves as you label. A typical setup runs the router all day and a short job each night:
 
 ```python
-from hunch import Router, Store, calibrate, prune, recheck, retrain, review_queue, stats
+from sureshot import Router, Store, calibrate, prune, recheck, retrain, review_queue, stats
 
-store = Store("hunch.db")
+store = Store("sureshot.db")
 router = Router([local, llm], system2, log=store, audit=0.05, trust_uncalibrated=False)
 
 # During the day
@@ -287,10 +287,10 @@ The rest of this section explains each step.
 
 ### Log and label
 
-`Router(log=Store("hunch.db"))` logs every decision and returns its `id`. Attach the true answer with
+`Router(log=Store("sureshot.db"))` logs every decision and returns its `id`. Attach the true answer with
 `store.label(id, key, answer)` (or `POST /feedback`), from a person or a downstream outcome.
 
-Where nobody has labeled, hunch grades a tier by System 2's answer. That measures agreement with System 2, which is
+Where nobody has labeled, sureshot grades a tier by System 2's answer. That measures agreement with System 2, which is
 not the truth when System 2 is often wrong, so label where you can and measure with a random sample (below).
 
 ### Review queue: what to label next
@@ -400,13 +400,13 @@ report["drift"]                                     # what changed since each ca
 
 - `accuracy_on_sample` has `below_target` when even the top of its interval is under the target. No threshold
   fixes that: System 2, or the question itself, is the limit.
-- In `cost`, a tier with a negative `net` costs more than it saves. hunch has no price list; pass yours. Add `"ms"`
+- In `cost`, a tier with a negative `net` costs more than it saves. sureshot has no price list; pass yours. Add `"ms"`
   to price waiting.
 - `drift` lists, per calibrated question and tier, `flags` for what moved: `escalation_rate`, `distribution` (the
   spread of its confidences), `accuracy`, and `change_*` for a change that started later. `unchecked` names the
   checks that lacked data, so an empty `flags` isn't read as no drift. `upstream` points at an earlier tier that
   drifted first. A flag means grade a fresh sample and calibrate again.
-- `examples/drift_alert.py hunch.db` prints what moved and exits with status 1 when anything is flagged; run it on
+- `examples/drift_alert.py sureshot.db` prints what moved and exits with status 1 when anything is flagged; run it on
   a schedule.
 
 How the drift checks keep false alarms rare however often you poll: [ARCHITECTURE.md](ARCHITECTURE.md#measuring-statspy-evaluatepy-goldenpy).
@@ -430,8 +430,8 @@ candidate System 1 models, to see which meets the target with the least escalati
 ```bash
 pip install -e ".[api]"
 cp .env.example .env    # fill in the keys
-uvicorn hunch.api:app
-curl -s localhost:8000/decide -H "Authorization: Bearer $HUNCH_API_KEY" \
+uvicorn sureshot.api:app
+curl -s localhost:8000/decide -H "Authorization: Bearer $SURESHOT_API_KEY" \
   -d '{"state": "...", "questions": {...}, "thresholds": {"urgency": 0.6}}'
 ```
 
@@ -444,26 +444,26 @@ curl -s localhost:8000/decide -H "Authorization: Bearer $HUNCH_API_KEY" \
 | `GET /review` | The review queue; `limit`, `reason`, `sample`, `confident` |
 | `GET /health` | No token needed |
 
-Every other route needs `Authorization: Bearer $HUNCH_API_KEY`. The API builds its router with `router_from_env()`,
+Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`. The API builds its router with `router_from_env()`,
 which you can also call yourself:
 
 | Variable | Values |
 | --- | --- |
-| `HUNCH_SYSTEM1` | `chat` (default), `vllm` or `gemini` |
-| `HUNCH_SYSTEM1_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 1's model (required), and a URL or a provider, and key |
-| `HUNCH_SYSTEM2` | `auto` (default), `claude`, `claude-cli`, `chat`, `gemini`, `none` |
-| `HUNCH_SYSTEM2_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 2's model, URL or provider, and key |
-| `HUNCH_SYSTEM2_JSON_MODE` | `schema` (default) or `object` |
-| `HUNCH_SYSTEM1_EXTRA`, `HUNCH_SYSTEM2_EXTRA` | JSON merged into every request, e.g. `{"reasoning_effort": "none"}` |
-| `HUNCH_LOCAL_MODEL` | A saved `LocalDecider` to put in front of System 1 |
-| `HUNCH_THRESHOLD` | Default threshold (0.8) |
-| `HUNCH_DB` | SQLite log; enables `/feedback` and `/calibrate` |
-| `HUNCH_CACHE`, `HUNCH_CACHE_TTL` | Response cache, and seconds an answer stays valid |
-| `HUNCH_AUDIT` | Share of confident answers audited (default 0) |
+| `SURESHOT_SYSTEM1` | `chat` (default), `vllm` or `gemini` |
+| `SURESHOT_SYSTEM1_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 1's model (required), and a URL or a provider, and key |
+| `SURESHOT_SYSTEM2` | `auto` (default), `claude`, `claude-cli`, `chat`, `gemini`, `none` |
+| `SURESHOT_SYSTEM2_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 2's model, URL or provider, and key |
+| `SURESHOT_SYSTEM2_JSON_MODE` | `schema` (default) or `object` |
+| `SURESHOT_SYSTEM1_EXTRA`, `SURESHOT_SYSTEM2_EXTRA` | JSON merged into every request, e.g. `{"reasoning_effort": "none"}` |
+| `SURESHOT_LOCAL_MODEL` | A saved `LocalDecider` to put in front of System 1 |
+| `SURESHOT_THRESHOLD` | Default threshold (0.8) |
+| `SURESHOT_DB` | SQLite log; enables `/feedback` and `/calibrate` |
+| `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache, and seconds an answer stays valid |
+| `SURESHOT_AUDIT` | Share of confident answers audited (default 0) |
 
 ## Performance
 
-- One process serves roughly 90 `/decide` requests a second with two model calls each; `uvicorn hunch.api:app
+- One process serves roughly 90 `/decide` requests a second with two model calls each; `uvicorn sureshot.api:app
   --workers 4` reached about 300, sharing the SQLite log and cache.
 - Identical concurrent requests ask the model once.
 - `/stats` and `/review` read the whole log; poll them rarely and use `since=`.

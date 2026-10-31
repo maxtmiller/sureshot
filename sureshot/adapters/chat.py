@@ -1,10 +1,10 @@
 """Adapters for chat-completions endpoints (the OpenAI wire format most servers speak)."""
 import json
-from hunch.adapters import base
-from hunch.adapters.base import PROMPT_VERSION, SYSTEM_PROMPT, OptionDecider, check_reply, prompt
-from hunch.adapters.http import HTTPReasoner
-from hunch.providers import endpoint
-from hunch.questions import answer_schema
+from sureshot.adapters import base
+from sureshot.adapters.base import PROMPT_VERSION, SYSTEM_PROMPT, OptionDecider, check_reply, prompt
+from sureshot.adapters.http import HTTPReasoner
+from sureshot.providers import endpoint
+from sureshot.questions import answer_schema
 
 
 def _chat_content(text, images):
@@ -22,7 +22,7 @@ class ChatDecider(OptionDecider):
     yes/no for noul), renormalized over the options, is the calibrated confidence."""
 
     def __init__(self, model, base_url=None, api_key=None, timeout=60, extra=None, provider=None):
-        """Give base_url, or a provider name from hunch.providers (which fills in the URL and reads the key from its
+        """Give base_url, or a provider name from sureshot.providers (which fills in the URL and reads the key from its
         usual environment variable). extra is merged into every request body, e.g. {"reasoning_effort": "none"} for a
         model that would otherwise spend its one token starting to think, which leaves no probability on the options."""
         base_url, api_key = endpoint(base_url, api_key, provider)
@@ -48,7 +48,7 @@ class ChatDecider(OptionDecider):
 
 class VLLMDecider(ChatDecider):
     """A model you serve yourself with vLLM (`vllm serve <model> --max-logprobs 20`), ideally on the same machine or
-    network as hunch, where the lowest latency is. Defaults to a local server and turns off thinking for models that
+    network as sureshot, where the lowest latency is. Defaults to a local server and turns off thinking for models that
     support it (Qwen3...), since a model that starts thinking leaves no probability on the options."""
 
     def __init__(self, model, base_url="http://localhost:8000/v1", api_key=None, timeout=60, extra=None):
@@ -58,7 +58,7 @@ class VLLMDecider(ChatDecider):
 class ChatReasoner(HTTPReasoner):
     """Any OpenAI-compatible chat endpoint (OpenAI, vLLM, Ollama...) as System 2, constrained to the question schema
     with structured outputs. For a service that only offers JSON mode (no schema), pass json_mode="object": the schema
-    is then put in the system message and the reply is checked against it by hunch, not by the server."""
+    is then put in the system message and the reply is checked against it by sureshot, not by the server."""
 
     def __init__(self, model, base_url=None, api_key=None, timeout=600, extra=None, provider=None, json_mode="schema"):
         if json_mode not in ("schema", "object"):

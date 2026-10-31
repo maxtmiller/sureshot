@@ -7,8 +7,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-import hunch.adapters.base as backends
-from hunch import ChatDecider, ChatReasoner
+import sureshot.adapters.base as backends
+from sureshot import ChatDecider, ChatReasoner
 from record_responses import STATE
 from test_router import QUESTIONS
 

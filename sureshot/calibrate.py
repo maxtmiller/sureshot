@@ -3,9 +3,9 @@ import logging
 from bisect import bisect_right
 from math import ceil, lgamma, log as ln, sqrt
 from statistics import NormalDist
-from hunch.review import in_sample
+from sureshot.review import in_sample
 
-log = logging.getLogger("hunch")
+log = logging.getLogger("sureshot")
 
 
 Z = 1.28

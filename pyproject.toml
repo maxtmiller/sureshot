@@ -1,5 +1,5 @@
 [project]
-name = "hunch"
+name = "sureshot"
 version = "0.1.0"
 description = "Fast, calibrated decisions from a System 1 model, with escalation to a stronger System 2 model when it's unsure"
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["hunch", "hunch.adapters"]
+packages = ["sureshot", "sureshot.adapters"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

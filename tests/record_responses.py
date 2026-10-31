@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-import hunch.adapters.base as backends
-from hunch import ChatDecider, ChatReasoner
+import sureshot.adapters.base as backends
+from sureshot import ChatDecider, ChatReasoner
 from test_router import QUESTIONS
 
 OUT = Path(__file__).parent / "recordings"

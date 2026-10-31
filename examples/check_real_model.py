@@ -1,9 +1,9 @@
 """Run labeled emails through a real System 1 and calibrate it. Configure the model in .env like the API does:
 
-    HUNCH_SYSTEM1_MODEL=gpt-4o-mini
-    HUNCH_SYSTEM1_URL=https://api.openai.com/v1
-    HUNCH_SYSTEM1_API_KEY=...
-    HUNCH_SYSTEM1_EXTRA={"reasoning_effort": "none"}   # optional extra request fields
+    SURESHOT_SYSTEM1_MODEL=gpt-4o-mini
+    SURESHOT_SYSTEM1_URL=https://api.openai.com/v1
+    SURESHOT_SYSTEM1_API_KEY=...
+    SURESHOT_SYSTEM1_EXTRA={"reasoning_effort": "none"}   # optional extra request fields
 
 then `python examples/check_real_model.py`. Shows how confident the model is, whether that confidence is earned, and
 the thresholds calibration would pick."""
@@ -11,8 +11,8 @@ import os
 import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
-from hunch import Router, Store, calibrate
-from hunch.config import system1_from_env
+from sureshot import Router, Store, calibrate
+from sureshot.config import system1_from_env
 
 QUESTIONS = {
     "needs_reply": {"type": "noul", "instructions": "Does this email need a personal reply?"},
@@ -74,7 +74,7 @@ def main():
         result = router.decide(text, QUESTIONS)
         for key, answer in zip(QUESTIONS, truth):
             store.label(result["id"], key, answer)
-    print(f"{os.environ['HUNCH_SYSTEM1_MODEL']}: {len(EMAILS)} emails graded against your labels\n")
+    print(f"{os.environ['SURESHOT_SYSTEM1_MODEL']}: {len(EMAILS)} emails graded against your labels\n")
     rows = store.labeled()
     for key, report in calibrate(store, target_accuracy=0.9, min_samples=20, save=False).items():
         confidences = sorted(r["confidence"] for r in rows if r["key"] == key)

@@ -1,11 +1,11 @@
-# System 1 on your own GPU with vLLM, next to the hunch API. From the repo root:
-#   cp .env.example .env     # set HUNCH_SYSTEM1_MODEL, HUNCH_API_KEY and the System 2 settings (HUNCH_SYSTEM2_*, or a provider key such as ANTHROPIC_API_KEY)
+# System 1 on your own GPU with vLLM, next to the sureshot API. From the repo root:
+#   cp .env.example .env     # set SURESHOT_SYSTEM1_MODEL, SURESHOT_API_KEY and the System 2 settings (SURESHOT_SYSTEM2_*, or a provider key such as ANTHROPIC_API_KEY)
 #   docker compose -f serve/docker-compose.yml up --build
-# Needs Docker with the NVIDIA container toolkit. The hunch API is then at http://localhost:8000/decide.
+# Needs Docker with the NVIDIA container toolkit. The sureshot API is then at http://localhost:8000/decide.
 services:
   vllm:
     image: vllm/vllm-openai:latest
-    command: --model ${HUNCH_SYSTEM1_MODEL} --enable-prefix-caching --max-logprobs 20 --max-model-len 4096
+    command: --model ${SURESHOT_SYSTEM1_MODEL} --enable-prefix-caching --max-logprobs 20 --max-model-len 4096
     ipc: host
     environment:
       - HF_TOKEN
@@ -23,17 +23,17 @@ services:
       interval: 10s
       retries: 60
 
-  hunch:
+  sureshot:
     build:
       context: ..
       dockerfile: serve/Dockerfile
     env_file: ../.env
     environment:
-      HUNCH_SYSTEM1: vllm
-      HUNCH_SYSTEM1_URL: http://vllm:8000/v1
-      HUNCH_DB: /data/hunch.db
+      SURESHOT_SYSTEM1: vllm
+      SURESHOT_SYSTEM1_URL: http://vllm:8000/v1
+      SURESHOT_DB: /data/sureshot.db
     volumes:
-      - hunch-data:/data
+      - sureshot-data:/data
     ports:
       - "8000:8000"
     depends_on:
@@ -41,4 +41,4 @@ services:
         condition: service_healthy
 
 volumes:
-  hunch-data:
+  sureshot-data:
