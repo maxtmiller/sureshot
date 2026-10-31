@@ -2,6 +2,9 @@
 name = "sureshot"
 version = "0.1.0"
 description = "Fast, calibrated decisions from a System 1 model, with escalation to a stronger System 2 model when it's unsure"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = ["httpx"]
 
@@ -12,7 +15,7 @@ local = ["scikit-learn", "sentence-transformers"]
 dev = ["pytest", "anthropic", "fastapi", "uvicorn", "python-dotenv", "scikit-learn"]
 
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
