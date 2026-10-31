@@ -18,7 +18,7 @@ priced in: that many dollars per second of latency). The shift from day 6 is one
     python examples/case_study.py baseline --dataset trec   # asks both models about every message (the paid part)
     python examples/case_study.py simulate --dataset trec   # runs the ten days, reusing those answers from the cache
 
---dataset defaults to banking77, --confident (the share of confident answers queued for labels) to 0.1. Add --smoke to run 20 messages a day for 2 days first, and --seed N to pick another repeatable run (which answers get audited and probed, and which go in the labeling sample). Needs an OpenAI key in OPENAI_API_KEY. Working files go to
+--dataset defaults to banking77, --confident (the share of confident answers queued for labels) to 0.1, --target (the accuracy target) to 0.95. Add --smoke to run 20 messages a day for 2 days first, and --seed N to pick another repeatable run (which answers get audited and probed, and which go in the labeling sample). Needs an OpenAI key in OPENAI_API_KEY. Working files go to
 data/case_study_<dataset>/ (or data/case_study_<dataset>_smoke/); the results are summary_<seed>.json and days_<seed>.jsonl there.
 """
 import argparse
@@ -37,7 +37,7 @@ from hunch import Cache, ChatDecider, ChatReasoner, LocalDecider, Router, Store,
 from hunch.review import REASONS
 
 PRICES = {"gpt-4o-mini": (0.15, 0.60), "gpt-4.1": (2.00, 8.00)}  # $ per million input and output tokens; check yours
-TARGET, AUDIT, PROBE, SAMPLE, LABELS_PER_NIGHT, WORKERS = 0.95, 0.05, 0.05, 0.02, 30, 8
+AUDIT, PROBE, SAMPLE, LABELS_PER_NIGHT, WORKERS = 0.05, 0.05, 0.02, 30, 8
 LOCAL_MS = 60  # the classifier's typical time per message on one laptop; measuring it live breaks when runs share a CPU
 
 
@@ -157,7 +157,7 @@ def per_call(work):
     return cost, ms, rows
 
 
-def simulate(work, dataset, days, seed=0, per_second=0.0, confident=0.1):
+def simulate(work, dataset, days, seed=0, per_second=0.0, confident=0.1, target=0.95):
     criteria, schedule = days
     key = dataset["key"]
     # The router picks audits and probes at random, and the store's ids pick the labeling sample. Decisions run one
@@ -170,7 +170,7 @@ def simulate(work, dataset, days, seed=0, per_second=0.0, confident=0.1):
     costs = {"tier 0": 0.0, "tier 1": cost["gpt-4o-mini"], "system2": cost["gpt-4.1"]}
     # What prune weighs: the price of each call plus the price of waiting for it.
     worth = {"tier 1": cost["gpt-4o-mini"] + per_second * ms["gpt-4o-mini"] / 1000, "system2": cost["gpt-4.1"] + per_second * ms["gpt-4.1"] / 1000}
-    tag = f"{seed}" + (f"_wait{per_second:g}" if per_second else "") + (f"_confident{confident:g}" if confident != 0.1 else "")
+    tag = f"{seed}" + (f"_wait{per_second:g}" if per_second else "") + (f"_confident{confident:g}" if confident != 0.1 else "") + (f"_target{target:g}" if target != 0.95 else "")
     sim = work / f"sim_{tag}.db"
     for suffix in ("", "-wal", "-shm"):
         Path(f"{sim}{suffix}").unlink(missing_ok=True)
@@ -199,14 +199,14 @@ def simulate(work, dataset, days, seed=0, per_second=0.0, confident=0.1):
         queue = review_queue(store, limit=LABELS_PER_NIGHT, sample=SAMPLE, confident=confident)
         for item in queue:
             store.label(item["id"], item["key"], gold[item["id"]], source="human")
-        trained = retrain(store, current=local, tier=0, target_accuracy=TARGET, min_samples=30, sample=SAMPLE, confident=confident)
+        trained = retrain(store, current=local, tier=0, target_accuracy=target, min_samples=30, sample=SAMPLE, confident=confident)
         local = trained["decider"]
         s = stats(store, since=start, costs=costs)  # today's cost
         whole = stats(store, sample=SAMPLE)  # drift compares everything since each calibration, not just today
         drift = {d["tier"]: d for d in whole["drift"]}
         # retrain rechecks the classifier every night; calibrate grades only its answers since promotion, too few.
         due = {d["tier"] for d in whole["drift"] if d["flags"] and d["tier"] == 1} | ({1} if store.thresholds(1).get(key) in (None, float("inf")) else set())
-        cals = {t: calibrate(store, TARGET, 30, tier=t, sample=SAMPLE, confident=confident)[key] for t in sorted(due)}
+        cals = {t: calibrate(store, target, 30, tier=t, sample=SAMPLE, confident=confident)[key] for t in sorted(due)}
         cal = cals.get(1)
         if due:
             recalibrated.append([day, sorted(due)])
@@ -257,9 +257,10 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--per-second", type=float, default=0.0)
     parser.add_argument("--confident", type=float, default=0.1)
+    parser.add_argument("--target", type=float, default=0.95)
     args = parser.parse_args()
     dataset = DATASETS[args.dataset]
     work = Path(f"data/case_study_{args.dataset}" + ("_smoke" if args.smoke else ""))
     work.mkdir(parents=True, exist_ok=True)
     days = traffic(dataset, 2, 20, 2) if args.smoke else traffic(dataset, 10, 300, 6)
-    baseline(work, dataset, days) if args.phase == "baseline" else simulate(work, dataset, days, args.seed, args.per_second, args.confident)
+    baseline(work, dataset, days) if args.phase == "baseline" else simulate(work, dataset, days, args.seed, args.per_second, args.confident, args.target)

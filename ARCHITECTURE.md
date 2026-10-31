@@ -283,7 +283,8 @@ accurate, so everything above it can skip System 2.
   graded by each other.
 - **Labels must confirm.** So with `sample=` or `confident=`, a threshold needs your labels before it is trusted.
   - *Confirming* asks whether the tier was right when it said it was sure. It counts the random labels on the answers
-    the tier flagged as confident (at or above the threshold in force when it answered; the router logs the flag), and
+    the tier flagged as confident while held to this threshold or a lower one (the router logs the flag and the
+    threshold with each answer), and
     needs them to clear the target on the same Wilson bound the threshold was certified with: at least 32 labels, all
     right, for 95%. Until then the threshold is saved but unconfirmed ("not enough labels"), and the router asks the
     tier and logs its answers but doesn't keep them.
@@ -293,8 +294,12 @@ accurate, so everything above it can skip System 2.
   - *Why only flagged answers confirm:* every one of them was in the `confident` share at the same rate, so each label
     counts fully. Mixing in the rest weights each label by its chance of being picked, and a label from the 2% sample
     stands for up to 15 times as many decisions as one from a 30% `confident` share. In the case studies that made
-    dozens of labels count as 5 to 20, and nothing could be confirmed. Thresholds that move from night to night make
-    it worse: answers between the old and new threshold were never flagged.
+    dozens of labels count as 5 to 20, and nothing could be confirmed.
+  - *Why only answers held to this threshold or lower:* thresholds move. In the case studies retrain lowered the
+    classifier's almost every night (0.95 to 0.82 over five nights on trec). Labels on answers held to a higher
+    threshold only cover the answers above it, so counting them confirmed a lower threshold on evidence about the most
+    confident answers alone, and once trusted the classifier was 84% to 93% right against a 90% target. Now a lowered
+    threshold needs labels on the newly trusted band before it is confirmed.
   - *Why not fail closed while unconfirmed:* a tier that is only probed is rarely confident, so labels on its
     confident answers would stop coming and it could never be confirmed. *Why the `confident` share rather than the
     answers the tier kept:* an unconfirmed tier keeps nothing.
@@ -337,8 +342,9 @@ accurate, so everything above it can skip System 2.
   `sample=` or `confident=`, `retrain` confirms it with your labels as `calibrate` does. The classifier is free to
   run, so a new one is scored on every held-out decision a person labeled at random, but only the decisions where the
   deployed classifier answered and was confident (`graded()` rows record `confident_by`) can confirm it. So a first
-  classifier is always unconfirmed until it has been asked. Labels that rule the target out stop a promotion or fail
-  the current classifier closed.
+  classifier is always unconfirmed until it has been asked. A new classifier is confirmed on the decisions where the
+  deployed one was confident, which are close to but not exactly the ones it would be confident about. Labels that
+  rule the target out stop a promotion or fail the current classifier closed.
 - Measured on public datasets (200 held-out items per question, 300 training labels): a classifier then
   `gpt-4o-mini` scored 92% on a topic question (the classifier answered 71%, p50 12 ms) and 89% on sentiment (trusted
   for only 12%, p50 461 ms), against 82% and 90% for the LLM alone.

@@ -1731,3 +1731,24 @@ def test_retrain_needs_labels_to_confirm_the_classifier(tmp_path):
     report = second["report"]["needs_prep"]
     assert report["label_check"]["ruled_out"] and not report["promoted"]
     assert store.thresholds()["needs_prep"] == float("inf") and store.issues()[0]["reason"] == "below target on labels"
+
+def test_labels_held_to_a_higher_threshold_cannot_confirm_a_lower_one(tmp_path):
+    from hunch import recheck, review_queue
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store.save_thresholds({"needs_prep": 0.95})
+    store.save_unconfirmed(0, ["needs_prep"], [])
+    router = Router(Tier({"needs_prep": (True, 0.99)}), FakeClaude(), log=store)
+    for _ in range(300):
+        router.decide("event", q)
+    for item in review_queue(store, limit=None, confident=0.5):
+        store.label(item["id"], "needs_prep", True)
+    # Every answer was held to 0.95, so the labels say nothing about a tier trusted from 0.5: that band would need
+    # labels of its own.
+    store.save_thresholds({"needs_prep": 0.5})
+    lowered = recheck(store, sample=0.0, confident=0.5, target_accuracy=0.9)["needs_prep"]
+    assert lowered["graded"] == 0 and not lowered["confirmed"] and store.unconfirmed() == {"needs_prep"}
+    store.save_thresholds({"needs_prep": 0.95})
+    held = recheck(store, sample=0.0, confident=0.5, target_accuracy=0.9)["needs_prep"]
+    assert held["graded"] > 100 and held["confirmed"] and store.unconfirmed() == set()

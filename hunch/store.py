@@ -156,8 +156,8 @@ class Store:
     def _graded(self):
         """(row, answer, result) for each graded question of each logged decision; row has id, key, state, question,
         images, truth, kind, weight, any_confident (whether some tier was confident about it, which decides its
-        chance of being in review_queue's `confident` sample) and confident_by ({tier: whether it was confident} for the
-        tiers that answered it).
+        chance of being in review_queue's `confident` sample), confident_by ({tier: whether it was confident} for the
+        tiers that answered it) and held_by ({tier: the threshold it was held to}).
 
         The truth is a human label ("human"), else System 2's answer ("proxy"). System 2 saw every escalated question
         (weight 1) and a random audit_rate share of the confident ones (weight 1/audit_rate), so weighting by the
@@ -178,7 +178,8 @@ class Store:
                     continue
                 row = {"id": decision_id, "key": key, "state": state, "question": questions[key], "images": images, "truth": truth, "kind": kind, "weight": weight,
                        "any_confident": any(t.get("confident") for t in answer.get("tried", [])),
-                       "confident_by": {t["tier"]: t.get("confident", False) for t in answer.get("tried", [])}}
+                       "confident_by": {t["tier"]: t.get("confident", False) for t in answer.get("tried", [])},
+                       "held_by": {t["tier"]: t.get("threshold") for t in answer.get("tried", [])}}
                 yield row, answer, result
 
     def graded(self):
@@ -188,8 +189,9 @@ class Store:
 
     def labeled(self):
         """One row per graded question and tier that answered it: the graded row (see _graded) with that tier's answer
-        and confidence, and whether it was confident (at or above the threshold it was held to, kept or not). A question
-        no tier answered has no row here; graded() has it."""
+        and confidence, whether it was confident (at or above the threshold it was held to, kept or not) and that
+        threshold (held_to; None in logs from before the router recorded it). A question no tier answered has no row
+        here; graded() has it."""
         rows = []
         for row, answer, result in self._graded():
             escalated = answer["source"] == "system2"
@@ -199,5 +201,6 @@ class Store:
             for entry in tried:
                 # Logs from before the router recorded "confident" have only whether the answer stood.
                 confident = entry.get("confident", not escalated and answer.get("tier", 0) == entry["tier"] and row["key"] not in result["unsure"])
-                rows.append(row | {"tier": entry["tier"], "confidence": entry["confidence"], "answer": entry["answer"], "confident": confident})
+                rows.append(row | {"tier": entry["tier"], "confidence": entry["confidence"], "answer": entry["answer"], "confident": confident,
+                                   "held_to": entry.get("threshold")})
         return rows

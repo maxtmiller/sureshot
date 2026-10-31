@@ -170,7 +170,7 @@ class Router:
                     unsure.append(key)
                     continue
                 tried[key].append({"tier": i, "answer": fast[key]["answer"], "confidence": fast[key]["confidence"],
-                                   "confident": fast[key]["confidence"] >= limit[key]})
+                                   "confident": fast[key]["confidence"] >= limit[key], "threshold": limit[key]})
                 latest[key] = fast[key] | {"tier": i}
                 calibrated = key in thresholds or key in saved
                 if fast[key]["confidence"] < limit[key] or (self.log and not self.trust_uncalibrated and not calibrated) or key in unconfirmed:

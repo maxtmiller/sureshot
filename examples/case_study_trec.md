@@ -131,6 +131,16 @@ Two more rounds, waiting priced, with 30% of confident answers queued for labels
   lower bounds of 0.92, 0.55 and 0.88. It needs about 32 straight right ones for 95%, so on trec it is now a
   matter of days, not of weighting. Accuracy, cost and speed were unchanged ($2.23, 0.94 to 0.97 s).
 
+### A 90% target
+
+To see confirmation happen within ten days, both studies were run with a 90% target (`--target 0.9`, waiting
+priced, `--confident 0.3`). At first the classifier was confirmed in four runs of six, on night 8 or 10, and then
+answered 60% to 89% of questions with daily savings of 55% to 83%, but its kept answers were 84% to 93% right
+against 90%. The labels that confirmed it came from answers held to a higher threshold than the one it was trusted
+at, since `retrain` lowered the threshold almost every night (0.95 to 0.82 over five nights here). Now only labels on
+answers held to the confirmed threshold or a lower one count. With that, no run confirmed the classifier in ten
+days: each night's lower threshold left the new band without labels (0 to 41 counted by day 10).
+
 ## Caveats
 
 One dataset with its own label conventions ("Who is Stephen Hawking?" asks for a description, not a person), which
