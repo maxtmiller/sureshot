@@ -1783,3 +1783,19 @@ def test_an_unconfirmed_lower_threshold_is_held_at_the_saved_one(tmp_path):
     for item in review_queue(store, limit=None, confident=0.5):
         store.label(item["id"], "needs_prep", True)
     assert recheck(store, sample=0.0, confident=0.5)["needs_prep"]["confirmed"] and store.unconfirmed() == set()
+
+
+def test_confirmation_is_only_tested_at_fixed_label_counts():
+    from hunch.calibrate import _check
+
+    def labels(rights):
+        return [(right, 1.0, True, float(i)) for i, right in enumerate(rights)]
+
+    # At 90% the first test is at 25 labels: 24 right ones are not enough, 25 are.
+    assert not _check(labels([True] * 24), 0.9)["confirmed"] and _check(labels([True] * 24), 0.9)["next_check"] == 25
+    assert _check(labels([True] * 25), 0.9)["confirmed"]
+    # A wrong label among the first 25 fails that test for good, however many right ones follow: 49 of 50 is not
+    # enough at the stricter bound the second test uses, and 99 of 100 passes the third.
+    early_miss = [False] + [True] * 24
+    assert not _check(labels(early_miss + [True] * 74), 0.9)["confirmed"]
+    assert _check(labels(early_miss + [True] * 75), 0.9)["confirmed"]

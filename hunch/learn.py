@@ -27,7 +27,8 @@ def _random_labels(decider, rows, sample, confident, tier):
             continue
         answered = decider.decide(row["state"], {row["key"]: row["question"]}).get(row["key"])
         if answered:
-            out.append((row["key"], answered["confidence"], answered["answer"] == row["truth"], 1 / rate, row["confident_by"].get(tier, False), row["held_by"].get(tier)))
+            out.append((row["key"], answered["confidence"], answered["answer"] == row["truth"], 1 / rate, row["confident_by"].get(tier, False), row["held_by"].get(tier),
+                        row["labeled_at"]))
     return out
 
 
@@ -128,7 +129,7 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
             which = "new" if key in promoted_at else "old"
 
             def check_at(t, key=key, which=which):
-                return _check([(right, w, _flagged(conf, held_to, t)) for k, c, right, w, conf, held_to in labels[which]
+                return _check([(right, w, _flagged(conf, held_to, t), at) for k, c, right, w, conf, held_to, at in labels[which]
                                if k == key and c >= t], target_accuracy)
 
             chosen, check = _hold(threshold, saved.get(key), check_at)

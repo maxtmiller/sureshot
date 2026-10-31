@@ -284,10 +284,15 @@ accurate, so everything above it can skip System 2.
 - **Labels must confirm.** So with `sample=` or `confident=`, a threshold needs your labels before it is trusted.
   - *Confirming* asks whether the tier was right when it said it was sure. It counts the random labels on the answers
     the tier flagged as confident while held to this threshold or a lower one (the router logs the flag and the
-    threshold with each answer), and
-    needs them to clear the target on the same Wilson bound the threshold was certified with: at least 32 labels, all
-    right, for 95%. Until then the threshold is saved but unconfirmed ("not enough labels"), and the router asks the
+    threshold with each answer), and needs them to clear the target on a one-sided 90% bound. Until then the threshold is saved but unconfirmed ("not enough labels"), and the router asks the
     tier and logs its answers but doesn't keep them.
+  - *Repeat-safe.* The check runs every night, and a one-off bound checked every night passes a lucky streak more
+    often than it says: with a 90% target, a classifier confirmed on 26 labels, all right, was then 88% right. So it is
+    only tested when the labels reach fixed counts, each test on the first that many in the order they were given,
+    with the 10% split across the tests (5%, 2.5%, 1.25%...), so all of them together are wrong at most 10% of the time
+    however long they run. The first test is at the fewest labels that could pass with none wrong, and the count
+    doubles after that: 25, 50, 100... for 90%, and 52, 104, 208... for 95%. A bound that holds at every check (the
+    confidence sequence ruling out uses) would need 62 and 142. Labels record when they were given for this.
   - *Ruling out* also uses every random label at or above the threshold, flagged or not, weighted by the inverse of
     its chance of being picked. Either set can rule the target out, each with a confidence sequence at 2.5%; the tier
     then fails closed ("below target on labels").
@@ -452,7 +457,7 @@ What load testing found, with fake models that take 20 ms (so these show hunch's
 - Per-slice thresholds and a self-verifier were measured and lost to a second LLM as the guard (#17).
 - A CLI is not built (#8).
 - `recheck` needs a few hundred labels on a tier's confident answers to rule out a target the tier misses by a few
-  points, and about 31 all-right labels to confirm a 95% threshold.
+  points, and at least 52 all-right labels to confirm a 95% threshold (25 for 90%).
 - Confirmation only counts held-out labels on flagged answers, so a classifier needs roughly three times the random labels a
   deployed tier does before it is trusted.
 - The guard and `LocalDecider` run in-process and are not wrapped in outage fallback.
