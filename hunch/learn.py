@@ -1,6 +1,6 @@
 """Retrain the cheap tier on the log's graded decisions, and keep the new classifier only where it escalates less."""
 import zlib
-from hunch.calibrate import _check, histogram, summarize
+from hunch.calibrate import _check, _flagged, histogram, summarize
 from hunch.local import DEFAULT_EMBEDDING, LocalDecider
 from hunch.review import in_sample
 
@@ -16,10 +16,10 @@ def _samples(decider, rows):
 
 
 def _random_labels(decider, rows, sample, confident, tier):
-    """[(key, confidence, right, weight, flagged)]: the decider's answers to the rows labeled by a person and picked at
-    random for review_queue (in the `sample` share, or in the `confident` share when some tier was confident), each
-    weighted by the inverse of its chance of being picked; flagged when `tier` answered the decision and was confident
-    (see calibrate._label_check)."""
+    """[(key, confidence, right, weight, confident, held_to)]: the decider's answers to the rows labeled by a person and
+    picked at random for review_queue (in the `sample` share, or in the `confident` share when some tier was
+    confident), each weighted by the inverse of its chance of being picked, with whether the deployed `tier` was
+    confident on the decision and the threshold it was held to (see calibrate._flagged)."""
     out = []
     for row in rows:
         rate = max(sample, confident) if row["any_confident"] else sample
@@ -27,7 +27,7 @@ def _random_labels(decider, rows, sample, confident, tier):
             continue
         answered = decider.decide(row["state"], {row["key"]: row["question"]}).get(row["key"])
         if answered:
-            out.append((row["key"], answered["confidence"], answered["answer"] == row["truth"], 1 / rate, row["confident_by"].get(tier, False)))
+            out.append((row["key"], answered["confidence"], answered["answer"] == row["truth"], 1 / rate, row["confident_by"].get(tier, False), row["held_by"].get(tier)))
     return out
 
 
@@ -124,7 +124,8 @@ def retrain(store, current=None, tier=0, target_accuracy=0.95, min_samples=30, h
         labels = {"new": _random_labels(candidate, held, sample, confident, tier), "old": _random_labels(current, held, sample, confident, tier) if current else []}
         for key, threshold in list(promoted_at.items()) + list(kept_at.items()):
             which = "new" if key in promoted_at else "old"
-            check = _check([(right, w, flagged) for k, c, right, w, flagged in labels[which] if k == key and c >= threshold], target_accuracy)
+            check = _check([(right, w, _flagged(confident, held, threshold)) for k, c, right, w, confident, held in labels[which]
+                            if k == key and c >= threshold], target_accuracy)
             report[key]["label_check"] = check
             if check["ruled_out"]:
                 issues[key] = "below target on labels"

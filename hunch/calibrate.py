@@ -128,8 +128,8 @@ def _label_check(rows, threshold, target, sample, confident):
     question): {graded, accuracy, low, confirmed, graded_all, high, ruled_out}.
 
     Confirming asks whether the tier was right when it said it was sure: it counts the labels on the answers the tier
-    flagged as confident (at or above the threshold in force then), which were all picked at the same rate, so each
-    counts fully. graded, accuracy and low are theirs; confirmed is low reaching the target on the bound calibration
+    flagged as confident while held to this threshold or a lower one (see _flagged), which were all picked at the
+    same rate, so each counts fully. graded, accuracy and low are theirs; confirmed is low reaching the target on the bound calibration
     certifies with.
 
     Ruling out also looks at every random label at or above the threshold, flagged or not, each weighted by the
@@ -142,8 +142,15 @@ def _label_check(rows, threshold, target, sample, confident):
             continue
         rate = max(sample, confident) if row["confident"] else sample
         if in_sample(row["id"], rate):
-            labels.append((row["answer"] == row["truth"], 1 / rate, row["confident"]))
+            labels.append((row["answer"] == row["truth"], 1 / rate, _flagged(row["confident"], row["held_to"], threshold)))
     return _check(labels, target)
+
+
+def _flagged(confident, held_to, threshold):
+    """Whether an answer's label can confirm `threshold`: the tier was confident, held to that threshold or a lower
+    one. A label from an answer held to a higher threshold says nothing about the answers between the two, so when a
+    threshold is lowered that band needs labels of its own."""
+    return bool(confident) and held_to is not None and held_to <= threshold
 
 
 def _check(labels, target):
