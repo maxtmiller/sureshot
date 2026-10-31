@@ -1752,3 +1752,34 @@ def test_labels_held_to_a_higher_threshold_cannot_confirm_a_lower_one(tmp_path):
     store.save_thresholds({"needs_prep": 0.95})
     held = recheck(store, sample=0.0, confident=0.5, target_accuracy=0.9)["needs_prep"]
     assert held["graded"] > 100 and held["confirmed"] and store.unconfirmed() == set()
+
+
+class Alternating:
+    """A tier that answers yes, alternately at 0.7 and 0.99 confidence."""
+
+    def __init__(self):
+        self.n = 0
+
+    def decide(self, state, questions, images=()):
+        self.n += 1
+        return {k: {"answer": True, "confidence": 0.99 if self.n % 2 else 0.7, "probabilities": {}} for k in questions}
+
+
+def test_an_unconfirmed_lower_threshold_is_held_at_the_saved_one(tmp_path):
+    from hunch import calibrate, recheck, review_queue
+
+    store = _calibration_store(tmp_path)
+    q = {"needs_prep": QUESTIONS["needs_prep"]}
+    store.save_thresholds({"needs_prep": 0.95})
+    router = Router(Alternating(), FakeClaude(), log=store, audit=1.0)
+    for _ in range(400):
+        router.decide("event", q)
+    # Graded by System 2 the tier is right from 0.7 up, but no answer was held to 0.7, so no label can confirm it
+    # there: the saved threshold stays, and labels gather on the answers held to it.
+    assert calibrate(store, 0.9, 30, save=False)["needs_prep"]["threshold"] == 0.7
+    report = calibrate(store, 0.9, 30, confident=0.5)["needs_prep"]
+    assert report["threshold"] == 0.95 and report["held_at"] == 0.95 and report["reason"] == "not enough labels"
+    assert store.thresholds() == {"needs_prep": 0.95} and store.unconfirmed() == {"needs_prep"}
+    for item in review_queue(store, limit=None, confident=0.5):
+        store.label(item["id"], "needs_prep", True)
+    assert recheck(store, sample=0.0, confident=0.5)["needs_prep"]["confirmed"] and store.unconfirmed() == set()

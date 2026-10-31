@@ -141,6 +141,24 @@ at, since `retrain` lowered the threshold almost every night (0.95 to 0.82 over 
 answers held to the confirmed threshold or a lower one count. With that, no run confirmed the classifier in ten
 days: each night's lower threshold left the new band without labels (0 to 41 counted by day 10).
 
+Then `calibrate` and `retrain` stopped lowering a saved threshold the labels don't confirm, so labels gather at a
+fixed one. With that, both studies at 90%:
+
+| Run | Classifier confirmed | Then answered | Right on what it kept | Cost (`gpt-4.1` alone) |
+|---|---|---|---|---|
+| trec 0 | night 8 | 70% to 72% | 88% | $1.93 ($2.22) |
+| trec 1 | night 7, again night 9 | 11% to 30% | 96% | $2.14 |
+| trec 2 | night 5 | 20% to 26% | 97% | $2.03 |
+| banking77 0 | no (labels 86% right) | | | $10.39 ($10.14) |
+| banking77 1 | night 10, no traffic after | | | $10.39 |
+| banking77 2 | night 9 | 72% | 93% | $9.69 |
+
+Accuracy stayed at `gpt-4.1`'s (85.5% to 86.0% on trec, 79.3% to 79.4% on banking77). Four of the five trusted
+periods met the target; trec seed 0 was confirmed on 26 labels, all right, and then was 91% and 85% right on the
+next two days. One reason it can happen: the confirmation check runs every night with a one-off bound, so over many
+nights a lucky streak is more likely to pass than the bound says; ruling out already uses a bound that holds however
+often it is checked, and confirming should too.
+
 ## Caveats
 
 One dataset with its own label conventions ("Who is Stephen Hawking?" asks for a description, not a person), which

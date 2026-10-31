@@ -300,6 +300,10 @@ accurate, so everything above it can skip System 2.
     threshold only cover the answers above it, so counting them confirmed a lower threshold on evidence about the most
     confident answers alone, and once trusted the classifier was 84% to 93% right against a 90% target. Now a lowered
     threshold needs labels on the newly trusted band before it is confirmed.
+  - *Holding a threshold still.* Since a lowered threshold has no labels on its new band, `calibrate` and `retrain`
+    don't lower a saved threshold unless the labels confirm the lower one; otherwise they keep the saved one
+    (`held_at`). A threshold that moved down every night would never gather labels; held still it does. Raising a
+    threshold is always allowed, since labels held to the lower one cover it.
   - *Why not fail closed while unconfirmed:* a tier that is only probed is rarely confident, so labels on its
     confident answers would stop coming and it could never be confirmed. *Why the `confident` share rather than the
     answers the tier kept:* an unconfirmed tier keeps nothing.

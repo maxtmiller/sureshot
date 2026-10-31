@@ -153,6 +153,17 @@ def _flagged(confident, held_to, threshold):
     return bool(confident) and held_to is not None and held_to <= threshold
 
 
+def _hold(threshold, saved, check_at):
+    """(threshold, its label check): the new threshold, unless it is lower than the saved one and your labels don't
+    confirm it, in which case the saved one is kept. Labels only confirm a threshold from answers held to it or a
+    lower one, so a threshold lowered every night would never gather them; held still, it does. check_at(t) is the
+    label check at threshold t."""
+    check = check_at(threshold)
+    if saved is not None and saved != float("inf") and threshold < saved and not check["confirmed"]:
+        return saved, check_at(saved)
+    return threshold, check
+
+
 def _check(labels, target):
     """_label_check on labels already picked: [(right, weight, flagged)]."""
     flagged = [right for right, _, f in labels if f]
@@ -190,7 +201,9 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
     fail_closed, the tier is not trusted. If they don't yet show the target on the bound calibration certifies with,
     the threshold is saved but unconfirmed, with the reason "not enough labels": the router keeps asking the tier
     but not keeping its answers, so labels on what it is confident about keep coming, and recheck confirms it once
-    they show the target. Confirming counts the labels on the answers the tier flagged as confident; ruling out
+    they show the target. A threshold lower than the saved one that the labels don't confirm is not saved: the saved
+    one is kept ("held_at"), so labels can gather at it. Confirming counts the labels on the answers the tier flagged
+    as confident; ruling out
     counts every random label (see _label_check). "label_check" gives {graded, accuracy, low, confirmed, graded_all,
     high, ruled_out}. Without either
     rate nothing needs confirming.
@@ -205,11 +218,15 @@ def calibrate(store, target_accuracy=0.95, min_samples=30, save=True, tier=0, fa
         by_key.setdefault(row["key"], []).append((row["confidence"], row["answer"] == row["truth"], row["weight"]))
         rows.setdefault(row["key"], []).append(row)
     report = {key: summarize(samples, target_accuracy, min_samples) for key, samples in by_key.items()}
+    saved = store.thresholds(tier)
     for key, r in report.items():
         kept = [row for row in rows[key] if r["threshold"] is None or row["confidence"] >= r["threshold"]]
         r["graded_by"] = {"human": sum(row["kind"] == "human" for row in kept), "system2": sum(row["kind"] == "proxy" for row in kept)}
         if (sample or confident) and r["threshold"] is not None:
-            r["label_check"] = check = _label_check(rows[key], r["threshold"], target_accuracy, sample, confident)
+            threshold, check = _hold(r["threshold"], saved.get(key), lambda t: _label_check(rows[key], t, target_accuracy, sample, confident))
+            if threshold != r["threshold"]:
+                r.update(threshold=threshold, held_at=threshold)
+            r["label_check"] = check
             if check["ruled_out"]:
                 r.update(threshold=None, trusted_accuracy=None, escalation_rate=None, reason="below target on labels")
             elif not check["confirmed"]:
