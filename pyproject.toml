@@ -13,6 +13,9 @@ dependencies = ["httpx"]
 Homepage = "https://github.com/maxtmiller/sureshot"
 Issues = "https://github.com/maxtmiller/sureshot/issues"
 
+[project.scripts]
+sureshot = "sureshot.cli:main"
+
 [project.optional-dependencies]
 claude = ["anthropic"]
 api = ["fastapi", "uvicorn", "python-dotenv"]

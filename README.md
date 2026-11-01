@@ -25,6 +25,7 @@ and why. [The banking77 case study](https://github.com/maxtmiller/sureshot/blob/
 - [The router](#the-router)
 - [The feedback loop](#the-feedback-loop): log, label, calibrate, retrain, recheck, prune, monitor
 - [HTTP API and configuration](#http-api-and-configuration)
+- [Command line](#command-line)
 - [Performance](#performance)
 - [Tests](#tests)
 
@@ -79,6 +80,7 @@ thresholds from your data, add a log and [calibrate](#calibrate-learn-each-quest
 | [`stats`](#stats-and-drift) | Usage, accuracy, cost, latency and drift report |
 | [`router.test`, `evaluate`](#testing-and-comparing-models) | Score a golden dataset; compare candidate models on your log |
 | [HTTP API](#http-api-and-configuration) | `/decide`, `/feedback`, `/calibrate`, `/stats`, `/review`, configured from env vars |
+| [`sureshot` command](#command-line) | The API, a single decision and every feedback-loop step from a shell, cron or CI |
 
 ## Questions
 
@@ -462,6 +464,35 @@ which you can also call yourself:
 | `SURESHOT_DB` | SQLite log; enables `/feedback` and `/calibrate` |
 | `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache, and seconds an answer stays valid |
 | `SURESHOT_AUDIT` | Share of confident answers audited (default 0) |
+
+## Command line
+
+`pip install sureshot` adds a `sureshot` command. It reads the same environment variables as the API (and a `.env` in
+the current directory when `python-dotenv` is installed), takes `--db` in place of `SURESHOT_DB`, and prints JSON.
+
+| Command | Does |
+| --- | --- |
+| `sureshot serve [--host] [--port]` | Runs the HTTP API (needs `sureshot[api]`) |
+| `sureshot decide [request.json]` | Decides one request, the body of `POST /decide`, from a file or stdin |
+| `sureshot calibrate [--target] [--tier]` | [Calibrates](#calibrate-learn-each-questions-threshold) and saves thresholds |
+| `sureshot retrain [--model local.joblib]` | [Retrains](#retrain-a-cheaper-first-tier) the `LocalDecider` (default `SURESHOT_LOCAL_MODEL`), saving it only when a question is promoted. A running API loads it on restart |
+| `sureshot recheck [--tier]` | [Rechecks](#recheck-and-prune) saved thresholds against your labels |
+| `sureshot prune --costs '{...}' [--tier]` | [Prunes](#recheck-and-prune) the questions a tier doesn't pay for |
+| `sureshot stats [--costs '{...}']` | The [stats](#stats-and-drift) report |
+| `sureshot review [--limit] [--reason]` | The [review queue](#review-queue-what-to-label-next) |
+| `sureshot test golden.jsonl [--questions q.json] [--min-accuracy]` | [Scores](#testing-and-comparing-models) the router without logging; exits 1 below `--min-accuracy` |
+
+`calibrate`, `retrain`, `recheck`, `stats` and `review` take `--sample` and `--confident`, the rates you give the
+review queue. They run where the log is: on the machine or in the container that holds `SURESHOT_DB`. `test` needs
+only the models, so it can gate a CI job:
+
+```bash
+# nightly, next to the log
+0 3 * * *  sureshot retrain --sample 0.02 --confident 0.1 && sureshot calibrate --tier 1 --sample 0.02 --confident 0.1 && sureshot recheck --tier 1 --confident 0.1
+
+# in CI, before a change to questions or models ships
+sureshot test golden.jsonl --questions questions.json --min-accuracy 0.95
+```
 
 ## Performance
 
