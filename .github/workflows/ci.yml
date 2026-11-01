@@ -17,6 +17,47 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev]"
       - run: pytest -q
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: PgBouncer in transaction mode, without prepared statements, as hosted pooled URLs often are
+        run: |
+          sudo apt-get install -y pgbouncer
+          cat > /tmp/pgbouncer.ini <<'EOF'
+          [databases]
+          * = host=localhost port=5432
+          [pgbouncer]
+          listen_addr = 127.0.0.1
+          listen_port = 6433
+          unix_socket_dir =
+          auth_type = plain
+          auth_file = /tmp/userlist.txt
+          pool_mode = transaction
+          max_prepared_statements = 0
+          ignore_startup_parameters = extra_float_digits
+          logfile = /tmp/pgbouncer.log
+          pidfile = /tmp/pgbouncer.pid
+          EOF
+          echo '"postgres" "postgres"' > /tmp/userlist.txt
+          pgbouncer -d /tmp/pgbouncer.ini
+      - run: pytest -q
+        env:
+          SURESHOT_TEST_POSTGRES: postgresql://postgres:postgres@localhost:5432/postgres
+          SURESHOT_TEST_POOLER: postgresql://postgres:postgres@127.0.0.1:6433/postgres
   image:
     runs-on: ubuntu-latest
     steps:

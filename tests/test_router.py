@@ -1257,6 +1257,7 @@ def test_drift_sees_confidence_sliding_while_still_above_the_threshold(tmp_path)
     assert drift["flags"] == ["distribution"]
 
 
+@pytest.mark.sqlite
 def test_a_log_saved_before_the_distribution_check_still_opens(tmp_path):
     import sqlite3
     from sureshot import Store, stats

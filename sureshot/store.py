@@ -1,20 +1,23 @@
-"""SQLite log of every decision, the labels that grade them, and the thresholds calibration learned."""
+"""The log of every decision, the labels that grade them, and the thresholds calibration learned: a SQLite file, or a
+Postgres database (a postgresql:// URL) that several API replicas and the nightly job share."""
 import json
 import random
 import sqlite3
 import time
 import uuid
-from contextlib import contextmanager
+from sureshot.db import create, database
 from sureshot.questions import check_answer
 
+# DOUBLE PRECISION, since Postgres's REAL has too few digits for a unix time (SQLite reads it as REAL either way).
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts REAL, state TEXT, questions TEXT, images INTEGER, result TEXT);
-CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, source TEXT, PRIMARY KEY (decision_id, key));
-CREATE TABLE IF NOT EXISTS calibration_issues (tier INTEGER, key TEXT, reason TEXT, best_target REAL, target REAL, PRIMARY KEY (tier, key));
-CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value REAL, PRIMARY KEY (tier, key));
+CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts DOUBLE PRECISION, state TEXT, questions TEXT, images INTEGER, result TEXT);
+CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, source TEXT, ts DOUBLE PRECISION, PRIMARY KEY (decision_id, key));
+CREATE TABLE IF NOT EXISTS calibration_issues (tier INTEGER, key TEXT, reason TEXT, best_target DOUBLE PRECISION, target DOUBLE PRECISION, PRIMARY KEY (tier, key));
+CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value DOUBLE PRECISION, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS skips (tier INTEGER, key TEXT, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS unconfirmed (tier INTEGER, key TEXT, PRIMARY KEY (tier, key));
-CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts REAL, threshold REAL, target REAL, escalation_rate REAL, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
+CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts DOUBLE PRECISION, threshold DOUBLE PRECISION, target DOUBLE PRECISION,
+                                         escalation_rate DOUBLE PRECISION, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
 """
 
 
@@ -22,10 +25,12 @@ class Store:
     def __init__(self, path, seed=None):
         """seed fixes the decision ids, which pick the labeling sample: a run that logs the same decisions in the
         same order gets the same ids. Without it ids are random uuids."""
-        self.path = str(path)
+        self.path, self._database = str(path), database(path)
         self._ids = random.Random(seed) if seed is not None else None
         with self._db() as db:
-            db.executescript(SCHEMA)
+            create(db, self._database.postgres, SCHEMA)
+            if self._database.postgres:
+                return
             if "histogram" not in {row[1] for row in db.execute("PRAGMA table_info(calibrations)")}:
                 try:  # a log made before drift compared the whole confidence distribution
                     db.execute("ALTER TABLE calibrations ADD COLUMN histogram TEXT")
@@ -40,14 +45,8 @@ class Store:
                         raise
             db.execute("PRAGMA journal_mode=WAL")  # readers (stats, review) stop blocking the writers that log decisions
 
-    @contextmanager
     def _db(self):
-        db = sqlite3.connect(self.path, timeout=30)
-        try:
-            with db:
-                yield db
-        finally:
-            db.close()
+        return self._database.connect()
 
     def log(self, state, questions, result, images=0):
         """Records a decision (the Router's result, with its audit_rate) and returns its id."""
@@ -67,7 +66,8 @@ class Store:
             if key not in questions:
                 raise ValueError(f"decision {decision_id} has no question {key!r}")
             check_answer(questions[key], answer)
-            db.execute("INSERT OR REPLACE INTO labels (decision_id, key, answer, source, ts) VALUES (?, ?, ?, ?, ?)", (decision_id, key, json.dumps(answer), source, time.time()))
+            db.execute("INSERT INTO labels (decision_id, key, answer, source, ts) VALUES (?, ?, ?, ?, ?) ON CONFLICT (decision_id, key) DO UPDATE "
+                       "SET answer = excluded.answer, source = excluded.source, ts = excluded.ts", (decision_id, key, json.dumps(answer), source, time.time()))
 
     def thresholds(self, tier=0):
         """The calibrated thresholds of one tier, {key: value}."""
@@ -82,7 +82,7 @@ class Store:
     def save_skips(self, tier, skip, ask):
         """Marks the questions in `skip` as skipped by a tier and the ones in `ask` as asked again."""
         with self._db() as db:
-            db.executemany("INSERT OR IGNORE INTO skips VALUES (?, ?)", [(tier, key) for key in skip])
+            db.executemany("INSERT INTO skips VALUES (?, ?) ON CONFLICT DO NOTHING", [(tier, key) for key in skip])
             db.executemany("DELETE FROM skips WHERE tier = ? AND key = ?", [(tier, key) for key in ask])
 
     def unconfirmed(self, tier=0):
@@ -95,12 +95,13 @@ class Store:
         """Marks the questions in `unconfirmed` as waiting for your labels to confirm a tier's threshold, and the ones in
         `confirmed` as no longer waiting."""
         with self._db() as db:
-            db.executemany("INSERT OR IGNORE INTO unconfirmed VALUES (?, ?)", [(tier, key) for key in unconfirmed])
+            db.executemany("INSERT INTO unconfirmed VALUES (?, ?) ON CONFLICT DO NOTHING", [(tier, key) for key in unconfirmed])
             db.executemany("DELETE FROM unconfirmed WHERE tier = ? AND key = ?", [(tier, key) for key in confirmed if key not in unconfirmed])
 
     def save_thresholds(self, thresholds, tier=0):
         with self._db() as db:
-            db.executemany("INSERT OR REPLACE INTO tier_thresholds VALUES (?, ?, ?)", [(tier, key, value) for key, value in thresholds.items()])
+            db.executemany("INSERT INTO tier_thresholds VALUES (?, ?, ?) ON CONFLICT (tier, key) DO UPDATE SET value = excluded.value",
+                           [(tier, key, value) for key, value in thresholds.items()])
 
     def save_issues(self, issues, tier, calibrated):
         """Records why a calibration found no threshold ({key: {reason, best_target, target}}), and clears the questions

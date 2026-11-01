@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from sureshot.calibrate import calibrate, prune, recheck
 from sureshot.config import router_from_env
+from sureshot.db import is_postgres
 from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.store import Store
@@ -17,7 +18,7 @@ def _store(args):
     path = args.db or os.environ.get("SURESHOT_DB")
     if not path:
         sys.exit("sureshot: set SURESHOT_DB or pass --db")
-    if not Path(path).exists():
+    if not is_postgres(path) and not Path(path).exists():
         sys.exit(f"sureshot: no log at {path}")
     return Store(path)
 
@@ -159,7 +160,7 @@ COMMANDS = {
 def parser():
     p = argparse.ArgumentParser(prog="sureshot", description=__doc__)
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--db", help="the decision log (default: SURESHOT_DB)")
+    common.add_argument("--db", help="the decision log, a SQLite file or a postgresql:// URL (default: SURESHOT_DB)")
     routed = argparse.ArgumentParser(add_help=False)
     routed.add_argument("--questions", help="a JSON or YAML questions file (default: SURESHOT_QUESTIONS)")
     sampled = argparse.ArgumentParser(add_help=False)

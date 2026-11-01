@@ -1,9 +1,8 @@
 """A response cache: what a model answered about a text, so asking again costs nothing."""
 import hashlib
 import json
-import sqlite3
 import time
-from contextlib import contextmanager
+from sureshot.db import create, database
 
 
 def cache_key(identity, key, question, state, images):
@@ -12,26 +11,22 @@ def cache_key(identity, key, question, state, images):
 
 
 class Cache:
-    """SQLite key-value store of model answers. ttl is how many seconds an answer stays valid (None: forever).
+    """Key-value store of model answers, in a SQLite file or a Postgres database (a postgresql:// URL, which replicas can
+    share). ttl is how many seconds an answer stays valid (None: forever).
 
     Router(cache=Cache(path)) caches per question and per model: a model's identity (its name, URL, extra request
     fields, prompt version, or a fingerprint of a trained classifier) is part of the key, so changing the model never
     serves the old model's answers. A model with no `identity` is not cached."""
 
     def __init__(self, path, ttl=None):
-        self.path, self.ttl = str(path), ttl
+        self.path, self.ttl, self._database = str(path), ttl, database(path)
         with self._db() as db:
-            db.execute("CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, ts REAL, value TEXT)")
-            db.execute("PRAGMA journal_mode=WAL")
+            create(db, self._database.postgres, "CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, ts DOUBLE PRECISION, value TEXT)")
+            if not self._database.postgres:
+                db.execute("PRAGMA journal_mode=WAL")
 
-    @contextmanager
     def _db(self):
-        db = sqlite3.connect(self.path, timeout=30)
-        try:
-            with db:
-                yield db
-        finally:
-            db.close()
+        return self._database.connect()
 
     def get_many(self, keys):
         """{key: value} for the keys that are cached and not expired."""
@@ -46,7 +41,8 @@ class Cache:
     def put_many(self, items):
         now = time.time()
         with self._db() as db:
-            db.executemany("INSERT OR REPLACE INTO cache VALUES (?, ?, ?)", [(key, now, json.dumps(value)) for key, value in items.items()])
+            db.executemany("INSERT INTO cache VALUES (?, ?, ?) ON CONFLICT (key) DO UPDATE SET ts = excluded.ts, value = excluded.value",
+                           [(key, now, json.dumps(value)) for key, value in items.items()])
 
     def size(self):
         with self._db() as db:
