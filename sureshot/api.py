@@ -1,12 +1,16 @@
-"""HTTP API: POST /decide, /feedback and /calibrate with a bearer token (SURESHOT_API_KEY). Run locally with `uvicorn sureshot.api:app`."""
+"""HTTP API: POST /decide, /feedback and /calibrate with a bearer token (SURESHOT_API_KEY), and the OpenAI, Anthropic
+and Gemini request formats for apps that already speak one (see formats.py). Run locally with `uvicorn sureshot.api:app`."""
 import os
 import hmac
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import Body, FastAPI, Header, HTTPException, Query
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
+from sureshot.adapters.base import post
 from sureshot.calibrate import calibrate
+from sureshot.formats import anthropic_request, anthropic_response, gemini_request, gemini_response, openai_request, openai_response, summary
 from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
@@ -126,3 +130,52 @@ def review(limit: int = 50, reason: str | None = None, sample: float = Query(0.0
 def calibrate_thresholds(request: CalibrateRequest, authorization: str = Header(default="")):
     authorize(authorization)
     return calibrate(log(), request.target_accuracy, request.min_samples, sample=request.sample, confident=request.confident)
+
+
+
+def passthrough(fmt, body, path, headers):
+    """Forwards a request sureshot can't answer, unchanged, to SURESHOT_{fmt}_PASSTHROUGH_URL: the base URL you would
+    give that API's SDK, with SURESHOT_{fmt}_PASSTHROUGH_API_KEY sent the way that API expects."""
+    url = os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_URL")
+    if not url or body.get("stream"):
+        raise HTTPException(422, "sureshot answers requests for a JSON schema whose fields are all enums, booleans or integer ranges of 2 to 10 values, "
+                                 f"without streaming; set SURESHOT_{fmt}_PASSTHROUGH_URL to forward other requests, except streaming ones")
+    upstream = post(url.rstrip("/") + path, json=body, headers=headers(os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_API_KEY")), timeout=300)
+    return Response(upstream.content, upstream.status_code, media_type=upstream.headers.get("content-type"))
+
+
+def answer(request, respond):
+    try:
+        result = router().decide(request["state"], request["questions"], request["images"])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return JSONResponse(respond(result), headers={"x-sureshot": json.dumps(summary(result))})
+
+
+@app.post("/v1/chat/completions")
+def openai_chat(body: dict = Body(...), authorization: str = Header(default="")):
+    """OpenAI's chat completions: point the client's base URL at <sureshot>/v1, with SURESHOT_API_KEY as its key."""
+    authorize(authorization)
+    if (request := openai_request(body)) is None:
+        return passthrough("OPENAI", body, "/chat/completions", lambda key: {"Authorization": f"Bearer {key}"} if key else {})
+    return answer(request, lambda result: openai_response(body, request, result))
+
+
+@app.post("/v1/messages")
+def anthropic_messages(body: dict = Body(...), x_api_key: str = Header(default=""), authorization: str = Header(default=""),
+                       anthropic_version: str = Header(default="2023-06-01"), anthropic_beta: str | None = Header(default=None)):
+    """Anthropic's Messages: point the client's base URL at <sureshot>, with SURESHOT_API_KEY as its key."""
+    authorize(f"Bearer {x_api_key}" if x_api_key else authorization)
+    if (request := anthropic_request(body)) is None:
+        version = {"anthropic-version": anthropic_version} | ({"anthropic-beta": anthropic_beta} if anthropic_beta else {})
+        return passthrough("ANTHROPIC", body, "/v1/messages", lambda key: version | ({"x-api-key": key} if key else {}))
+    return answer(request, lambda result: anthropic_response(body, request, result))
+
+
+@app.post("/{version}/models/{model}:generateContent")
+def gemini_generate(version: str, model: str, body: dict = Body(...), x_goog_api_key: str = Header(default=""), key: str = ""):
+    """Gemini's generateContent: point the client's base URL at <sureshot>, with SURESHOT_API_KEY as its key."""
+    authorize(f"Bearer {x_goog_api_key or key}")
+    if (request := gemini_request(body)) is None:
+        return passthrough("GEMINI", body, f"/{version}/models/{model}:generateContent", lambda k: {"x-goog-api-key": k} if k else {})
+    return answer(request, lambda result: gemini_response(model, request, result))

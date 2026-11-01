@@ -25,6 +25,7 @@ and why. [The banking77 case study](https://github.com/maxtmiller/sureshot/blob/
 - [The router](#the-router)
 - [The feedback loop](#the-feedback-loop): log, label, calibrate, retrain, recheck, prune, monitor
 - [HTTP API and configuration](#http-api-and-configuration)
+- [Drop-in for OpenAI, Anthropic and Gemini apps](#drop-in-for-openai-anthropic-and-gemini-apps)
 - [Command line](#command-line)
 - [Performance](#performance)
 - [Tests](#tests)
@@ -81,6 +82,7 @@ thresholds from your data, add a log and [calibrate](#calibrate-learn-each-quest
 | [`stats`](#stats-and-drift) | Usage, accuracy, cost, latency and drift report |
 | [`router.test`, `evaluate`](#testing-and-comparing-models) | Score a golden dataset; compare candidate models on your log |
 | [HTTP API](#http-api-and-configuration) | `/decide`, `/feedback`, `/calibrate`, `/stats`, `/review`, configured from env vars |
+| [Drop-in formats](#drop-in-for-openai-anthropic-and-gemini-apps) | Answers an app's OpenAI, Anthropic or Gemini structured-output requests with no code change but its base URL |
 | [`sureshot` command](#command-line) | The API, a single decision and every feedback-loop step from a shell, cron or CI |
 
 ## Questions
@@ -462,6 +464,7 @@ curl -s localhost:8000/decide -H "Authorization: Bearer $SURESHOT_API_KEY" \
 | `POST /calibrate` | `{"target_accuracy": 0.95}`, optionally `min_samples`, `sample` and `confident` |
 | `GET /stats` | The `stats` report; its options are query parameters, `costs` as JSON |
 | `GET /review` | The review queue; `limit`, `reason`, `sample`, `confident` |
+| `POST /v1/chat/completions`, `/v1/messages`, `/{version}/models/{model}:generateContent` | OpenAI, Anthropic and Gemini requests (see [below](#drop-in-for-openai-anthropic-and-gemini-apps)); the key may also come as `x-api-key`, `x-goog-api-key` or `?key=` |
 | `GET /health` | No token needed |
 
 Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`. The API builds its router with `router_from_env()`,
@@ -481,6 +484,50 @@ which you can also call yourself:
 | `SURESHOT_DB` | SQLite log; enables `/feedback` and `/calibrate` |
 | `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache, and seconds an answer stays valid |
 | `SURESHOT_AUDIT` | Share of confident answers audited (default 0) |
+| `SURESHOT_OPENAI_PASSTHROUGH_URL`, `SURESHOT_ANTHROPIC_PASSTHROUGH_URL`, `SURESHOT_GEMINI_PASSTHROUGH_URL`, each with `_API_KEY` | Where each format's requests that sureshot can't answer are forwarded |
+
+## Drop-in for OpenAI, Anthropic and Gemini apps
+
+An app that already asks OpenAI, Anthropic or Gemini for structured output can use sureshot by changing only its base
+URL and key (`SURESHOT_API_KEY`):
+
+```python
+class Ticket(BaseModel):
+    team: Literal["billing", "support"] = Field(description="Which team should handle this ticket?")
+    urgent: bool
+    priority: int = Field(ge=1, le=5)
+
+OpenAI(base_url="http://localhost:8000/v1", api_key=key).beta.chat.completions.parse(model=..., messages=..., response_format=Ticket)
+Anthropic(base_url="http://localhost:8000", api_key=key).messages.parse(model=..., max_tokens=..., messages=..., output_format=Ticket)
+genai.Client(api_key=key, http_options={"base_url": "http://localhost:8000"}).models.generate_content(
+    model=..., contents=..., config={"response_mime_type": "application/json", "response_schema": Ticket})
+```
+
+| Format | Route | Where the schema comes from |
+| --- | --- | --- |
+| OpenAI | `POST /v1/chat/completions` | `response_format.json_schema`, or one forced function (`tool_choice` naming it, or `"required"` with one tool) |
+| Anthropic | `POST /v1/messages` | `output_config.format`, or one forced tool (`tool_choice` naming it, or `"any"` with one tool) |
+| Gemini | `POST /{version}/models/{model}:generateContent` | `generationConfig.responseJsonSchema` or `responseSchema` |
+
+sureshot turns each field of the schema into a question, routes them, and answers in the app's format with an object
+matching the schema:
+
+| Schema field | Question |
+| --- | --- |
+| string `enum` (a `Literal` or an `Enum`) | `choice` |
+| `boolean` | `noul` |
+| integer `enum`, or `minimum` to `maximum`, of 2 to 10 values | `score` |
+
+- Each field's `description` (or `title`) is its instructions. The state is the text of every message, system prompt included.
+- Question keys are the schema's name (or title, or the forced tool's name) and the field, e.g. `Ticket.team`, so apps sharing one sureshot are
+  calibrated apart. The `x-sureshot` response header has the decision `id` and who answered each question; label with
+  `POST /feedback {"id": ..., "labels": {"Ticket.team": "support"}}`. For a score, a label is the level's position (0 for `priority` 1).
+- A request sureshot can't answer (no schema, a free-text, nested or optional field, streaming, OpenAI's `n` above 1,
+  an image by URL, Gemini function calling) is forwarded unchanged to `SURESHOT_OPENAI_PASSTHROUGH_URL`,
+  `SURESHOT_ANTHROPIC_PASSTHROUGH_URL` or `SURESHOT_GEMINI_PASSTHROUGH_URL` when it is set (the base URL you would give
+  that SDK, with the matching `_API_KEY`), so one base URL serves the whole app. Otherwise it gets a 422. Streaming
+  requests are never forwarded.
+- Token usage is reported as zero: the models sureshot asked are not the one the app named.
 
 ## Command line
 
