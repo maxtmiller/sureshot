@@ -453,7 +453,7 @@ candidate System 1 models, to see which meets the target with the least escalati
 pip install "sureshot[api]"
 cp .env.example .env    # fill in the keys
 sureshot serve          # or: uvicorn sureshot.api:app
-curl -s localhost:8000/decide -H "Authorization: Bearer $SURESHOT_API_KEY" \
+curl -s localhost:8000/decide -H "Authorization: Bearer $SURESHOT_API_KEY" -H "Content-Type: application/json" \
   -d '{"state": "...", "questions": {...}, "thresholds": {"urgency": 0.6}}'
 ```
 
