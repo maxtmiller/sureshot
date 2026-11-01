@@ -74,6 +74,64 @@ def retrain_local(args):
     return result["report"]
 
 
+def _show(question, answer):
+    if question["type"] == "noul":
+        return "yes" if answer else "no"
+    return f"{answer} {question['criteria'][answer]}" if question["type"] == "score" else answer
+
+
+def _parse(question, text):
+    """The answer `text` gives to a question: yes/no, a score level's position or name, or a choice's name or the
+    start of one. None if it is none of those."""
+    text = text.strip().lower()
+    if question["type"] == "noul":
+        return {"y": True, "yes": True, "true": True, "n": False, "no": False, "false": False}.get(text)
+    if question["type"] == "score":
+        levels = [str(level).lower() for level in question["criteria"]]
+        return int(text) if text.isdigit() and int(text) < len(levels) else levels.index(text) if text in levels else None
+    matches = [key for key in question["criteria"] if key.lower() == text] or [key for key in question["criteria"] if key.lower().startswith(text)]
+    return matches[0] if len(matches) == 1 else None
+
+
+def label(store, items):
+    """Asks for the true answer to each queued item and saves it at once, so stopping part way keeps what was given."""
+    labeled = skipped = 0
+    try:
+        for n, item in enumerate(items, 1):
+            question = item["question"]
+            if n == 1 or item["id"] != items[n - 2]["id"]:
+                print("\n" + item["state"][:2000])
+            print(f"\n[{n}/{len(items)}] {item['key']} ({item['reason']}): {question.get('instructions', '')}")
+            for c in item["candidates"]:
+                extra = f" ({c['confidence']:.2f})" if c.get("confidence") is not None else f": {c['reason']}" if c.get("reason") else ""
+                print(f"  {c['who']}: {_show(question, c['answer'])}{extra}")
+            options = "yes/no" if question["type"] == "noul" else " · ".join(_show(question, i) for i in range(len(question["criteria"]))) \
+                if question["type"] == "score" else ", ".join(question["criteria"])
+            print(f"  options: {options}")
+            while True:
+                text = input(f"  answer [{_show(question, item['answer'])}] (Enter accepts, - skips, Ctrl-D stops): ")
+                answer = item["answer"] if not text.strip() else None if text.strip() == "-" else _parse(question, text)
+                if answer is not None or text.strip() == "-":
+                    break
+                print("  not an answer to this question")
+            if answer is None:
+                skipped += 1
+            else:
+                store.label(item["id"], item["key"], answer)
+                labeled += 1
+    except (EOFError, KeyboardInterrupt):
+        print()
+    print(f"labeled {labeled}, skipped {skipped}, {len(items) - labeled - skipped} left")
+
+
+def review(args):
+    store = _store(args)
+    items = review_queue(store, args.limit, (args.reason,) if args.reason else REASONS, sample=args.sample, confident=args.confident)
+    if not args.label:
+        return items
+    label(store, items)
+
+
 def test(args):
     try:
         report = _router(args).test(args.golden, args.set)
@@ -93,7 +151,7 @@ COMMANDS = {
     "recheck": lambda a: recheck(_store(a), a.tier, a.sample, a.target, a.confident),
     "prune": lambda a: prune(_store(a), _costs(a.costs), a.tier, a.min_answers),
     "stats": lambda a: stats(_store(a), a.since, a.min_samples, costs=_costs(a.costs) if a.costs else None, sample=a.sample, confident=a.confident),
-    "review": lambda a: review_queue(_store(a), a.limit, (a.reason,) if a.reason else REASONS, sample=a.sample, confident=a.confident),
+    "review": review,
     "test": test,
 }
 
@@ -142,9 +200,10 @@ def parser():
     s.add_argument("--min-samples", type=int, default=30)
     s.add_argument("--costs", help='cost per question of each stage as JSON, e.g. {"tier 0": 0, "system2": 0.004}')
 
-    s = sub.add_parser("review", parents=[common, sampled], help="the questions to label next")
+    s = sub.add_parser("review", parents=[common, sampled], help="the questions to label next, or with --label, label them")
     s.add_argument("--limit", type=int, default=50)
     s.add_argument("--reason", choices=REASONS)
+    s.add_argument("--label", action="store_true", help="show each item and ask for its true answer")
 
     s = sub.add_parser("test", parents=[common, routed], help="score the router on a golden JSONL file, without logging")
     s.add_argument("golden")
