@@ -1,0 +1,24 @@
+# Builds the release image for every platform publish.yml pushes, without pushing, so an arm64-only failure shows up
+# in the PR that causes it rather than at release. ci.yml runs the amd64 image on every PR.
+name: image
+on:
+  pull_request:
+    paths:
+      - serve/**
+      - pyproject.toml
+      - .github/workflows/**
+jobs:
+  multi-arch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: serve/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
