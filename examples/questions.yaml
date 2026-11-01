@@ -1,0 +1,31 @@
+# Question sets for the recipes in examples/recipes.md. Keys are unique across sets, since thresholds are learned per key.
+email_triage:
+  category:
+    type: choice
+    instructions: What kind of email is this?
+    criteria:
+      person: Written by a real person to you
+      newsletter: A newsletter or digest you subscribed to
+      promotion: Marketing, a sale or an offer
+      notification: An automated notice, receipt or alert
+  needs_reply:
+    type: noul
+    instructions: Does this email need a personal reply from you?
+  urgency:
+    type: score
+    instructions: How soon does this need your attention?
+    criteria: [Whenever, This week, Today]
+
+ticket_routing:
+  team:
+    type: choice
+    instructions: Which team should handle this support ticket?
+    criteria:
+      billing: Charges, refunds, invoices and plans
+      technical: Bugs, errors and how the product works
+      account: Logins, passwords, access and account settings
+      sales: Buying, upgrading or pricing questions from prospects
+  priority:
+    type: score
+    instructions: How urgent is this ticket?
+    criteria: [Low, Normal, High, Urgent]

@@ -16,6 +16,8 @@ content + questions ─▶ System 1 ─▶ confident? ── yes ──▶ answe
 Around that handoff, sureshot logs every decision and uses your labels to learn how far to trust System 1, to train
 a cheaper tier, and to warn you when things change. [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md) explains how each part works
 and why. [The banking77 case study](https://github.com/maxtmiller/sureshot/blob/main/examples/case_study_banking77.md) runs the whole loop on real data.
+[Recipes](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md) plug it into cron, CI, LangChain,
+LlamaIndex, n8n, Zapier and Make, with email-triage and ticket-routing examples.
 
 - [Install](#install)
 - [Quick start](#quick-start)
