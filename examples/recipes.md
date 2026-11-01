@@ -102,9 +102,14 @@ python examples/email_triage.py --dry-run
 ```
 
 `--dry-run` prints what it would do. Drop it once the choices look right, and run it from cron every 15 minutes. It
-reads unseen mail without marking it read and logs every decision, the dry run's included, to `triage.db`:
-`sureshot review --db triage.db` lists what to label next, and `sureshot calibrate --db triage.db` learns thresholds
-from the labels. Gmail needs IMAP turned on and an [app password](https://support.google.com/accounts/answer/185833).
+reads unseen mail without marking it read and logs every decision, the dry run's included, to `triage.db`. A few
+minutes of labeling a week is what lets it learn your thresholds:
+
+```bash
+sureshot review --db triage.db --sample 0.1 --label    # shows each email and asks for the right answers
+sureshot calibrate --db triage.db --sample 0.1         # learns thresholds from them
+```
+ Gmail needs IMAP turned on and an [app password](https://support.google.com/accounts/answer/185833).
 
 ## Support-ticket routing
 

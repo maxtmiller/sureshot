@@ -7,8 +7,8 @@ of the inbox. Configure the models as for the API, plus the mailbox:
 
 Drop --dry-run once its choices look right, and run it from cron every 15 minutes. It reads unseen mail without
 marking it read, asks the email_triage questions in examples/questions.yaml, and logs every decision to triage.db
-(SURESHOT_DB), so `sureshot review --db triage.db` lists what to label and `sureshot calibrate --db triage.db` learns
-thresholds from your labels. PROMOTIONS_FOLDER (default "Promotions") must exist; on Gmail it is a label."""
+(SURESHOT_DB), so `sureshot review --db triage.db --label` asks you for the right answers and `sureshot calibrate --db
+triage.db` learns thresholds from them. PROMOTIONS_FOLDER (default "Promotions") must exist; on Gmail it is a label."""
 import email
 import imaplib
 import os

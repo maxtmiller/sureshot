@@ -557,7 +557,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | `sureshot recheck [--tier]` | [Rechecks](#recheck-and-prune) saved thresholds against your labels |
 | `sureshot prune --costs '{...}' [--tier]` | [Prunes](#recheck-and-prune) the questions a tier doesn't pay for |
 | `sureshot stats [--costs '{...}']` | The [stats](#stats-and-drift) report |
-| `sureshot review [--limit] [--reason]` | The [review queue](#review-queue-what-to-label-next) |
+| `sureshot review [--limit] [--reason] [--label]` | The [review queue](#review-queue-what-to-label-next). With `--label`, shows each item and asks for its true answer (Enter accepts the router's, `-` skips, Ctrl-D stops), saving each label as it is given |
 | `sureshot test golden.jsonl [--questions file] [--set name] [--min-accuracy]` | [Scores](#testing-and-comparing-models) the router without logging; exits 1 below `--min-accuracy` |
 
 `calibrate`, `retrain`, `recheck`, `stats` and `review` take `--sample` and `--confident`, the rates you give the

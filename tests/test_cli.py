@@ -81,3 +81,34 @@ def test_retrain_saves_the_classifier_only_when_it_changes(tmp_path, capsys, mon
     assert run(capsys, *args)["needs_prep"]["promoted"] and model.exists()
     saved = model.stat().st_mtime_ns
     assert not run(capsys, *args)["needs_prep"]["promoted"] and model.stat().st_mtime_ns == saved
+
+
+def test_review_label_saves_answers_as_they_are_given(tmp_path, capsys, monkeypatch):
+    store = Store(tmp_path / "sureshot.db", seed=0)
+    q = {"needs_prep": QUESTIONS["needs_prep"], "importance": QUESTIONS["importance"], "event_type": QUESTIONS["event_type"]}
+    ids = [Router(FakeDecider(), FakeClaude(), log=store).decide(f"event {i}", q)["id"] for i in range(2)]
+    # In order: accept, a score by name after a bad answer, a choice by prefix, a no, a skip, then Ctrl-D.
+    answers = iter(["", "nine", "high", "meet", "n", "-"])
+
+    def typed(prompt):
+        try:
+            return next(answers)
+        except StopIteration:
+            raise EOFError
+
+    monkeypatch.setattr("builtins.input", typed)
+    cli.main(["review", "--db", str(tmp_path / "sureshot.db"), "--sample", "1", "--label"])
+    out = capsys.readouterr().out
+    assert "not an answer" in out and "options: 0 Optional · 1 Low · 2 Normal · 3 High · 4 Critical" in out and "labeled 4, skipped 1, 1 left" in out
+    got = {(r["id"], r["key"]): r["truth"] for r in store.labeled() if r["kind"] == "human"}
+    assert got == {(ids[0], "needs_prep"): True, (ids[0], "importance"): 3, (ids[0], "event_type"): "meeting", (ids[1], "needs_prep"): False}
+    assert [(item["id"], item["key"]) for item in cli.review_queue(store, None, sample=1.0)] == [(ids[1], "importance"), (ids[1], "event_type")]
+
+
+@pytest.mark.parametrize("question, text, answer", [
+    (QUESTIONS["needs_prep"], "Yes", True), (QUESTIONS["needs_prep"], "f", None),
+    (QUESTIONS["importance"], "2", 2), (QUESTIONS["importance"], "critical", 4), (QUESTIONS["importance"], "9", None),
+    (QUESTIONS["event_type"], "Interview", "interview"), (QUESTIONS["event_type"], "m", "meeting"), (QUESTIONS["event_type"], "x", None),
+])
+def test_typed_answers_are_read_by_question_type(question, text, answer):
+    assert cli._parse(question, text) == answer
