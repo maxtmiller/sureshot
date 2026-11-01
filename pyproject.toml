@@ -18,9 +18,10 @@ sureshot = "sureshot.cli:main"
 
 [project.optional-dependencies]
 claude = ["anthropic"]
-api = ["fastapi", "uvicorn", "python-dotenv"]
+yaml = ["pyyaml"]
+api = ["fastapi", "uvicorn", "python-dotenv", "pyyaml"]
 local = ["scikit-learn", "sentence-transformers"]
-dev = ["pytest", "anthropic", "fastapi", "uvicorn", "python-dotenv", "scikit-learn"]
+dev = ["pytest", "anthropic", "fastapi", "uvicorn", "python-dotenv", "scikit-learn", "pyyaml"]
 
 [build-system]
 requires = ["setuptools>=77"]

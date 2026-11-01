@@ -10,8 +10,11 @@ from sureshot.calibrate import calibrate
 from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
+from sureshot.questions import load
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+if os.environ.get("SURESHOT_QUESTIONS"):
+    load(os.environ["SURESHOT_QUESTIONS"])  # a bad questions file fails at startup, not on the first request
 app = FastAPI(title="sureshot")
 _router = None
 
@@ -32,7 +35,7 @@ def router():
 
 class DecideRequest(BaseModel):
     state: str
-    questions: dict
+    questions: dict | str | None = None
     images: list[str] = []
     thresholds: dict[str, float] = {}
     escalate: bool = True

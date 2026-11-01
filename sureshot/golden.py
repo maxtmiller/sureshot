@@ -17,14 +17,18 @@ def percentiles(values):
 
 
 def run(router, cases, questions=None, thresholds=None):
-    """Each case is {"state", "expected": {key: answer}} plus its own "questions", or the shared `questions`. Only the
+    """Each case is {"state", "expected": {key: answer}} plus its own "questions", or the shared `questions` (either
+    may name one of the router's question sets, and with neither the router's only set is used). Only the
     questions with an expected answer are asked. Returns accuracy of the final answers and of System 1 alone, the
     escalation rate (each overall and per question), the share of answers each tier and System 2 gave, p50/p95 latency
     in ms, and every wrong final answer."""
     cases = load(cases) if isinstance(cases, (str, Path)) else cases
     tally, failures, answered_by, latency = {}, [], {}, {"system1": [], "system2": [], "total": []}
     for i, case in enumerate(cases):
-        all_questions = case.get("questions") or questions
+        try:
+            all_questions = router.question_set(case.get("questions") or questions)
+        except ValueError as e:
+            raise ValueError(f"case {i}: {e}") from e
         for key, answer in case["expected"].items():
             try:
                 check_answer(all_questions[key], answer)

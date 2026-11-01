@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import pytest
 import sureshot.cli as cli
 from sureshot import Store, calibrate
@@ -57,7 +58,8 @@ def test_decide_reads_a_request_from_stdin(capsys, monkeypatch):
 
 
 def test_test_fails_below_min_accuracy(tmp_path, capsys, monkeypatch):
-    monkeypatch.setattr(cli, "router_from_env", lambda: Router(FakeDecider(), FakeClaude()))
+    monkeypatch.setenv("SURESHOT_QUESTIONS", "unset")
+    monkeypatch.setattr(cli, "router_from_env", lambda: Router(FakeDecider(), FakeClaude(), questions=os.environ["SURESHOT_QUESTIONS"]))
     golden, questions = tmp_path / "golden.jsonl", tmp_path / "questions.json"
     golden.write_text("\n".join(json.dumps(c) for c in [{"state": "a", "expected": {"importance": 4, "event_type": "interview"}},
                                                          {"state": "b", "expected": {"event_type": "meeting"}}]))

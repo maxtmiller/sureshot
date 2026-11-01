@@ -36,6 +36,7 @@ pip install sureshot                # core: any OpenAI-compatible or HTTP model,
 pip install "sureshot[claude]"      # ClaudeAPI, Claude as System 2 through the Anthropic SDK
 pip install "sureshot[local]"       # LocalDecider, the in-process classifier
 pip install "sureshot[api]"         # the HTTP API
+pip install "sureshot[yaml]"        # YAML questions files (included in [api])
 ```
 
 The extras combine, e.g. `pip install "sureshot[claude,api]"`. Only `httpx` is required: the Quick start uses Claude
@@ -97,6 +98,21 @@ An object of named questions, each one of three types:
 ```
 
 - `choice`: one of named options. `score`: a level from an ordered list. `noul`: yes or no.
+- Questions can live in a JSON or YAML file that a team versions and reviews, holding one set or several named ones:
+
+  ```yaml
+  # questions.yaml
+  email_triage:
+    needs_reply: {type: noul, instructions: Does this email need a personal reply?}
+  ticket_routing:
+    team:
+      type: choice
+      instructions: Which team should handle this ticket?
+      criteria: {billing: Payments and invoices, support: Everything else}
+  ```
+
+  `Router(..., questions="questions.yaml")` (or `SURESHOT_QUESTIONS`) loads and validates it, and `decide` then takes a
+  set's name, `router.decide(text, "email_triage")`, or nothing when the file has one set. Inline questions still work.
 - Every answer has the same shape: `answer` (an option key, a level index, or a boolean), `confidence` (0 to 1;
   for `noul`, the distance from a coin flip), `probabilities` and `source` (`sureshot` or `system2`).
 
@@ -441,7 +457,7 @@ curl -s localhost:8000/decide -H "Authorization: Bearer $SURESHOT_API_KEY" \
 
 | Route | Does |
 | --- | --- |
-| `POST /decide` | `state`, `questions`, optionally `images` (data URIs), `thresholds`, `escalate`. Returns an `id` when logging |
+| `POST /decide` | `state`, `questions` (inline, or a set's name from `SURESHOT_QUESTIONS`, or left out when it has one), optionally `images` (data URIs), `thresholds`, `escalate`. Returns an `id` when logging |
 | `POST /feedback` | `{"id": ..., "labels": {"urgency": 2}}` |
 | `POST /calibrate` | `{"target_accuracy": 0.95}`, optionally `min_samples`, `sample` and `confident` |
 | `GET /stats` | The `stats` report; its options are query parameters, `costs` as JSON |
@@ -460,6 +476,7 @@ which you can also call yourself:
 | `SURESHOT_SYSTEM2_JSON_MODE` | `schema` (default) or `object` |
 | `SURESHOT_SYSTEM1_EXTRA`, `SURESHOT_SYSTEM2_EXTRA` | JSON merged into every request, e.g. `{"reasoning_effort": "none"}` |
 | `SURESHOT_LOCAL_MODEL` | A saved `LocalDecider` to put in front of System 1 |
+| `SURESHOT_QUESTIONS` | A JSON or YAML [questions file](#questions), checked when the API starts |
 | `SURESHOT_THRESHOLD` | Default threshold (0.8) |
 | `SURESHOT_DB` | SQLite log; enables `/feedback` and `/calibrate` |
 | `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache, and seconds an answer stays valid |
@@ -473,14 +490,14 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | Command | Does |
 | --- | --- |
 | `sureshot serve [--host] [--port]` | Runs the HTTP API (needs `sureshot[api]`) |
-| `sureshot decide [request.json]` | Decides one request, the body of `POST /decide`, from a file or stdin |
+| `sureshot decide [request.json] [--questions file]` | Decides one request, the body of `POST /decide`, from a file or stdin |
 | `sureshot calibrate [--target] [--tier]` | [Calibrates](#calibrate-learn-each-questions-threshold) and saves thresholds |
 | `sureshot retrain [--model local.joblib]` | [Retrains](#retrain-a-cheaper-first-tier) the `LocalDecider` (default `SURESHOT_LOCAL_MODEL`), saving it only when a question is promoted. A running API loads it on restart |
 | `sureshot recheck [--tier]` | [Rechecks](#recheck-and-prune) saved thresholds against your labels |
 | `sureshot prune --costs '{...}' [--tier]` | [Prunes](#recheck-and-prune) the questions a tier doesn't pay for |
 | `sureshot stats [--costs '{...}']` | The [stats](#stats-and-drift) report |
 | `sureshot review [--limit] [--reason]` | The [review queue](#review-queue-what-to-label-next) |
-| `sureshot test golden.jsonl [--questions q.json] [--min-accuracy]` | [Scores](#testing-and-comparing-models) the router without logging; exits 1 below `--min-accuracy` |
+| `sureshot test golden.jsonl [--questions file] [--set name] [--min-accuracy]` | [Scores](#testing-and-comparing-models) the router without logging; exits 1 below `--min-accuracy` |
 
 `calibrate`, `retrain`, `recheck`, `stats` and `review` take `--sample` and `--confident`, the rates you give the
 review queue. They run where the log is: on the machine or in the container that holds `SURESHOT_DB`. `test` needs
@@ -491,7 +508,7 @@ only the models, so it can gate a CI job:
 0 3 * * *  sureshot retrain --sample 0.02 --confident 0.1 && sureshot calibrate --tier 1 --sample 0.02 --confident 0.1 && sureshot recheck --tier 1 --confident 0.1
 
 # in CI, before a change to questions or models ships
-sureshot test golden.jsonl --questions questions.json --min-accuracy 0.95
+sureshot test golden.jsonl --questions questions.yaml --set email_triage --min-accuracy 0.95
 ```
 
 ## Performance

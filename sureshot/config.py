@@ -81,4 +81,4 @@ def router_from_env():
     ttl = os.environ.get("SURESHOT_CACHE_TTL")
     return Router(system1_from_env(), system2_from_env(), float(os.environ.get("SURESHOT_THRESHOLD", 0.8)),
                   Store(db) if db else None, float(os.environ.get("SURESHOT_AUDIT", 0)),
-                  cache=Cache(cache, float(ttl) if ttl else None) if cache else None)
+                  cache=Cache(cache, float(ttl) if ttl else None) if cache else None, questions=os.environ.get("SURESHOT_QUESTIONS"))
