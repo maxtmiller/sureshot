@@ -1,0 +1,24 @@
+# A GitHub Actions workflow for your own repo: when a pull request changes the questions or the golden set, score the
+# router on the golden set and fail below 95%. Copy it to .github/workflows/ and add OPENAI_API_KEY and
+# ANTHROPIC_API_KEY as repository secrets. golden.jsonl has one {"state", "expected": {key: answer}} per line.
+name: sureshot
+on:
+  pull_request:
+    paths:
+      - questions.yaml
+      - golden.jsonl
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install "sureshot[claude,yaml]"
+      - run: sureshot test golden.jsonl --questions questions.yaml --set email_triage --min-accuracy 0.95
+        env:
+          SURESHOT_SYSTEM1_MODEL: gpt-4o-mini
+          SURESHOT_SYSTEM1_PROVIDER: openai
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
