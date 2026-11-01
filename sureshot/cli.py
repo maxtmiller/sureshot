@@ -25,6 +25,8 @@ def _store(args):
 def _router(args):
     if args.db:
         os.environ["SURESHOT_DB"] = args.db
+    if args.questions:
+        os.environ["SURESHOT_QUESTIONS"] = args.questions
     return router_from_env()
 
 
@@ -51,7 +53,7 @@ def serve(args):
 def decide(args):
     body = _json(Path(args.file).read_text() if args.file else sys.stdin.read(), args.file or "stdin")
     try:
-        return _router(args).decide(body["state"], body["questions"], body.get("images", ()), body.get("thresholds"), body.get("escalate", True))
+        return _router(args).decide(body["state"], body.get("questions"), body.get("images", ()), body.get("thresholds"), body.get("escalate", True))
     except KeyError as e:
         sys.exit(f"sureshot: the request needs {e}")
     except ValueError as e:
@@ -73,8 +75,10 @@ def retrain_local(args):
 
 
 def test(args):
-    questions = _json(Path(args.questions).read_text(), args.questions) if args.questions else None
-    report = _router(args).test(args.golden, questions)
+    try:
+        report = _router(args).test(args.golden, args.set)
+    except ValueError as e:
+        sys.exit(f"sureshot: {e}")
     if args.min_accuracy is not None and (report["overall"] is None or report["overall"]["accuracy"] < args.min_accuracy):
         print(json.dumps(report, indent=1))
         sys.exit(1)
@@ -98,6 +102,8 @@ def parser():
     p = argparse.ArgumentParser(prog="sureshot", description=__doc__)
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--db", help="the decision log (default: SURESHOT_DB)")
+    routed = argparse.ArgumentParser(add_help=False)
+    routed.add_argument("--questions", help="a JSON or YAML questions file (default: SURESHOT_QUESTIONS)")
     sampled = argparse.ArgumentParser(add_help=False)
     sampled.add_argument("--sample", type=float, default=0.0, help="the review_queue sample rate your labels came from")
     sampled.add_argument("--confident", type=float, default=0.0, help="the review_queue confident rate your labels came from")
@@ -107,7 +113,7 @@ def parser():
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
 
-    s = sub.add_parser("decide", parents=[common], help="decide one request, the JSON body of POST /decide")
+    s = sub.add_parser("decide", parents=[common, routed], help="decide one request, the JSON body of POST /decide")
     s.add_argument("file", nargs="?", help="the request (default: stdin)")
 
     s = sub.add_parser("calibrate", parents=[common, sampled], help="learn and save each question's threshold for a tier")
@@ -140,9 +146,9 @@ def parser():
     s.add_argument("--limit", type=int, default=50)
     s.add_argument("--reason", choices=REASONS)
 
-    s = sub.add_parser("test", parents=[common], help="score the router on a golden JSONL file, without logging")
+    s = sub.add_parser("test", parents=[common, routed], help="score the router on a golden JSONL file, without logging")
     s.add_argument("golden")
-    s.add_argument("--questions", help="a JSON file of questions shared by the cases")
+    s.add_argument("--set", help="the question set for cases without their own questions (default: the file's only set)")
     s.add_argument("--min-accuracy", type=float, help="exit with status 1 when overall accuracy is below this")
     return p
 

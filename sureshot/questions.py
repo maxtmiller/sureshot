@@ -1,5 +1,6 @@
 """The question format: an object of named questions, each a choice, score or noul (yes/no)."""
 import json
+from pathlib import Path
 
 
 def validate(questions):
@@ -22,6 +23,34 @@ def validate(questions):
     if problems:
         raise ValueError("; ".join(problems))
     return questions
+
+
+def question_sets(data, source="questions"):
+    """{name: questions} from either one object of named questions (named "default") or an object of named sets of
+    them, with every set validated."""
+    if not isinstance(data, dict) or not data:
+        raise ValueError(f"{source} must be a non-empty object of questions, or of named sets of them")
+    sets = {"default": data} if any(isinstance(q, dict) and isinstance(q.get("type"), str) for q in data.values()) else data
+    for name, questions in sets.items():
+        try:
+            validate(questions)
+        except ValueError as e:
+            raise ValueError(f"{source}, set {name!r}: {e}") from e
+    return sets
+
+
+def load(path):
+    """question_sets from a JSON file, or a YAML one (.yaml or .yml, needing PyYAML)."""
+    path = Path(path)
+    if path.suffix in (".yaml", ".yml"):
+        try:
+            import yaml
+        except ImportError as e:
+            raise ImportError('YAML questions need PyYAML: pip install "sureshot[yaml]"') from e
+        data = yaml.safe_load(path.read_text())
+    else:
+        data = json.loads(path.read_text())
+    return question_sets(data, str(path))
 
 
 def check_answer(question, answer):

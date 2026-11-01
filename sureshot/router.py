@@ -8,7 +8,8 @@ import time
 import httpx
 from sureshot.adapters.base import Outage
 from sureshot.cache import cache_key
-from sureshot.questions import validate
+from pathlib import Path
+from sureshot.questions import load, question_sets, validate
 
 RETRY_STATUS = (408, 429, 500, 502, 503, 504)
 
@@ -25,7 +26,7 @@ def _transient(error):
 
 class Router:
     def __init__(self, system1, system2=None, threshold=0.8, log=None, audit=0.0, retries=2, backoff=0.5, cache=None, guard=None, guard_threshold=0.9,
-                 trust_uncalibrated=True, probe=0.05):
+                 trust_uncalibrated=True, probe=0.05, questions=None):
         """system1 is one decider, or a list of them tried in order (say a trained classifier, then an LLM): a question
         stops at the first tier that is confident about it. A tier may answer only some of the questions it is given;
         the rest pass down. threshold is a number, or a list with one number per tier, since a classifier's 0.9 and
@@ -53,7 +54,11 @@ class Router:
         probe is the share of questions still asked of a tier that failed closed on them (calibrate could not certify
         the target, so nothing it says is kept), or that sureshot.prune found costs more than it saves. The rest skip it and go straight to the next tier or System 2, which
         saves its cost and latency; the sample keeps data coming for a later calibration to try again. A tier with
-        nowhere to pass its questions to is always asked."""
+        nowhere to pass its questions to is always asked.
+
+        questions is the path of a questions file (see sureshot.questions.load) or its contents: one object of named
+        questions, or an object of named sets of them. decide can then be given a set's name, or nothing when there is
+        only one set, in place of the questions themselves."""
         self.system1, self.system2, self.threshold, self.log, self.audit = system1, system2, threshold, log, audit
         self.guard, self.guard_threshold = guard, guard_threshold
         self.tiers = list(system1) if isinstance(system1, (list, tuple)) else [system1]
@@ -63,6 +68,20 @@ class Router:
         self.retries, self.backoff, self.record, self.cache = retries, backoff, True, cache
         self.trust_uncalibrated, self.probe = trust_uncalibrated, probe
         self._flights, self._flights_lock = {}, threading.Lock()
+        self.questions = load(questions) if isinstance(questions, (str, Path)) else (question_sets(questions) if questions is not None else None)
+
+    def question_set(self, questions=None):
+        """questions when it is an object of questions, else the router's set of that name (its only one when None)."""
+        if isinstance(questions, dict):
+            return questions
+        sets = self.questions or {}
+        if questions is None:
+            if len(sets) != 1:
+                raise ValueError("pass questions, or the name of one of the router's question sets" + (f": {sorted(sets)}" if sets else ""))
+            return next(iter(sets.values()))
+        if questions not in sets:
+            raise ValueError(f"no question set {questions!r}" + (f"; the router has {sorted(sets)}" if sets else "; the router has no questions file"))
+        return sets[questions]
 
     def _call(self, fn, *args):
         for attempt in range(self.retries + 1):
@@ -120,7 +139,7 @@ class Router:
         tally["misses"] += len(missing)
         return hits | fresh
 
-    def decide(self, state, questions, images=(), thresholds=None, escalate=True):
+    def decide(self, state, questions=None, images=(), thresholds=None, escalate=True):
         """Returns {"answers": {key: {answer, confidence, source, ...}}, "unsure": [...], "escalated": [...],
         "degraded", "cache" ({"hits", "misses"}: how many model answers came from the cache; None without one), "latency_ms": {"system1" (all tiers), "tiers" (each), "system2" (None if not called), "total"}},
         plus "id" when a log is set (pass it to the log's label() to grade the answer).
@@ -137,8 +156,10 @@ class Router:
         "error"}. A tier that is down is skipped. If every tier is down, System 2 answers every question (each answer
         has "sureshot": None). If System 2 is down, the last tier's answers stand and "escalated" is empty. If the guard
         is down, nothing is vetoed. Only outages fall back this way: a bad key or an unknown model raises, so a
-        misconfiguration is not hidden by silently using another model."""
-        validate(questions)
+        misconfiguration is not hidden by silently using another model.
+
+        questions is an object of questions, or the name of one of the router's sets (see __init__)."""
+        questions = validate(self.question_set(questions))
         thresholds = thresholds or {}
         start = time.perf_counter()
         tally = {"hits": 0, "misses": 0}

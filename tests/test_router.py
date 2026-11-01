@@ -1799,3 +1799,62 @@ def test_confirmation_is_only_tested_at_fixed_label_counts():
     early_miss = [False] + [True] * 24
     assert not _check(labels(early_miss + [True] * 74), 0.9)["confirmed"]
     assert _check(labels(early_miss + [True] * 75), 0.9)["confirmed"]
+
+
+def test_question_files_hold_one_set_or_several(tmp_path):
+    import json
+    from sureshot.questions import load
+
+    single, several = tmp_path / "single.json", tmp_path / "several.yaml"
+    single.write_text(json.dumps(QUESTIONS))
+    several.write_text("triage:\n  needs_prep: {type: noul, instructions: Does it need preparation}\nkind:\n  event_type:\n    type: choice\n    criteria: {meeting: A meeting, interview: An interview}\n")
+    assert load(single) == {"default": QUESTIONS}
+    assert set(load(several)) == {"triage", "kind"} and load(several)["kind"]["event_type"]["type"] == "choice"
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("triage:\n  needs_prep: {type: maybe}\n")
+    with pytest.raises(ValueError, match="set 'triage'.*needs_prep"):
+        load(bad)
+    # A malformed question in a single set is reported as such, not read as a set of sets.
+    bad.write_text(json.dumps({"needs_prep": {"type": "noul"}, "oops": {"instructions": "no type"}}))
+    with pytest.raises(ValueError, match="'default'.*oops"):
+        load(bad)
+
+
+def test_router_decides_with_a_named_or_only_question_set(tmp_path):
+    import json
+
+    path = tmp_path / "questions.json"
+    path.write_text(json.dumps({"prep": {"needs_prep": QUESTIONS["needs_prep"]}, "kind": {"event_type": QUESTIONS["event_type"]}}))
+    router = Router(FakeDecider(), FakeClaude(), questions=path)
+    assert list(router.decide("event", "kind")["answers"]) == ["event_type"]
+    assert list(router.decide("event", {"importance": QUESTIONS["importance"]})["answers"]) == ["importance"]
+    with pytest.raises(ValueError, match="kind"):
+        router.decide("event")
+    with pytest.raises(ValueError, match="no question set 'nope'"):
+        router.decide("event", "nope")
+    only = Router(FakeDecider(), FakeClaude(), questions=QUESTIONS)
+    assert set(only.decide("event")["answers"]) == set(QUESTIONS)
+    assert only.test([{"state": "a", "expected": {"event_type": "interview"}}])["overall"]["accuracy"] == 1.0
+    with pytest.raises(ValueError, match="case 0: no question set"):
+        router.test([{"state": "a", "questions": "nope", "expected": {"event_type": "interview"}}])
+    with pytest.raises(ValueError, match="no questions file"):
+        Router(FakeDecider()).decide("event", "kind")
+
+
+def test_api_and_env_use_the_questions_file(tmp_path, monkeypatch):
+    import json
+    from fastapi.testclient import TestClient
+    import sureshot.api as api
+    from sureshot import router_from_env
+
+    path = tmp_path / "questions.json"
+    path.write_text(json.dumps({"kind": {"event_type": QUESTIONS["event_type"]}}))
+    for k, v in {"SURESHOT_SYSTEM1_MODEL": "a", "SURESHOT_SYSTEM1_URL": "http://one/v1", "SURESHOT_SYSTEM2": "none", "SURESHOT_QUESTIONS": str(path)}.items():
+        monkeypatch.setenv(k, v)
+    assert set(router_from_env().questions) == {"kind"}
+    monkeypatch.setenv("SURESHOT_API_KEY", "secret")
+    monkeypatch.setattr(api, "_router", Router(FakeDecider(), FakeClaude(), questions=path))
+    client, auth = TestClient(api.app), {"Authorization": "Bearer secret"}
+    assert list(client.post("/decide", json={"state": "event", "questions": "kind"}, headers=auth).json()["answers"]) == ["event_type"]
+    assert list(client.post("/decide", json={"state": "event"}, headers=auth).json()["answers"]) == ["event_type"]
+    assert client.post("/decide", json={"state": "event", "questions": "nope"}, headers=auth).status_code == 422
