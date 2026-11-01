@@ -21,7 +21,7 @@ claude = ["anthropic"]
 yaml = ["pyyaml"]
 api = ["fastapi", "uvicorn", "python-dotenv", "pyyaml"]
 local = ["scikit-learn", "sentence-transformers"]
-dev = ["pytest", "anthropic", "fastapi", "uvicorn", "python-dotenv", "scikit-learn", "pyyaml"]
+dev = ["pytest", "anthropic", "openai", "fastapi", "uvicorn", "python-dotenv", "scikit-learn", "pyyaml"]
 
 [build-system]
 requires = ["setuptools>=77"]
