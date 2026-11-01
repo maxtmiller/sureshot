@@ -203,8 +203,8 @@ router = Router(VLLMDecider("Qwen/Qwen2.5-7B-Instruct").check(), ClaudeAPI())
 ```
 
 `serve/docker-compose.yml` runs vLLM and the sureshot API together on one GPU machine: `cp .env.example .env`, set
-`SURESHOT_SYSTEM1_MODEL`, `SURESHOT_API_KEY` and a System 2 key, then `docker compose -f serve/docker-compose.yml up
---build`. A zero-shot 7B model is less accurate than `gpt-4o-mini`, so log decisions, calibrate, and keep a System 2
+`SURESHOT_SYSTEM1_MODEL`, `SURESHOT_API_KEY` and a System 2 key, then `docker compose -f serve/docker-compose.yml up`
+(add `--build` to build sureshot from your checkout instead of pulling the published image). A zero-shot 7B model is less accurate than `gpt-4o-mini`, so log decisions, calibrate, and keep a System 2
 behind it.
 
 ## The router
@@ -452,10 +452,22 @@ candidate System 1 models, to see which meets the target with the least escalati
 ```bash
 pip install "sureshot[api]"
 cp .env.example .env    # fill in the keys
-uvicorn sureshot.api:app
+sureshot serve          # or: uvicorn sureshot.api:app
 curl -s localhost:8000/decide -H "Authorization: Bearer $SURESHOT_API_KEY" \
   -d '{"state": "...", "questions": {...}, "thresholds": {"urgency": 0.6}}'
 ```
+
+Or run the published image, with no clone or install (amd64 and arm64, tagged `latest` and each release's version):
+
+```bash
+docker run -p 8000:8000 -v sureshot-data:/data \
+  -e SURESHOT_API_KEY=... -e SURESHOT_SYSTEM1_MODEL=gpt-4o-mini -e SURESHOT_SYSTEM1_PROVIDER=openai -e OPENAI_API_KEY=... \
+  -e ANTHROPIC_API_KEY=... \
+  ghcr.io/maxtmiller/sureshot
+```
+
+The image has the API and Claude as System 2, and logs to `/data/sureshot.db` (`SURESHOT_DB`), so mount a volume there
+to keep the log. Run the [command line](#command-line) inside it with `docker exec <container> sureshot stats`.
 
 | Route | Does |
 | --- | --- |

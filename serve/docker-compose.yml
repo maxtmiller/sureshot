@@ -1,6 +1,7 @@
 # System 1 on your own GPU with vLLM, next to the sureshot API. From the repo root:
 #   cp .env.example .env     # set SURESHOT_SYSTEM1_MODEL, SURESHOT_API_KEY and the System 2 settings (SURESHOT_SYSTEM2_*, or a provider key such as ANTHROPIC_API_KEY)
-#   docker compose -f serve/docker-compose.yml up --build
+#   docker compose -f serve/docker-compose.yml up            # the published sureshot image
+#   docker compose -f serve/docker-compose.yml up --build    # or one built from this checkout
 # Needs Docker with the NVIDIA container toolkit. The sureshot API is then at http://localhost:8000/decide.
 services:
   vllm:
@@ -24,6 +25,7 @@ services:
       retries: 60
 
   sureshot:
+    image: ghcr.io/maxtmiller/sureshot:latest
     build:
       context: ..
       dockerfile: serve/Dockerfile
@@ -31,7 +33,6 @@ services:
     environment:
       SURESHOT_SYSTEM1: vllm
       SURESHOT_SYSTEM1_URL: http://vllm:8000/v1
-      SURESHOT_DB: /data/sureshot.db
     volumes:
       - sureshot-data:/data
     ports:
