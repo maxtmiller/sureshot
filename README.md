@@ -31,12 +31,14 @@ and why. [The banking77 case study](https://github.com/maxtmiller/sureshot/blob/
 ## Install
 
 ```bash
-pip install -e .                 # core: any OpenAI-compatible or HTTP model
-pip install -e ".[claude]"       # Claude as System 2 through the Anthropic API
-pip install -e ".[local]"        # LocalDecider, the in-process classifier
-pip install -e ".[api]"          # the HTTP API
-pip install -e ".[dev]"          # tests
+pip install sureshot                # core: any OpenAI-compatible or HTTP model, as System 1 or System 2
+pip install "sureshot[claude]"      # ClaudeAPI, Claude as System 2 through the Anthropic SDK
+pip install "sureshot[local]"       # LocalDecider, the in-process classifier
+pip install "sureshot[api]"         # the HTTP API
 ```
+
+The extras combine, e.g. `pip install "sureshot[claude,api]"`. Only `httpx` is required: the Quick start uses Claude
+as System 2, but `ChatReasoner` or a [vendor class](#vendors) works without the `[claude]` extra.
 
 ## Quick start
 
@@ -349,7 +351,7 @@ How the statistics work, and how often they are wrong in simulation: [ARCHITECTU
 
 ### Retrain: a cheaper first tier
 
-`LocalDecider` (`pip install -e ".[local]"`) embeds the text with a small local model and trains one logistic
+`LocalDecider` (`pip install "sureshot[local]"`) embeds the text with a small local model and trains one logistic
 regression per question on your graded decisions. It answers in about 10 ms with no server, so it makes a good
 tier 0 in front of an LLM. It is strong on topical questions and weak on subtle ones such as tone; calibration
 decides per question.
@@ -428,7 +430,7 @@ candidate System 1 models, to see which meets the target with the least escalati
 ## HTTP API and configuration
 
 ```bash
-pip install -e ".[api]"
+pip install "sureshot[api]"
 cp .env.example .env    # fill in the keys
 uvicorn sureshot.api:app
 curl -s localhost:8000/decide -H "Authorization: Bearer $SURESHOT_API_KEY" \
