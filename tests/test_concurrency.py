@@ -95,6 +95,7 @@ def test_a_failing_call_releases_the_waiting_requests(tmp_path):
     assert router._flights == {}
 
 
+@pytest.mark.sqlite
 def test_reads_do_not_block_writes(tmp_path):
     store, cache = Store(tmp_path / "s.db"), Cache(tmp_path / "c.db")
     for db in (store, cache):

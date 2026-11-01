@@ -20,8 +20,9 @@ sureshot = "sureshot.cli:main"
 claude = ["anthropic"]
 yaml = ["pyyaml"]
 api = ["fastapi", "uvicorn", "python-dotenv", "pyyaml"]
+postgres = ["psycopg[binary,pool]"]
 local = ["scikit-learn", "sentence-transformers"]
-dev = ["pytest", "anthropic", "openai", "fastapi", "uvicorn", "python-dotenv", "scikit-learn", "pyyaml"]
+dev = ["pytest", "anthropic", "openai", "fastapi", "uvicorn", "python-dotenv", "scikit-learn", "pyyaml", "psycopg[binary,pool]"]
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -32,3 +33,4 @@ packages = ["sureshot", "sureshot.adapters"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["sqlite: checks SQLite itself, so it is skipped when the suite runs against Postgres"]

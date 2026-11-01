@@ -37,7 +37,7 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
    +-------------------------------------------------------+
         |                      |
         v                      v
-     answers              Store (SQLite log)
+     answers              Store (SQLite or Postgres log)
                                |
               labels, audits   |   calibrate / retrain / stats / review
                                v
@@ -58,8 +58,9 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 | `sureshot/providers.py` | URLs and key variables of common OpenAI-compatible services, so `provider="groq"` replaces a URL |
 | `sureshot/local.py` | `LocalDecider`: an in-process classifier (embeddings + logistic regression) used as a System 1 tier or a guard |
 | `sureshot/router.py` | `Router`: the cascade, thresholds, retries, outage fallback, guard, audit, cache use |
-| `sureshot/cache.py` | `Cache`: SQLite cache of model answers |
-| `sureshot/store.py` | `Store`: SQLite log of decisions, labels, thresholds, calibration issues, skips, drift snapshots |
+| `sureshot/cache.py` | `Cache`: cache of model answers |
+| `sureshot/store.py` | `Store`: log of decisions, labels, thresholds, calibration issues, skips, drift snapshots |
+| `sureshot/db.py` | The SQLite file or Postgres database that `Store` and `Cache` keep their tables in |
 | `sureshot/calibrate.py` | `calibrate` picks per-question thresholds that meet an accuracy target; `recheck` tests them against labels; `prune` skips tiers that don't pay |
 | `sureshot/learn.py` | `retrain`: trains a better local tier from the log and promotes it only if it helps |
 | `sureshot/review.py` | The queue of questions where a person's label would help most |
@@ -212,7 +213,7 @@ available truth for grading System 1 when no human has labeled the item.
 
 ### The Cache (`cache.py`)
 
-A SQLite store of what each model said, keyed by a hash of (model identity, question name, question definition, text,
+A store (SQLite or Postgres, as for the Store) of what each model said, keyed by a hash of (model identity, question name, question definition, text,
 images). *Why this key:* it caches the *model's answer*, not the *decision*. Changing a threshold, recalibrating, or
 adding a tier therefore needs no cache clearing, while changing the model, the prompt version or the question
 definition automatically misses. A model with no `identity` is not cached.
@@ -233,6 +234,13 @@ SQLite with six tables: `decisions` (every result), `labels` (true answers), `ti
 `skips` (what `prune` stopped asking). Decision ids are random uuids, or come from `Store(path, seed=)` so a
 simulation that logs the same decisions in the same order gets the same ids. It uses WAL mode and a 30 second busy timeout, which fixed `database is
 locked` errors and lost decisions under concurrent load.
+
+The same tables live in Postgres when the path is a `postgresql://` URL (`sureshot/db.py`). The SQL is written once
+for both: `?` placeholders (rewritten for psycopg), `ON CONFLICT` upserts, and `DOUBLE PRECISION` columns, since
+Postgres's `REAL` keeps about seven digits and would round a unix time to minutes. Each process keeps one connection
+pool per URL, closed at exit (left open, its threads delay exit by seconds). Creating the tables takes an advisory
+lock, so replicas starting together don't collide. `tests/conftest.py` runs the whole suite against Postgres when
+`SURESHOT_TEST_POSTGRES` is set, as CI does, apart from the tests of SQLite itself.
 
 `Store.labeled()` is the bridge between logging and learning. It returns one row per graded question and tier with the
 tier's answer and confidence, the **truth**, and a **weight**:
@@ -438,7 +446,8 @@ What load testing found, with fake models that take 20 ms (so these show suresho
 - Single-flight is per process, so with `--workers N` up to N identical requests can still reach the model at once.
 - `/stats` and `/review` read the whole log (about 0.25 s of CPU each at 20,000 decisions of two questions) and slow
   that process's other requests while they run.
-- Separate machines would need to share one log, which SQLite does not support.
+- Separate machines share one log through Postgres. Eight processes starting together on a new database created the
+  tables once and logged every decision.
 
 ## Testing
 

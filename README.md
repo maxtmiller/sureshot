@@ -40,6 +40,7 @@ pip install "sureshot[claude]"      # ClaudeAPI, Claude as System 2 through the 
 pip install "sureshot[local]"       # LocalDecider, the in-process classifier
 pip install "sureshot[api]"         # the HTTP API
 pip install "sureshot[yaml]"        # YAML questions files (included in [api])
+pip install "sureshot[postgres]"    # a Postgres log and cache, shared by several machines
 ```
 
 The extras combine, e.g. `pip install "sureshot[claude,api]"`. Only `httpx` is required: the Quick start uses Claude
@@ -74,7 +75,7 @@ thresholds from your data, add a log and [calibrate](#calibrate-learn-each-quest
 | [System 1 deciders](#system-1) | Fast models with a confidence: `ChatDecider`, vendor classes, `VLLMDecider`, `HTTPDecider`, `LocalDecider` |
 | [System 2 reasoners](#system-2) | Stronger models that answer with a reason: `ClaudeAPI`, `ChatReasoner`, vendor classes, `HTTPReasoner` |
 | [`Router`](#the-router) | Tries the tiers in order, escalates what nobody is sure about, retries, and falls back when a model is down |
-| [`Store`](#log-and-label) | SQLite log of decisions, your labels, and the thresholds sureshot learns |
+| [`Store`](#log-and-label) | Log of decisions, your labels, and the thresholds sureshot learns: a SQLite file, or Postgres |
 | [`Cache`](#cache) | Reuses a model's answer to the same question about the same text |
 | [`review_queue`](#review-queue-what-to-label-next) | The questions where a person's label helps most |
 | [`calibrate`](#calibrate-learn-each-questions-threshold) | Learns per-question thresholds that meet an accuracy target |
@@ -314,6 +315,12 @@ The rest of this section explains each step.
 `Router(log=Store("sureshot.db"))` logs every decision and returns its `id`. Attach the true answer with
 `store.label(id, key, answer)` (or `POST /feedback`), from a person or a downstream outcome.
 
+`Store("postgresql://user:password@host/db")` (`pip install "sureshot[postgres]"`) keeps the same log in Postgres, so
+API replicas on several machines and the nightly job share one log, one set of labels and one set of thresholds: a
+`calibrate` on any of them applies to every router on its next decision. `Cache` takes a Postgres URL the same way.
+The tables are created on first use, so the user needs to be able to create tables. Hosted Postgres works: add
+`?sslmode=require` for TLS, and pooled URLs (PgBouncer, or Supabase's and Neon's poolers) work in transaction mode.
+
 Where nobody has labeled, sureshot grades a tier by System 2's answer. That measures agreement with System 2, which is
 not the truth when System 2 is often wrong, so label where you can and measure with a random sample (below).
 
@@ -468,8 +475,8 @@ docker run -p 8000:8000 -v sureshot-data:/data \
   ghcr.io/maxtmiller/sureshot
 ```
 
-The image has the API and Claude as System 2, and logs to `/data/sureshot.db` (`SURESHOT_DB`), so mount a volume there
-to keep the log. Run the [command line](#command-line) inside it with `docker exec <container> sureshot stats`.
+The image has the API, Claude as System 2 and Postgres support, and logs to `/data/sureshot.db` (`SURESHOT_DB`), so
+mount a volume there to keep the log, or set `SURESHOT_DB` to a `postgresql://` URL to share one log across replicas. Run the [command line](#command-line) inside it with `docker exec <container> sureshot stats`.
 
 | Route | Does |
 | --- | --- |
@@ -495,8 +502,8 @@ which you can also call yourself:
 | `SURESHOT_LOCAL_MODEL` | A saved `LocalDecider` to put in front of System 1 |
 | `SURESHOT_QUESTIONS` | A JSON or YAML [questions file](#questions), checked when the API starts |
 | `SURESHOT_THRESHOLD` | Default threshold (0.8) |
-| `SURESHOT_DB` | SQLite log; enables `/feedback` and `/calibrate` |
-| `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache, and seconds an answer stays valid |
+| `SURESHOT_DB` | The log, a SQLite path or a `postgresql://` URL; enables `/feedback` and `/calibrate` |
+| `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache (a SQLite path or a `postgresql://` URL), and seconds an answer stays valid |
 | `SURESHOT_AUDIT` | Share of confident answers audited (default 0) |
 | `SURESHOT_OPENAI_PASSTHROUGH_URL`, `SURESHOT_ANTHROPIC_PASSTHROUGH_URL`, `SURESHOT_GEMINI_PASSTHROUGH_URL`, each with `_API_KEY` | Where each format's requests that sureshot can't answer are forwarded |
 
@@ -578,7 +585,8 @@ sureshot test golden.jsonl --questions questions.yaml --set email_triage --min-a
   --workers 4` reached about 300, sharing the SQLite log and cache.
 - Identical concurrent requests ask the model once.
 - `/stats` and `/review` read the whole log; poll them rarely and use `since=`.
-- SQLite is for one machine: several workers on one disk are fine, separate machines are not supported.
+- SQLite is for one machine: several workers on one disk are fine. For separate machines, point `SURESHOT_DB` and
+  `SURESHOT_CACHE` at Postgres; each decision then makes a few round trips to it (reading thresholds, logging).
 
 `examples/loadtest.py <url> questions.json --clients 32 --requests 1000` measures your own setup. What load testing
 found is in [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#concurrency).
