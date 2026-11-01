@@ -17,3 +17,12 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev]"
       - run: pytest -q
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f serve/Dockerfile -t sureshot .
+      - run: docker run -d --name sureshot -p 8000:8000 -e SURESHOT_API_KEY=ci sureshot
+      - run: |
+          for i in $(seq 1 30); do curl -sf localhost:8000/health && exit 0; sleep 1; done
+          docker logs sureshot; exit 1
