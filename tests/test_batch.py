@@ -18,15 +18,19 @@ class Batched(FakeClaude):
     """FakeClaude with a batch API: a batch is done on its second check; `drop` rows come back unanswered."""
     batches = True
 
-    def __init__(self, drop=(), stop=False):
+    identity = "batched"
+
+    def __init__(self, drop=(), stop=False, stop_submit=None):
         super().__init__()
-        self.submitted, self.checks, self.direct, self.drop, self.stop = [], 0, 0, set(drop), stop
+        self.submitted, self.checks, self.direct, self.drop, self.stop, self.stop_submit = [], 0, 0, set(drop), stop, stop_submit
 
     def answer(self, state, questions, images=()):
         self.direct += 1
         return super().answer(state, questions, images)
 
     def batch_submit(self, items):
+        if len(self.submitted) + 1 == self.stop_submit:
+            raise KeyboardInterrupt
         self.submitted.append(items)
         return {"id": len(self.submitted)}
 
@@ -39,10 +43,36 @@ class Batched(FakeClaude):
         return {cid: FakeClaude.answer(self, None, qs) for cid, qs in questions.items() if cid not in self.drop}
 
 
-def _run(tmp_path, system2, data=DATA, **kwargs):
+def _run(tmp_path, system2, data=DATA, cache=None, **kwargs):
     store = Store(tmp_path / "sureshot.db")
-    router = Router(FakeDecider(), system2, log=store, questions={"events": QUESTIONS})
+    router = Router(FakeDecider(), system2, log=store, questions={"events": QUESTIONS}, cache=cache)
     return store, decide_rows(router, "events", data, tmp_path / "out.progress", poll=0, **kwargs)
+
+
+def test_batch_answers_are_cached_and_cached_questions_are_not_sent(tmp_path):
+    from sureshot import Cache
+
+    cache = Cache(tmp_path / "cache.db")
+    _run(tmp_path, Batched(), cache=cache)
+    (tmp_path / "again").mkdir()
+    again = Batched()
+    _, results = _run(tmp_path / "again", again, cache=cache)
+    assert again.submitted == [] and again.direct == 0  # every escalation was answered from the cache
+    assert all(r["answers"]["importance"]["source"] == "system2" for r in results[:3])
+    # Live decisions read what the batch cached, too.
+    live = Router(FakeDecider(), again, cache=cache).decide("event 0", QUESTIONS)
+    assert live["answers"]["importance"]["source"] == "system2" and again.direct == 0
+
+
+def test_rows_are_split_into_batches_and_a_stop_between_them_sends_only_the_rest(tmp_path, monkeypatch):
+    monkeypatch.setattr("sureshot.batch.PER_BATCH", 2)
+    with pytest.raises(KeyboardInterrupt):
+        _run(tmp_path, Batched(stop_submit=2))
+    again = Batched()
+    store, results = _run(tmp_path, again)
+    assert [[custom_id for custom_id, _, _ in items] for items in again.submitted] == [["row-2"]]
+    assert again.direct == 0 and len(store.results()) == 3
+    assert all(r["answers"]["importance"]["source"] == "system2" for r in results[:3])
 
 
 def test_escalations_go_out_as_one_batch_and_decisions_are_logged_as_live(tmp_path):
@@ -100,9 +130,15 @@ def test_the_cli_writes_each_row_with_its_answers(tmp_path, capsys, monkeypatch)
     assert out[3]["sureshot_error"] == "no 'text'" and not (tmp_path / "events.decided.csv.progress").exists()
 
 
-def test_parquet_round_trip(tmp_path):
+def test_parquet_round_trip_and_through_the_cli(tmp_path, capsys, monkeypatch):
     write_rows(tmp_path / "a.parquet", [{"text": "x"}, {"text": "y", "extra": 1}])
     assert rows(tmp_path / "a.parquet") == [{"text": "x", "extra": None}, {"text": "y", "extra": 1}]
+    router = Router(FakeDecider(), Batched(), log=Store(tmp_path / "sureshot.db"), questions={"events": QUESTIONS})
+    monkeypatch.setattr(cli, "_router", lambda args: router)
+    cli.main(["decide", "--batch", str(tmp_path / "a.parquet"), "--out", str(tmp_path / "b.parquet"), "--poll", "0"])
+    out = rows(tmp_path / "b.parquet")
+    assert json.loads(capsys.readouterr().out)["decided"] == 2
+    assert out[1]["extra"] == 1 and out[1]["sureshot_importance"] == 4 and out[1]["sureshot_needs_prep"] is True
 
 
 def test_openai_batches_upload_jsonl_and_read_the_output_file(monkeypatch):
@@ -134,6 +170,12 @@ def test_openai_batches_upload_jsonl_and_read_the_output_file(monkeypatch):
     assert reasoner.batch_results(handle, {"row-0": q, "row-1": q}) is None
     status.update(status="completed", output_file_id="file-2")
     assert reasoner.batch_results(handle, {"row-0": q, "row-1": q}) == {"row-0": {"importance": {"answer": 3, "reason": "r"}}}
+    # An expired batch gives what it finished; a failed one, nothing, so its rows are asked directly.
+    status.update(status="expired")
+    assert reasoner.batch_results(handle, {"row-0": q, "row-1": q}) == {"row-0": {"importance": {"answer": 3, "reason": "r"}}}
+    status.clear()
+    status.update(status="failed", errors={"data": [{"message": "bad"}]})
+    assert reasoner.batch_results(handle, {"row-0": q}) == {}
 
 
 def test_claude_batches_drop_fallbacks_and_read_succeeded_results():
