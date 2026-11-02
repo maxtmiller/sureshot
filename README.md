@@ -313,7 +313,10 @@ The rest of this section explains each step.
 ### Log and label
 
 `Router(log=Store("sureshot.db"))` logs every decision and returns its `id`. Attach the true answer with
-`store.label(id, key, answer)` (or `POST /feedback`), from a person or a downstream outcome.
+`store.label(id, key, answer)` (or `POST /feedback`), from a person or a downstream outcome. A tool where people
+already act (Zendesk, GitHub, Jira, Linear, an n8n or Zapier flow) can label through its own webhook: pass your id for
+the item as `decide(..., ref=...)` and map the tool's events to labels in a [webhooks file](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labels-from-webhooks)
+(`SURESHOT_WEBHOOKS`), which `POST /feedback/webhook/<source>` checks the signature of and applies.
 
 `Store("postgresql://user:password@host/db")` (`pip install "sureshot[postgres]"`) keeps the same log in Postgres, so
 API replicas on several machines and the nightly job share one log, one set of labels and one set of thresholds: a
@@ -480,15 +483,16 @@ mount a volume there to keep the log, or set `SURESHOT_DB` to a `postgresql://` 
 
 | Route | Does |
 | --- | --- |
-| `POST /decide` | `state`, `questions` (inline, or a set's name from `SURESHOT_QUESTIONS`, or left out when it has one), optionally `images` (data URIs), `thresholds`, `escalate`. Returns an `id` when logging |
+| `POST /decide` | `state`, `questions` (inline, or a set's name from `SURESHOT_QUESTIONS`, or left out when it has one), optionally `images` (data URIs), `thresholds`, `escalate`, and `ref` (your id for the item). Returns an `id` when logging |
 | `POST /feedback` | `{"id": ..., "labels": {"urgency": 2}}` |
+| `POST /feedback/webhook/<source>` | Another tool's webhook, labeled by the rules `SURESHOT_WEBHOOKS` gives that source, checked by its signature ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labels-from-webhooks)) |
 | `POST /calibrate` | `{"target_accuracy": 0.95}`, optionally `min_samples`, `sample` and `confident` |
 | `GET /stats` | The `stats` report; its options are query parameters, `costs` as JSON |
 | `GET /review` | The review queue; `limit`, `reason`, `sample`, `confident` |
 | `POST /v1/chat/completions`, `/v1/messages`, `/{version}/models/{model}:generateContent` | OpenAI, Anthropic and Gemini requests (see [below](#drop-in-for-openai-anthropic-and-gemini-apps)); the key may also come as `x-api-key`, `x-goog-api-key` or `?key=` |
 | `GET /health` | No token needed |
 
-Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`. The API builds its router with `router_from_env()`,
+Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`, except webhooks, which are checked as their source says. The API builds its router with `router_from_env()`,
 which you can also call yourself:
 
 | Variable | Values |
@@ -501,6 +505,7 @@ which you can also call yourself:
 | `SURESHOT_SYSTEM1_EXTRA`, `SURESHOT_SYSTEM2_EXTRA` | JSON merged into every request, e.g. `{"reasoning_effort": "none"}` |
 | `SURESHOT_LOCAL_MODEL` | A saved `LocalDecider` to put in front of System 1 |
 | `SURESHOT_QUESTIONS` | A JSON or YAML [questions file](#questions), checked when the API starts |
+| `SURESHOT_WEBHOOKS` | A JSON or YAML file of webhook sources for `/feedback/webhook/<source>`, checked when the API starts |
 | `SURESHOT_THRESHOLD` | Default threshold (0.8) |
 | `SURESHOT_DB` | The log, a SQLite path or a `postgresql://` URL; enables `/feedback` and `/calibrate` |
 | `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache (a SQLite path or a `postgresql://` URL), and seconds an answer stays valid |

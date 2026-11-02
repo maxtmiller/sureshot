@@ -39,18 +39,21 @@ def question_sets(data, source="questions"):
     return sets
 
 
-def load(path):
-    """question_sets from a JSON file, or a YAML one (.yaml or .yml, needing PyYAML)."""
+def read(path):
+    """The data in a JSON file, or a YAML one (.yaml or .yml, needing PyYAML)."""
     path = Path(path)
     if path.suffix in (".yaml", ".yml"):
         try:
             import yaml
         except ImportError as e:
-            raise ImportError('YAML questions need PyYAML: pip install "sureshot[yaml]"') from e
-        data = yaml.safe_load(path.read_text())
-    else:
-        data = json.loads(path.read_text())
-    return question_sets(data, str(path))
+            raise ImportError('YAML files need PyYAML: pip install "sureshot[yaml]"') from e
+        return yaml.safe_load(path.read_text())
+    return json.loads(path.read_text())
+
+
+def load(path):
+    """question_sets from a JSON or YAML file."""
+    return question_sets(read(path), str(path))
 
 
 def check_answer(question, answer):
