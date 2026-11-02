@@ -121,7 +121,13 @@ def _batches(router, system2, pending, sent, note, poll, say):
     while waiting:
         for entry in list(waiting):
             asked = {custom_id: {key: pending[int(custom_id[4:])]["ask"][key] for key in keys} for custom_id, keys in entry["asked"].items()}
-            results = router._call(system2.batch_results, entry["batch"], asked)
+            try:
+                results = router._call(system2.batch_results, entry["batch"], asked)
+            except Exception as e:
+                if not _transient(e):
+                    raise
+                say(f"System 2: could not check a batch ({e!r}); trying again")  # a batch waits up to 24 hours: a blip must not end the run
+                results = None
             if results is not None:
                 waiting.remove(entry)
                 got |= {int(custom_id[4:]): answers for custom_id, answers in results.items()}

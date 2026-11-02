@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+import httpx
 import pytest
 import sureshot.adapters.base as backends
 import sureshot.cli as cli
@@ -20,9 +21,9 @@ class Batched(FakeClaude):
 
     identity = "batched"
 
-    def __init__(self, drop=(), stop=False, stop_submit=None):
+    def __init__(self, drop=(), stop=False, stop_submit=None, flaky=False):
         super().__init__()
-        self.submitted, self.checks, self.direct, self.drop, self.stop, self.stop_submit = [], 0, 0, set(drop), stop, stop_submit
+        self.submitted, self.checks, self.direct, self.drop, self.stop, self.stop_submit, self.flaky = [], 0, 0, set(drop), stop, stop_submit, flaky
 
     def answer(self, state, questions, images=()):
         self.direct += 1
@@ -38,6 +39,8 @@ class Batched(FakeClaude):
         self.checks += 1
         if self.stop:
             raise KeyboardInterrupt
+        if self.checks == 1 and self.flaky:
+            raise httpx.ConnectError("nodename nor servname provided")
         if self.checks % 2:
             return None
         return {cid: FakeClaude.answer(self, None, qs) for cid, qs in questions.items() if cid not in self.drop}
@@ -98,6 +101,15 @@ def test_a_stopped_run_resumes_without_asking_or_logging_again(tmp_path):
     assert len(store.results()) == 3 and all(r["answers"]["importance"]["source"] == "system2" for r in results[:3])
     with pytest.raises(ValueError, match="other rows or questions"):
         _run(tmp_path, Batched(), data=DATA[:2])
+
+
+def test_a_network_blip_while_waiting_does_not_end_the_run(tmp_path):
+    system2 = Batched(flaky=True)
+    router = Router(FakeDecider(), system2, log=Store(tmp_path / "sureshot.db"), questions={"events": QUESTIONS}, retries=0)
+    said = []
+    results = decide_rows(router, "events", DATA, tmp_path / "out.progress", poll=0, say=said.append)
+    assert len(system2.submitted) == 1 and all(r["answers"]["importance"]["source"] == "system2" for r in results[:3])
+    assert any("could not check a batch" in message for message in said)
 
 
 def test_what_a_batch_did_not_answer_is_asked_directly(tmp_path):

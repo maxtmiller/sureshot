@@ -51,10 +51,16 @@ class ClaudeAPI:
 
     def batch_results(self, handle, questions):
         """None while the batch runs; then {custom_id: answers} for each request that succeeded."""
-        if self.client.messages.batches.retrieve(handle["anthropic"]).processing_status != "ended":
-            return None
+        import anthropic
+
+        try:
+            if self.client.messages.batches.retrieve(handle["anthropic"]).processing_status != "ended":
+                return None
+            items = list(self.client.messages.batches.results(handle["anthropic"]))
+        except (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError) as e:
+            raise Outage(repr(e)) from e
         results = {}
-        for item in self.client.messages.batches.results(handle["anthropic"]):
+        for item in items:
             if item.result.type == "succeeded" and item.custom_id in questions:
                 try:
                     results[item.custom_id] = self._read(item.result.message)
