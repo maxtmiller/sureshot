@@ -1,14 +1,17 @@
 """HTTP API: POST /decide, /feedback and /calibrate with a bearer token (SURESHOT_API_KEY), and the OpenAI, Anthropic
-and Gemini request formats for apps that already speak one (see formats.py). Run locally with `uvicorn sureshot.api:app`."""
+and Gemini request formats for apps that already speak one (see formats.py), and MCP at /mcp (see mcp.py). Run locally
+with `uvicorn sureshot.api:app`."""
 import os
 import hmac
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 from urllib.parse import parse_qs
 from fastapi import BackgroundTasks, Body, FastAPI, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 from sureshot.adapters.base import post
 from sureshot.calibrate import calibrate
@@ -17,14 +20,35 @@ from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
 from sureshot.questions import load
-from sureshot import slack, webhooks
+from sureshot import mcp, slack, webhooks
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-if os.environ.get("SURESHOT_QUESTIONS"):
-    load(os.environ["SURESHOT_QUESTIONS"])  # a bad questions file fails at startup, not on the first request
+# A bad questions file fails at startup, not on the first request.
+_sets = load(os.environ["SURESHOT_QUESTIONS"]) if os.environ.get("SURESHOT_QUESTIONS") else {}
 _webhooks = webhooks.load(os.environ["SURESHOT_WEBHOOKS"]) if os.environ.get("SURESHOT_WEBHOOKS") else {}
-app = FastAPI(title="sureshot")
 _router = None
+
+
+def _mcp_router():
+    try:
+        return router()
+    except HTTPException as e:
+        raise RuntimeError(e.detail) from e
+
+
+_mcp = mcp.server(_mcp_router, _sets)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    # A session manager runs only once, so each start of the app makes a new one. Stateless, so any worker can answer
+    # any request; the bearer token, not the Host header, is what keeps other sites out.
+    _mcp.streamable_http_app(stateless_http=True, json_response=True, transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False))
+    async with _mcp.session_manager.run():
+        yield
+
+
+app = FastAPI(title="sureshot", lifespan=lifespan)
 
 
 def router():
@@ -171,6 +195,21 @@ def calibrate_thresholds(request: CalibrateRequest, authorization: str = Header(
     authorize(authorization)
     return calibrate(log(), request.target_accuracy, request.min_samples, sample=request.sample, confident=request.confident)
 
+
+
+class MCPEndpoint:
+    """MCP's streamable HTTP transport, with the same bearer token as the rest of the API."""
+
+    async def __call__(self, scope, receive, send):
+        authorization = dict(scope["headers"]).get(b"authorization", b"").decode("latin-1")
+        try:
+            authorize(authorization)
+        except HTTPException as e:
+            return await JSONResponse({"detail": e.detail}, e.status_code)(scope, receive, send)
+        await _mcp.session_manager.handle_request(scope, receive, send)
+
+
+app.add_route("/mcp", MCPEndpoint(), methods=["GET", "POST", "DELETE"])
 
 
 def passthrough(fmt, body, path, headers):
