@@ -37,14 +37,19 @@ def _choices(question):
     return [(key, key, description) for key, description in question["criteria"].items()]
 
 
+def _alias(answer):
+    # Label Studio reads an attribute that looks like a boolean or a number as one, and then rejects it as an alias.
+    return "answer:" + json.dumps(answer)
+
+
 def label_config(questions):
-    """The labeling interface: the text, then each question as a single choice whose alias is the answer's JSON."""
+    """The labeling interface: the text, then each question as a single choice whose alias names the answer."""
     names(questions)
     parts = ['<View>', '  <Text name="text" value="$text"/>']
     for key, question in questions.items():
         parts.append(f"  <Header value={quoteattr(f'{key}: ' + question.get('instructions', ''))}/>")
         parts.append(f'  <Choices name="{_name(key)}" toName="text" choice="single-radio">')
-        parts += [f"    <Choice value={quoteattr(str(value))} alias={quoteattr(json.dumps(answer))}" + (f" hint={quoteattr(hint)}" if hint else "") + "/>"
+        parts += [f"    <Choice value={quoteattr(str(value))} alias={quoteattr(_alias(answer))}" + (f" hint={quoteattr(hint)}" if hint else "") + "/>"
                   for value, answer, hint in _choices(question)]
         parts.append("  </Choices>")
     return "\n".join(parts + ["</View>"])
@@ -98,7 +103,7 @@ def _answer(question, chosen):
     """(answer, None) for a chosen option, saved as its alias or, by older interfaces, its visible value; else (None,
     why)."""
     for value, answer, _ in _choices(question):
-        if chosen in (json.dumps(answer), str(value)):
+        if chosen in (_alias(answer), str(value)):
             return answer, None
     return None, "not an answer from sureshot's labeling interface"
 

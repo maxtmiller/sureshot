@@ -59,8 +59,8 @@ def _store(tmp_path, n=2):
 def test_the_interface_has_a_single_choice_per_question():
     config = label_config(QUESTIONS)
     assert '<Text name="text" value="$text"/>' in config and config.count("<Choices ") == 3
-    assert '<Choice value="Yes" alias="true"/>' in config and '<Choice value="2 Normal" alias="2"/>' in config
-    assert '<Choice value="meeting" alias=\'"meeting"\' hint="A meeting"/>' in config
+    assert '<Choice value="Yes" alias="answer:true"/>' in config and '<Choice value="2 Normal" alias="answer:2"/>' in config
+    assert '<Choice value="meeting" alias=\'answer:"meeting"\' hint="A meeting"/>' in config
     with pytest.raises(ValueError, match="same name"):
         label_config({"a.b": QUESTIONS["needs_prep"], "a_b": QUESTIONS["needs_prep"]})
 
@@ -73,9 +73,9 @@ def test_push_once_and_pull_the_annotations(tmp_path):
     assert push(store, studio, "events", QUESTIONS, items) == {"project": 1, "tasks": 0, "questions": 0}
     assert server.projects[1]["title"] == "sureshot: events" and server.projects[1]["label_config"] == label_config(QUESTIONS)
     first, second = server.tasks[1]
-    server.annotate(1, 0, event_type='"interview"', importance="2 Normal")  # the visible value also maps back
-    server.annotate(1, 1, importance="4")
-    server.annotate(1, 1, importance="3", needs_prep="false")
+    server.annotate(1, 0, event_type='answer:"interview"', importance="2 Normal")  # the visible value also maps back
+    server.annotate(1, 1, importance="answer:4")
+    server.annotate(1, 1, importance="answer:3", needs_prep="answer:false")
     assert pull(store, studio, "events", QUESTIONS) == {"project": 1, "labeled": 3, "unchanged": 0, "skipped": {"annotators disagree": 1}}
     one, two = first["data"]["sureshot_id"], second["data"]["sureshot_id"]
     assert store.labels() == {(one, "event_type"): "interview", (one, "importance"): 2, (two, "needs_prep"): False}
@@ -90,7 +90,7 @@ def test_pull_skips_what_it_cannot_label(tmp_path):
     push(store, studio, "events", QUESTIONS, review_queue(store, sample=1.0))
     server.annotate(1, 0, importance="ten")
     server.tasks[1].append({"id": 2, "data": {"text": "x", "sureshot_id": "gone"}, "annotations": []})
-    server.annotate(1, 1, importance="1")
+    server.annotate(1, 1, importance="answer:1")
     assert pull(store, studio, "events", QUESTIONS)["skipped"] == {"not an answer from sureshot's labeling interface": 1, "no logged decision": 1}
 
 
@@ -135,6 +135,6 @@ def test_cli(tmp_path, monkeypatch, capsys):
     db = str(tmp_path / "sureshot.db")
     cli.main(["label-studio", "push", "--db", db, "--questions", str(questions), "--sample", "1", "--limit", "4"])
     assert json.loads(capsys.readouterr().out) == {"project": 1, "tasks": 2, "questions": 4}
-    server.annotate(1, 0, needs_prep="true")
+    server.annotate(1, 0, needs_prep="answer:true")
     cli.main(["label-studio", "pull", "--db", db, "--questions", str(questions)])
     assert json.loads(capsys.readouterr().out)["labeled"] == 1
