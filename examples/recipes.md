@@ -9,6 +9,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 - [n8n, Zapier and Make](#n8n-zapier-and-make): two HTTP calls
 - [Email triage](#email-triage): the personal case
 - [Support-ticket routing](#support-ticket-routing): the company case
+- [Labels from webhooks](#labels-from-webhooks): Zendesk, GitHub, Jira, Linear or any automation, with no code
 
 ## Nightly upkeep
 
@@ -126,3 +127,39 @@ Call `route()` from the helpdesk's new-ticket webhook and set the team and prior
 from its ticket-updated webhook when an agent changes the team. Every correction becomes a label, so the nightly
 calibration learns from the agents' work with no separate labeling step. Sample the review queue too
 (`SAMPLE=0.02`): corrections alone come only from tickets someone noticed were wrong.
+
+## Labels from webhooks
+
+With no code of your own, the helpdesk can send its own webhook to sureshot. Pass your id for the item as `ref` when
+deciding, e.g. `route(text, ticket_id)` or `{"state": ..., "ref": "12345"}` to `POST /decide`, and point the tool's
+webhook at `POST /feedback/webhook/<source>`, with a [webhooks file](webhooks.yaml) saying which event fields are which
+labels:
+
+```yaml
+zendesk:                                 # POST /feedback/webhook/zendesk
+  verify: zendesk                        # checks Zendesk's signature
+  secret: ZENDESK_WEBHOOK_SECRET         # the environment variable holding it
+  events:
+    - ref: ticket_id                     # the ref given to /decide
+      labels:
+        team: {from: group, map: {Billing: billing, Technical Support: technical}}
+```
+
+```bash
+SURESHOT_WEBHOOKS=examples/webhooks.yaml ZENDESK_WEBHOOK_SECRET=... sureshot serve
+```
+
+- `verify` is `zendesk`, `github`, `jira` or `linear` for their signed webhooks, or `bearer` (the default) for
+  anything that can send `Authorization: Bearer $SURESHOT_API_KEY`, such as n8n, Zapier or Make. The API checks the
+  file when it starts, including that each secret is set.
+- An event takes the rules whose `when` fields match. A rule finds the decision by `ref` (the latest decision logged
+  with it) or by `id` (a field holding the decision id itself, if the tool stores it). Each label comes `from` a field
+  (dotted, `labels.0.name` for a list), translated by `map` when given, or is a fixed `value`.
+- The response lists what was labeled and skipped (no logged decision, a value not in the map, an invalid answer), always
+  with a 200, so the tool does not retry an event about an item sureshot never saw. A repeated event sets the same labels.
+- Send an event that every item reaches, such as a ticket being solved with its final team, rather than only
+  reassignments. Labels count toward confirming a threshold only on the decisions in the random review sample, and
+  if only corrections arrive, those decisions get labels only when the model was wrong, so it looks worse than it is
+  and its thresholds are never confirmed.
+- Gmail has no webhook with the label in it (its push notifications say only that something changed), so for email
+  triage label with `sureshot review --label`, or from a script that reads label changes and calls `/feedback`.

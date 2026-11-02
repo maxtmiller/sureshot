@@ -15,9 +15,10 @@ URL, HEADERS = os.environ.get("SURESHOT_URL", "http://localhost:8000"), {"Author
 PRIORITIES = ["low", "normal", "high", "urgent"]
 
 
-def route(text):
-    """{"team", "priority", "decision"}: keep "decision" with the ticket, to report a reassignment."""
-    response = httpx.post(f"{URL}/decide", json={"state": text, "questions": "ticket_routing"}, headers=HEADERS, timeout=60)
+def route(text, ticket_id=None):
+    """{"team", "priority", "decision"}: keep "decision" with the ticket, to report a reassignment. With the ticket's
+    id as the ref, a helpdesk webhook can label the decision instead (see examples/webhooks.yaml)."""
+    response = httpx.post(f"{URL}/decide", json={"state": text, "questions": "ticket_routing", "ref": ticket_id}, headers=HEADERS, timeout=60)
     response.raise_for_status()
     result = response.json()
     return {"team": result["answers"]["team"]["answer"], "priority": PRIORITIES[result["answers"]["priority"]["answer"]], "decision": result["id"]}

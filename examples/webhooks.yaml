@@ -1,0 +1,30 @@
+# Webhook sources for POST /feedback/webhook/<source> (SURESHOT_WEBHOOKS=examples/webhooks.yaml). See examples/recipes.md.
+
+# A Zendesk trigger on "Ticket is solved" that notifies a webhook (signed, secret in ZENDESK_WEBHOOK_SECRET) with the
+# JSON body {"ticket_id": "{{ticket.id}}", "group": "{{ticket.group.name}}", "priority": "{{ticket.priority}}"}.
+# route() in ticket_routing.py passed the ticket id as the decision's ref. Map your own group names to the team keys.
+zendesk:
+  verify: zendesk
+  secret: ZENDESK_WEBHOOK_SECRET
+  events:
+    - ref: ticket_id
+      labels:
+        team:
+          from: group
+          map: {Billing: billing, Technical Support: technical, Accounts: account, Sales: sales}
+        priority:
+          from: priority
+          map: {Low: 0, Normal: 1, High: 2, Urgent: 3}
+
+# A GitHub repository webhook (content type application/json, "Issues" events, secret in GITHUB_WEBHOOK_SECRET) for
+# an app that decided on each issue with its URL as the ref.
+github:
+  verify: github
+  secret: GITHUB_WEBHOOK_SECRET
+  events:
+    - when: {action: closed}
+      ref: issue.html_url
+      labels:
+        kind:
+          from: issue.labels.0.name
+          map: {bug: bug, enhancement: feature, question: question}

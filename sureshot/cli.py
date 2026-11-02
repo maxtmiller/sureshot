@@ -54,7 +54,7 @@ def serve(args):
 def decide(args):
     body = _json(Path(args.file).read_text() if args.file else sys.stdin.read(), args.file or "stdin")
     try:
-        return _router(args).decide(body["state"], body.get("questions"), body.get("images", ()), body.get("thresholds"), body.get("escalate", True))
+        return _router(args).decide(body["state"], body.get("questions"), body.get("images", ()), body.get("thresholds"), body.get("escalate", True), body.get("ref"))
     except KeyError as e:
         sys.exit(f"sureshot: the request needs {e}")
     except ValueError as e:

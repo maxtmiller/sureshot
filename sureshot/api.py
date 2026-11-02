@@ -5,7 +5,8 @@ import hmac
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import Body, FastAPI, Header, HTTPException, Query
+from fastapi import Body, FastAPI, Header, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sureshot.adapters.base import post
@@ -15,10 +16,12 @@ from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
 from sureshot.questions import load
+from sureshot import webhooks
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 if os.environ.get("SURESHOT_QUESTIONS"):
     load(os.environ["SURESHOT_QUESTIONS"])  # a bad questions file fails at startup, not on the first request
+_webhooks = webhooks.load(os.environ["SURESHOT_WEBHOOKS"]) if os.environ.get("SURESHOT_WEBHOOKS") else {}
 app = FastAPI(title="sureshot")
 _router = None
 
@@ -43,6 +46,7 @@ class DecideRequest(BaseModel):
     images: list[str] = []
     thresholds: dict[str, float] = {}
     escalate: bool = True
+    ref: str | None = None
 
 
 @app.get("/health")
@@ -79,9 +83,25 @@ class CalibrateRequest(BaseModel):
 def decide(request: DecideRequest, authorization: str = Header(default="")):
     authorize(authorization)
     try:
-        return router().decide(request.state, request.questions, request.images, request.thresholds, request.escalate)
+        return router().decide(request.state, request.questions, request.images, request.thresholds, request.escalate, request.ref)
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+@app.post("/feedback/webhook/{source}")
+async def feedback_webhook(source: str, request: Request):
+    """Labels from another tool's webhook, by the rules SURESHOT_WEBHOOKS gives the source (see webhooks.py). It
+    answers 200 with what was labeled and skipped, so the sender does not retry an event that matched nothing."""
+    if source not in _webhooks:
+        raise HTTPException(404, f"no webhook source {source!r} in SURESHOT_WEBHOOKS")
+    body = await request.body()
+    if not webhooks.verify(_webhooks[source], request.headers, body):
+        raise HTTPException(401, "missing or wrong webhook signature")
+    try:
+        event = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "the webhook body must be JSON")
+    return {"events": await run_in_threadpool(lambda: webhooks.apply(log(), source, _webhooks[source], event))}
 
 
 @app.post("/feedback")

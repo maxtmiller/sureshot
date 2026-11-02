@@ -139,10 +139,11 @@ class Router:
         tally["misses"] += len(missing)
         return hits | fresh
 
-    def decide(self, state, questions=None, images=(), thresholds=None, escalate=True):
+    def decide(self, state, questions=None, images=(), thresholds=None, escalate=True, ref=None):
         """Returns {"answers": {key: {answer, confidence, source, ...}}, "unsure": [...], "escalated": [...],
         "degraded", "cache" ({"hits", "misses"}: how many model answers came from the cache; None without one), "latency_ms": {"system1" (all tiers), "tiers" (each), "system2" (None if not called), "total"}},
-        plus "id" when a log is set (pass it to the log's label() to grade the answer).
+        plus "id" when a log is set (pass it to the log's label() to grade the answer). ref, your own id for the
+        content (a ticket or message id), is logged with the decision so a webhook can label it (see sureshot.webhooks).
 
         Each question goes to the first tier; if its confidence is below that tier's threshold it goes to the next.
         A tier's threshold is thresholds[key] (the same for every tier), else the log's calibrated one for that tier
@@ -244,7 +245,7 @@ class Router:
         result = {"answers": answers, "unsure": remaining, "escalated": escalated, "degraded": degraded or None, "cache": tally if self.cache else None,
                   "latency_ms": {k: v and round(v, 1) for k, v in latency.items()} | {"tiers": [round(ms, 1) for ms in tier_ms]}}
         if self.log and self.record:
-            result["id"] = self.log.log(state, questions, result | {"audit_rate": self.audit}, len(images))
+            result["id"] = self.log.log(state, questions, result | {"audit_rate": self.audit}, len(images), ref)
         return result
 
     def test(self, cases, questions=None, thresholds=None):

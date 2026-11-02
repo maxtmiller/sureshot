@@ -10,7 +10,7 @@ from sureshot.questions import check_answer
 
 # DOUBLE PRECISION, since Postgres's REAL has too few digits for a unix time (SQLite reads it as REAL either way).
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts DOUBLE PRECISION, state TEXT, questions TEXT, images INTEGER, result TEXT);
+CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, ts DOUBLE PRECISION, state TEXT, questions TEXT, images INTEGER, result TEXT, ref TEXT);
 CREATE TABLE IF NOT EXISTS labels (decision_id TEXT, key TEXT, answer TEXT, source TEXT, ts DOUBLE PRECISION, PRIMARY KEY (decision_id, key));
 CREATE TABLE IF NOT EXISTS calibration_issues (tier INTEGER, key TEXT, reason TEXT, best_target DOUBLE PRECISION, target DOUBLE PRECISION, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS tier_thresholds (tier INTEGER, key TEXT, value DOUBLE PRECISION, PRIMARY KEY (tier, key));
@@ -19,6 +19,17 @@ CREATE TABLE IF NOT EXISTS unconfirmed (tier INTEGER, key TEXT, PRIMARY KEY (tie
 CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts DOUBLE PRECISION, threshold DOUBLE PRECISION, target DOUBLE PRECISION,
                                          escalation_rate DOUBLE PRECISION, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
 """
+REF_INDEX = "CREATE INDEX IF NOT EXISTS decisions_ref ON decisions (ref)"
+
+
+def _add_column(db, table, column):
+    if column.split()[0] in {row[1] for row in db.execute(f"PRAGMA table_info({table})")}:
+        return
+    try:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column}")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e):  # another process added it first
+            raise
 
 
 class Store:
@@ -30,31 +41,32 @@ class Store:
         with self._db() as db:
             create(db, self._database.postgres, SCHEMA)
             if self._database.postgres:
+                db.execute("ALTER TABLE decisions ADD COLUMN IF NOT EXISTS ref TEXT")  # a log made before decisions had refs
+                db.execute(REF_INDEX)
                 return
-            if "histogram" not in {row[1] for row in db.execute("PRAGMA table_info(calibrations)")}:
-                try:  # a log made before drift compared the whole confidence distribution
-                    db.execute("ALTER TABLE calibrations ADD COLUMN histogram TEXT")
-                except sqlite3.OperationalError as e:
-                    if "duplicate column" not in str(e):  # another process added it first
-                        raise
-            if "ts" not in {row[1] for row in db.execute("PRAGMA table_info(labels)")}:
-                try:  # a log made before labels were timed
-                    db.execute("ALTER TABLE labels ADD COLUMN ts REAL")
-                except sqlite3.OperationalError as e:
-                    if "duplicate column" not in str(e):
-                        raise
+            _add_column(db, "calibrations", "histogram TEXT")  # a log made before drift compared the whole confidence distribution
+            _add_column(db, "labels", "ts REAL")  # a log made before labels were timed
+            _add_column(db, "decisions", "ref TEXT")
+            db.execute(REF_INDEX)
             db.execute("PRAGMA journal_mode=WAL")  # readers (stats, review) stop blocking the writers that log decisions
 
     def _db(self):
         return self._database.connect()
 
-    def log(self, state, questions, result, images=0):
-        """Records a decision (the Router's result, with its audit_rate) and returns its id."""
+    def log(self, state, questions, result, images=0, ref=None):
+        """Records a decision (the Router's result, with its audit_rate) and returns its id. ref is your own id for what
+        was decided on (a ticket or message id), which find() and webhook labels look the decision up by."""
         decision_id = uuid.UUID(int=self._ids.getrandbits(128)).hex if self._ids else uuid.uuid4().hex
         with self._db() as db:
-            db.execute("INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?)",
-                       (decision_id, time.time(), state, json.dumps(questions), images, json.dumps(result)))
+            db.execute("INSERT INTO decisions (id, ts, state, questions, images, result, ref) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       (decision_id, time.time(), state, json.dumps(questions), images, json.dumps(result), ref))
         return decision_id
+
+    def find(self, ref):
+        """The id of the latest decision logged with this ref, or None."""
+        with self._db() as db:
+            row = db.execute("SELECT id FROM decisions WHERE ref = ? ORDER BY ts DESC LIMIT 1", (ref,)).fetchone()
+        return row and row[0]
 
     def label(self, decision_id, key, answer, source="human"):
         """Sets the true answer to one question of a logged decision, replacing any earlier label."""
