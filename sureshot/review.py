@@ -1,13 +1,14 @@
 """The questions worth a person's answer: a random sample, where the models disagree, or where nobody was sure."""
 import zlib
+from sureshot.store import IMPORTED
 
 REASONS = ("sample", "confident", "disagreement", "audit_disagreement", "unresolved")
 
 
 def in_sample(decision_id, rate):
     """Whether a decision is in the random labeling sample: a fixed share of decisions, picked by id, so the same
-    ones stay picked however often the queue is read."""
-    return rate > 0 and zlib.crc32(decision_id.encode()) % 10_000 < rate * 10_000
+    ones stay picked however often the queue is read. Imported decisions never are: they aren't today's traffic."""
+    return rate > 0 and not decision_id.startswith(IMPORTED) and zlib.crc32(decision_id.encode()) % 10_000 < rate * 10_000
 
 
 def review_queue(store, limit=50, reasons=REASONS, since=0.0, sample=0.0, confident=0.0, skip=frozenset(), keys=None):

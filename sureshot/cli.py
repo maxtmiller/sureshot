@@ -138,6 +138,19 @@ def review(args):
     label(store, items)
 
 
+def import_labels(args):
+    from sureshot.importer import import_rows, rows
+
+    router = _router(args)
+    if router.log is None:
+        sys.exit("sureshot: set SURESHOT_DB or pass --db: imported rows are logged there")
+    try:
+        questions = router.question_set(args.set)
+        return import_rows(router, router.log, questions, rows(args.file)[:args.limit], args.text, args.escalate, args.workers)
+    except ValueError as e:
+        sys.exit(f"sureshot: {e}")
+
+
 def label_studio(args):
     from sureshot import labelstudio
     from sureshot.questions import load
@@ -182,6 +195,7 @@ COMMANDS = {
     "stats": lambda a: stats(_store(a), a.since, a.min_samples, costs=_costs(a.costs) if a.costs else None, sample=a.sample, confident=a.confident),
     "review": review,
     "label-studio": label_studio,
+    "import": import_labels,
     "test": test,
 }
 
@@ -237,6 +251,14 @@ def parser():
     how.add_argument("--label", action="store_true", help="show each item and ask for its true answer")
     how.add_argument("--slack", action="store_true", help="post the items not posted before to Slack, to label with buttons (see sureshot.slack)")
     s.add_argument("--channel", help="the Slack channel id (default: SURESHOT_SLACK_CHANNEL)")
+
+    s = sub.add_parser("import", parents=[common, routed], help="decide and log labeled examples you already have (CSV or JSONL), so calibrate and retrain use them")
+    s.add_argument("file")
+    s.add_argument("--set", help="the question set (default: the file's only set)")
+    s.add_argument("--text", default="text", help="the column holding the content")
+    s.add_argument("--limit", type=int, help="import at most this many rows")
+    s.add_argument("--escalate", action="store_true", help="also ask System 2 about what System 1 is unsure of (costs more)")
+    s.add_argument("--workers", type=int, default=4)
 
     s = sub.add_parser("label-studio", parents=[common, routed, sampled], help="send review items to a Label Studio project (push), or save its annotations as labels (pull)")
     s.add_argument("action", choices=["push", "pull"])

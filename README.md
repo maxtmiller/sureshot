@@ -351,6 +351,10 @@ and each click is a label ([recipe](https://github.com/maxtmiller/sureshot/blob/
 An annotation team can label in Label Studio: `sureshot label-studio push` sends the queue to a project built from your
 questions, and `sureshot label-studio pull` saves the annotations ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labeling-in-label-studio)).
 
+Labeled examples you already have count from day one: `sureshot import labels.csv` (or JSONL) asks System 1 about each
+row and logs it with its labels, so `calibrate` grades on them and `retrain` learns from them ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#importing-labeled-data)).
+Imported decisions aren't today's traffic, so they never confirm a threshold and stay out of `stats`, drift and the review queue.
+
 ### Calibrate: learn each question's threshold
 
 ```python
@@ -578,6 +582,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | `sureshot prune --costs '{...}' [--tier]` | [Prunes](#recheck-and-prune) the questions a tier doesn't pay for |
 | `sureshot stats [--costs '{...}']` | The [stats](#stats-and-drift) report |
 | `sureshot review [--limit] [--reason] [--label \| --slack [--channel]]` | The [review queue](#review-queue-what-to-label-next). With `--label`, shows each item and asks for its true answer (Enter accepts the router's, `-` skips, Ctrl-D stops), saving each label as it is given. With `--slack`, posts the items not posted before to Slack to label with buttons |
+| `sureshot import FILE [--set] [--text] [--limit] [--escalate] [--workers]` | Decides and logs labeled examples you already have (CSV or JSONL, a column per question), so calibrate and retrain use them |
 | `sureshot label-studio push\|pull [--set] [--limit]` | Sends new review items of a question set to its Label Studio project, or saves the project's annotations as labels |
 | `sureshot test golden.jsonl [--questions file] [--set name] [--min-accuracy]` | [Scores](#testing-and-comparing-models) the router without logging; exits 1 below `--min-accuracy` |
 

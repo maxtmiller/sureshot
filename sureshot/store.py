@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts DOUBLE PRECI
 CREATE TABLE IF NOT EXISTS posts (decision_id TEXT, key TEXT, ts DOUBLE PRECISION, PRIMARY KEY (decision_id, key));
 """
 REF_INDEX = "CREATE INDEX IF NOT EXISTS decisions_ref ON decisions (ref)"
+IMPORTED = "import-"
 
 
 def _add_column(db, table, column):
@@ -54,10 +55,12 @@ class Store:
     def _db(self):
         return self._database.connect()
 
-    def log(self, state, questions, result, images=0, ref=None):
+    def log(self, state, questions, result, images=0, ref=None, imported=False):
         """Records a decision (the Router's result, with its audit_rate) and returns its id. ref is your own id for what
-        was decided on (a ticket or message id), which find() and webhook labels look the decision up by."""
+        was decided on (a ticket or message id), which find() and webhook labels look the decision up by. An imported
+        decision (see sureshot.importer) is not live traffic: its id starts with IMPORTED."""
         decision_id = uuid.UUID(int=self._ids.getrandbits(128)).hex if self._ids else uuid.uuid4().hex
+        decision_id = IMPORTED + decision_id if imported else decision_id
         with self._db() as db:
             db.execute("INSERT INTO decisions (id, ts, state, questions, images, result, ref) VALUES (?, ?, ?, ?, ?, ?, ?)",
                        (decision_id, time.time(), state, json.dumps(questions), images, json.dumps(result), ref))
@@ -169,9 +172,10 @@ class Store:
         return [dict(zip(("tier", "key", "reason", "best_target", "target"), row)) for row in rows]
 
     def results(self, since=0.0):
-        """[(id, ts, questions, result)] of every logged decision since a unix time, oldest first."""
+        """[(id, ts, questions, result)] of every live decision logged since a unix time, oldest first: imported ones
+        are left out, since this is what stats, drift, prune and the review queue measure traffic with."""
         with self._db() as db:
-            rows = db.execute("SELECT id, ts, questions, result FROM decisions WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
+            rows = db.execute("SELECT id, ts, questions, result FROM decisions WHERE ts >= ? AND id NOT LIKE ? ORDER BY ts", (since, IMPORTED + "%")).fetchall()
         return [(decision_id, ts, json.loads(questions), json.loads(result)) for decision_id, ts, questions, result in rows]
 
     def states(self, decision_ids):
