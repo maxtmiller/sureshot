@@ -142,6 +142,8 @@ def import_labels(args):
     from sureshot.importer import import_rows, rows
 
     router = _router(args)
+    if router.log is None:
+        sys.exit("sureshot: set SURESHOT_DB or pass --db: imported rows are logged there")
     try:
         questions = router.question_set(args.set)
         return import_rows(router, router.log, questions, rows(args.file)[:args.limit], args.text, args.escalate, args.workers)

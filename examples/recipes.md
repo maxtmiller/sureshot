@@ -12,6 +12,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 - [Labels from webhooks](#labels-from-webhooks): Zendesk, GitHub, Jira, Linear or any automation, with no code
 - [Labeling in Slack](#labeling-in-slack): the review queue as messages with a button per answer
 - [Labeling in Label Studio](#labeling-in-label-studio): the review queue as tasks for an annotation team
+- [Importing labeled data](#importing-labeled-data): start from the labels you already have
 
 ## Nightly upkeep
 
@@ -215,3 +216,32 @@ sureshot label-studio pull --questions examples/questions.yaml --set ticket_rout
 - Changing a question set updates the project's interface on the next push. Label Studio refuses to drop a question
   that already has annotations; make a new set (and so a new project) for that.
 - Label Studio 1.23 turns legacy tokens off by default; a personal access token works either way.
+
+## Importing labeled data
+
+Labeled examples you already have, from an old classifier, a spreadsheet or a dataset, give calibration and
+`retrain` something to learn from before any new labels arrive. Put them in a CSV (with a header) or JSONL file
+with the text and a column per question:
+
+```csv
+text,team,priority
+I was charged twice for my order,billing,High
+The app crashes when I upload a photo,technical,2
+```
+
+```bash
+sureshot import labels.csv --questions examples/questions.yaml --set ticket_routing --limit 2000
+sureshot calibrate --target 0.9          # grades System 1 on the imported labels
+sureshot retrain                         # trains the classifier on them (with SURESHOT_LOCAL_MODEL)
+```
+
+- Each row is asked of System 1, one call per question, so `--limit` caps the cost. `--escalate` also asks System 2
+  about what System 1 is unsure of, which costs more and isn't needed: the labels are the truth.
+- Cells are read as a spreadsheet writes them: yes/no, true/false or 1/0; a score level's position or name; a
+  choice's key in any case. An empty cell is no label. Rows with an invalid label are skipped and listed in `errors`.
+- Running it again skips rows already imported (same text), so a stopped import can be resumed.
+- Imported decisions count for grading and training, but not as today's traffic: they are never in the random review
+  sample, so their labels can't confirm a threshold (old data need not look like what comes in now), and `stats`,
+  drift, `prune` and the review queue leave them out. Confirmation still comes from labels on live decisions.
+- A Hugging Face dataset can be saved as JSONL first, mapping class numbers to your option keys:
+  `datasets.load_dataset("banking77")["train"].to_json("labels.jsonl")`.
