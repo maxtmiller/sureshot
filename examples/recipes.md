@@ -11,6 +11,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 - [Support-ticket routing](#support-ticket-routing): the company case
 - [Labels from webhooks](#labels-from-webhooks): Zendesk, GitHub, Jira, Linear or any automation, with no code
 - [Labeling in Slack](#labeling-in-slack): the review queue as messages with a button per answer
+- [Labeling in Label Studio](#labeling-in-label-studio): the review queue as tasks for an annotation team
 
 ## Nightly upkeep
 
@@ -192,3 +193,25 @@ five). A click saves the label and replaces the buttons with who answered.
 - The text is posted as plain text, cut at 2,900 characters, so nothing in it can mention people. Images are not posted.
 - Questions with more than 100 options don't fit a Slack menu; they are counted as `unanswerable` and left for
   `sureshot review --label`.
+
+## Labeling in Label Studio
+
+A team that labels in [Label Studio](https://labelstud.io) can work through the review queue there.
+`sureshot label-studio push` sends new queue items of one question set to a project named `sureshot: <set>`, created
+on first use with a labeling interface built from the questions (one single choice per question), one task per
+decision. `sureshot label-studio pull` saves the project's annotations as labels.
+
+```bash
+export SURESHOT_LABEL_STUDIO_URL=http://localhost:8080 SURESHOT_LABEL_STUDIO_TOKEN=...   # Account & Settings > Personal Access Token
+sureshot label-studio push --questions examples/questions.yaml --set ticket_routing --limit 100 --sample 0.02 --confident 0.1
+sureshot label-studio pull --questions examples/questions.yaml --set ticket_routing
+```
+
+- Run both from cron, e.g. after [nightly.sh](nightly.sh): pull first, so the night's calibration sees the day's labels.
+- Each item is sent once, to Slack or Label Studio. A task shows every question of its decision; answering the ones
+  that weren't queued labels them too.
+- Where several annotators answered a question, it is labeled only when they agree (`skipped` counts the rest). A
+  pull labels only what changed, so pulling every night doesn't reorder the labels confirmation reads.
+- Changing a question set updates the project's interface on the next push. Label Studio refuses to drop a question
+  that already has annotations; make a new set (and so a new project) for that.
+- Label Studio 1.23 turns legacy tokens off by default; a personal access token works either way.

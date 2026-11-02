@@ -70,7 +70,9 @@ class Store:
         return row and row[0]
 
     def label(self, decision_id, key, answer, source="human"):
-        """Sets the true answer to one question of a logged decision, replacing any earlier label."""
+        """Sets the true answer to one question of a logged decision, replacing any earlier, different label. The same
+        answer again (a retried webhook, a second sync) changes nothing: confirmation reads labels in the order they
+        were given, so re-sending one must not move it to the end."""
         with self._db() as db:
             row = db.execute("SELECT questions FROM decisions WHERE id = ?", (decision_id,)).fetchone()
             if row is None:
@@ -80,7 +82,7 @@ class Store:
                 raise ValueError(f"decision {decision_id} has no question {key!r}")
             check_answer(questions[key], answer)
             db.execute("INSERT INTO labels (decision_id, key, answer, source, ts) VALUES (?, ?, ?, ?, ?) ON CONFLICT (decision_id, key) DO UPDATE "
-                       "SET answer = excluded.answer, source = excluded.source, ts = excluded.ts", (decision_id, key, json.dumps(answer), source, time.time()))
+                       "SET answer = excluded.answer, source = excluded.source, ts = excluded.ts WHERE labels.answer <> excluded.answer", (decision_id, key, json.dumps(answer), source, time.time()))
 
     def posted(self):
         """{(decision id, key)} of the questions already sent out for labeling (see sureshot.slack)."""
