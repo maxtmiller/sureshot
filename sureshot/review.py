@@ -10,7 +10,7 @@ def in_sample(decision_id, rate):
     return rate > 0 and zlib.crc32(decision_id.encode()) % 10_000 < rate * 10_000
 
 
-def review_queue(store, limit=50, reasons=REASONS, since=0.0, sample=0.0, confident=0.0, skip=frozenset()):
+def review_queue(store, limit=50, reasons=REASONS, since=0.0, sample=0.0, confident=0.0, skip=frozenset(), keys=None):
     """Ungraded questions in the log that a person's label would help most, as a list of items, most useful first
     (by reason, then oldest first). An item is {id, key, reason, state, question, answer, source, candidates, ts}; give
     the true answer with store.label(id, key, answer) (or POST /feedback) and it leaves the queue.
@@ -28,9 +28,10 @@ def review_queue(store, limit=50, reasons=REASONS, since=0.0, sample=0.0, confid
     - "unresolved": no tier was confident and System 2 was not asked (escalate=False, or it was down).
 
     candidates lists what each tier and System 2 said. Questions answered by System 2 with no System 1 answer to
-    compare (System 1 was down) are not queued. skip is {(id, key)} to leave out, such as those already sent to Slack."""
+    compare (System 1 was down) are not queued. skip is {(id, key)} to leave out, such as those already sent to Slack,
+    and keys, when given, the only questions to queue."""
     items = sorted((item for item in pending(store, since, sample=sample, confident=confident)
-                    if item["reason"] in reasons and (item["id"], item["key"]) not in skip), key=lambda item: (REASONS.index(item["reason"]), item["ts"]))
+                    if item["reason"] in reasons and (item["id"], item["key"]) not in skip and (keys is None or item["key"] in keys)), key=lambda item: (REASONS.index(item["reason"]), item["ts"]))
     items = items[:limit] if limit is not None else items
     states = store.states({item["id"] for item in items})
     return [item | {"state": states[item["id"]]} for item in items]

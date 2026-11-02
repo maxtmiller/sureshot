@@ -387,6 +387,7 @@ def test_vllm_decider_and_env_option(monkeypatch):
     assert local.extra == {"chat_template_kwargs": {"enable_thinking": False}, "top_p": 1}
     monkeypatch.setenv("SURESHOT_SYSTEM1_MODEL", "m")
     monkeypatch.setenv("SURESHOT_SYSTEM2", "none")
+    monkeypatch.delenv("SURESHOT_SYSTEM1_PROVIDER", raising=False)  # importing sureshot.api loads a local .env
     with pytest.raises(ValueError, match="base_url"):
         router_from_env()  # no OpenAI (or any) endpoint is assumed
     monkeypatch.setenv("SURESHOT_SYSTEM1_URL", "http://one/v1")

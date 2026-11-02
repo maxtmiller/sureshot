@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import sys
+import httpx
 from pathlib import Path
 from sureshot.calibrate import calibrate, prune, recheck
 from sureshot.config import router_from_env
@@ -137,6 +138,29 @@ def review(args):
     label(store, items)
 
 
+def label_studio(args):
+    from sureshot import labelstudio
+    from sureshot.questions import load
+
+    path = args.questions or os.environ.get("SURESHOT_QUESTIONS")
+    if not path:
+        sys.exit("sureshot: set SURESHOT_QUESTIONS or pass --questions: the project's interface is built from a question set")
+    sets = load(path)
+    name = args.set or (next(iter(sets)) if len(sets) == 1 else None)
+    if name not in sets:
+        sys.exit(f"sureshot: pass --set, one of {sorted(sets)}")
+    store = _store(args)
+    try:
+        studio = labelstudio.LabelStudio()
+        if args.action == "pull":
+            return labelstudio.pull(store, studio, name, sets[name])
+        items = review_queue(store, args.limit, (args.reason,) if args.reason else REASONS, sample=args.sample, confident=args.confident,
+                             skip=store.posted(), keys=set(sets[name]))
+        return labelstudio.push(store, studio, name, sets[name], items)
+    except (ValueError, RuntimeError, httpx.HTTPError) as e:
+        sys.exit(f"sureshot: {e}")
+
+
 def test(args):
     try:
         report = _router(args).test(args.golden, args.set)
@@ -157,6 +181,7 @@ COMMANDS = {
     "prune": lambda a: prune(_store(a), _costs(a.costs), a.tier, a.min_answers),
     "stats": lambda a: stats(_store(a), a.since, a.min_samples, costs=_costs(a.costs) if a.costs else None, sample=a.sample, confident=a.confident),
     "review": review,
+    "label-studio": label_studio,
     "test": test,
 }
 
@@ -212,6 +237,12 @@ def parser():
     how.add_argument("--label", action="store_true", help="show each item and ask for its true answer")
     how.add_argument("--slack", action="store_true", help="post the items not posted before to Slack, to label with buttons (see sureshot.slack)")
     s.add_argument("--channel", help="the Slack channel id (default: SURESHOT_SLACK_CHANNEL)")
+
+    s = sub.add_parser("label-studio", parents=[common, routed, sampled], help="send review items to a Label Studio project (push), or save its annotations as labels (pull)")
+    s.add_argument("action", choices=["push", "pull"])
+    s.add_argument("--set", help="the question set, which names the project (default: the file's only set)")
+    s.add_argument("--limit", type=int, default=50, help="push at most this many new questions")
+    s.add_argument("--reason", choices=REASONS)
 
     s = sub.add_parser("test", parents=[common, routed], help="score the router on a golden JSONL file, without logging")
     s.add_argument("golden")
