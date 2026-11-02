@@ -13,12 +13,40 @@ from pathlib import Path
 
 
 def rows(path):
-    """The rows of a CSV file (with a header) or a JSONL file, as dicts."""
+    """The rows of a CSV file (with a header), a JSONL file or a Parquet file (needing pyarrow), as dicts."""
     path = Path(path)
     if path.suffix == ".csv":
         with path.open(newline="") as f:
             return list(csv.DictReader(f))
+    if path.suffix == ".parquet":
+        return _pyarrow().parquet.read_table(path).to_pylist()
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def write_rows(path, data):
+    """Writes dicts as CSV (columns in the order first seen), JSONL or Parquet, by the file's suffix."""
+    path = Path(path)
+    columns = list(dict.fromkeys(key for row in data for key in row))
+    if path.suffix == ".csv":
+        with path.open("w", newline="") as f:
+            writer = csv.DictWriter(f, columns)
+            writer.writeheader()
+            writer.writerows(data)
+    elif path.suffix == ".parquet":
+        pa = _pyarrow()
+        # from_pylist takes its columns from the first row, so every row gets them all
+        pa.parquet.write_table(pa.Table.from_pylist([{c: row.get(c) for c in columns} for row in data]), path)
+    else:
+        path.write_text("".join(json.dumps(row) + "\n" for row in data))
+
+
+def _pyarrow():
+    try:
+        import pyarrow
+        import pyarrow.parquet  # noqa: F401
+    except ImportError as e:
+        raise ImportError('Parquet files need pyarrow: pip install "sureshot[parquet]"') from e
+    return pyarrow
 
 
 def parse(question, value):

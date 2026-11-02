@@ -25,23 +25,51 @@ class ClaudeAPI:
         self.identity = f"claude-api|{model}|{effort}|v{PROMPT_VERSION}"
         self.client = client or anthropic.Anthropic()
 
+    batches = True
+
+    def _params(self, state, questions, images):
+        content = [_image_block(i) for i in images] + [{"type": "text", "text": prompt(state, questions)}]
+        return {"model": self.model, "max_tokens": 4096, "system": SYSTEM_PROMPT, "messages": [{"role": "user", "content": content}],
+                "output_config": {"effort": self.effort, "format": {"type": "json_schema", "schema": answer_schema(questions)}}}
+
     def answer(self, state, questions, images=()):
         import anthropic
 
-        content = [_image_block(i) for i in images] + [{"type": "text", "text": prompt(state, questions)}]
         try:
-            response = self.client.beta.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": content}],
-                output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": answer_schema(questions)}},
-                # If a safety classifier declines, the API reruns the request on a fallback model it picks.
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-            )
+            # If a safety classifier declines, the API reruns the request on a fallback model it picks.
+            response = self.client.beta.messages.create(**self._params(state, questions, images), betas=["server-side-fallback-2026-07-01"], fallbacks="default")
         except (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError) as e:
             raise Outage(repr(e)) from e
+        return self._read(response)
+
+    def batch_submit(self, items):
+        """Sends [(custom_id, state, questions)] as one Message Batch and returns its handle. Batches take no
+        fallbacks, so a declined request is answered directly afterwards, where they apply."""
+        batch = self.client.messages.batches.create(requests=[{"custom_id": custom_id, "params": self._params(state, questions, [])}
+                                                              for custom_id, state, questions in items])
+        return {"anthropic": batch.id}
+
+    def batch_results(self, handle, questions):
+        """None while the batch runs; then {custom_id: answers} for each request that succeeded."""
+        import anthropic
+
+        try:
+            if self.client.messages.batches.retrieve(handle["anthropic"]).processing_status != "ended":
+                return None
+            items = list(self.client.messages.batches.results(handle["anthropic"]))
+        except (anthropic.APIConnectionError, anthropic.RateLimitError, anthropic.InternalServerError) as e:
+            raise Outage(repr(e)) from e
+        results = {}
+        for item in items:
+            if item.result.type == "succeeded" and item.custom_id in questions:
+                try:
+                    results[item.custom_id] = self._read(item.result.message)
+                except (RuntimeError, StopIteration, json.JSONDecodeError):
+                    pass  # answered directly instead
+        return results
+
+    @staticmethod
+    def _read(response):
         if response.stop_reason == "refusal":
             raise RuntimeError(f"Claude declined: {response.stop_details.category if response.stop_details else 'no category'}")
         if response.stop_reason == "max_tokens":

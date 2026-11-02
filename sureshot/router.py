@@ -160,9 +160,25 @@ class Router:
         misconfiguration is not hidden by silently using another model.
 
         questions is an object of questions, or the name of one of the router's sets (see __init__)."""
+        start = time.perf_counter()
+        pending = self.first(state, questions, images, thresholds, escalate)
+        slow = outage = system2_ms = None
+        if pending["ask"]:
+            slow_start = time.perf_counter()
+            try:
+                slow = self._cached(self.system2, "answer", state, pending["ask"], images, pending["cache"])
+            except Exception as e:
+                if not _transient(e) or any(key not in pending["latest"] for key in pending["escalated"]):
+                    raise
+                outage = repr(e)
+            system2_ms = (time.perf_counter() - slow_start) * 1000
+        return self.finish(pending, slow, outage, system2_ms, (time.perf_counter() - start) * 1000, len(images), ref)
+
+    def first(self, state, questions=None, images=(), thresholds=None, escalate=True):
+        """The System 1 half of decide: asks the tiers (and the guard) and returns what finish needs, JSON-ready so a
+        batch can keep it while System 2 works. "ask" is {key: question} for System 2: the escalated and the audited."""
         questions = validate(self.question_set(questions))
         thresholds = thresholds or {}
-        start = time.perf_counter()
         tally = {"hits": 0, "misses": 0}
         degraded, tier_ms, tried, latest, answers, remaining = [], [], {key: [] for key in questions}, {}, {}, list(questions)
         for i, tier in enumerate(self.tiers):
@@ -214,38 +230,38 @@ class Router:
             for key in vetoed:
                 del answers[key]
             remaining = remaining + list(vetoed)
-        system2_ms = None
         escalated = remaining if escalate and self.system2 and remaining else []
         audited = [key for key in answers if escalate and self.system2 and random.random() < self.audit]
-        if escalated or audited:
-            slow_start = time.perf_counter()
-            try:
-                slow = self._cached(self.system2, "answer", state, {key: questions[key] for key in escalated + audited}, images, tally)
-            except Exception as e:
-                if not _transient(e) or any(key not in latest for key in escalated):
-                    raise
-                slow = None
-                if escalated:
-                    degraded.append({"system": 2, "tier": None, "error": repr(e)})
-            system2_ms = (time.perf_counter() - slow_start) * 1000
-            if slow is None:
-                escalated = []
-            else:
-                for key in escalated:
-                    answers[key] = {"answer": slow[key]["answer"], "reason": slow[key]["reason"], "source": "system2", "sureshot": latest.get(key)}
-                for key in audited:
-                    answers[key]["audit"] = slow[key]
+        return {"state": state, "questions": questions, "answers": answers, "tried": tried, "latest": latest, "remaining": remaining,
+                "escalated": escalated, "audited": audited, "vetoed": vetoed, "degraded": degraded, "tiers_ms": tier_ms, "cache": tally,
+                "ask": {key: questions[key] for key in escalated + audited}}
+
+    def finish(self, pending, slow, outage=None, system2_ms=None, total_ms=0.0, images=0, ref=None):
+        """The rest of decide, from first's result and System 2's answers to pending["ask"] (slow; None when System 2
+        was down, with outage saying why): the decision, logged when there is a log."""
+        p = pending
+        questions, latest, remaining, vetoed = p["questions"], p["latest"], p["remaining"], p["vetoed"]
+        answers, escalated, degraded = dict(p["answers"]), list(p["escalated"]), list(p["degraded"])
+        if p["ask"] and slow is None:
+            if escalated:
+                degraded.append({"system": 2, "tier": None, "error": outage})
+            escalated = []
+        elif p["ask"]:
+            for key in escalated:
+                answers[key] = {"answer": slow[key]["answer"], "reason": slow[key]["reason"], "source": "system2", "sureshot": latest.get(key)}
+            for key in p["audited"]:
+                answers[key] = answers[key] | {"audit": slow[key]}
         for key in remaining:
             if key not in escalated:
                 if key not in latest:
                     raise ValueError(f"no System 1 tier answered {key!r}, and there is no System 2 to escalate it to")
                 answers[key] = latest[key] | {"source": "sureshot"}
-        answers = {key: answers[key] | {"tried": tried[key]} | ({"guard": vetoed[key]} if key in vetoed else {}) for key in questions}
-        latency = {"system1": sum(tier_ms), "system2": system2_ms, "total": (time.perf_counter() - start) * 1000}
-        result = {"answers": answers, "unsure": remaining, "escalated": escalated, "degraded": degraded or None, "cache": tally if self.cache else None,
-                  "latency_ms": {k: v and round(v, 1) for k, v in latency.items()} | {"tiers": [round(ms, 1) for ms in tier_ms]}}
+        answers = {key: answers[key] | {"tried": p["tried"][key]} | ({"guard": vetoed[key]} if key in vetoed else {}) for key in questions}
+        latency = {"system1": sum(p["tiers_ms"]), "system2": system2_ms, "total": total_ms}
+        result = {"answers": answers, "unsure": remaining, "escalated": escalated, "degraded": degraded or None, "cache": p["cache"] if self.cache else None,
+                  "latency_ms": {k: v and round(v, 1) for k, v in latency.items()} | {"tiers": [round(ms, 1) for ms in p["tiers_ms"]]}}
         if self.log and self.record:
-            result["id"] = self.log.log(state, questions, result | {"audit_rate": self.audit}, len(images), ref)
+            result["id"] = self.log.log(p["state"], questions, result | {"audit_rate": self.audit}, images, ref)
         return result
 
     def test(self, cases, questions=None, thresholds=None):
