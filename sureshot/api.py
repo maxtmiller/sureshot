@@ -5,7 +5,8 @@ import hmac
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import Body, FastAPI, Header, HTTPException, Query, Request
+from urllib.parse import parse_qs
+from fastapi import BackgroundTasks, Body, FastAPI, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -16,7 +17,7 @@ from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
 from sureshot.questions import load
-from sureshot import webhooks
+from sureshot import slack, webhooks
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 if os.environ.get("SURESHOT_QUESTIONS"):
@@ -102,6 +103,25 @@ async def feedback_webhook(source: str, request: Request):
     except json.JSONDecodeError:
         raise HTTPException(400, "the webhook body must be JSON")
     return {"events": await run_in_threadpool(lambda: webhooks.apply(log(), source, _webhooks[source], event))}
+
+
+@app.post("/slack/actions")
+async def slack_actions(request: Request, background: BackgroundTasks):
+    """A click on a review message posted by `sureshot review --slack` (see slack.py). Slack wants a reply within 3
+    seconds, so the label is saved before replying and the message is updated after."""
+    if not os.environ.get("SURESHOT_SLACK_SIGNING_SECRET"):
+        raise HTTPException(404, "set SURESHOT_SLACK_SIGNING_SECRET to label from Slack")
+    body = await request.body()
+    if not slack.verify(request.headers, body):
+        raise HTTPException(401, "missing, wrong or stale Slack signature")
+    try:
+        payload = json.loads(parse_qs(body.decode())["payload"][0])
+    except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
+        raise HTTPException(400, "expected Slack's form-encoded payload")
+    reply = await run_in_threadpool(lambda: slack.handle(log(), payload))
+    if reply is not None and payload.get("response_url"):
+        background.add_task(post, payload["response_url"], json=reply, timeout=30)
+    return Response(status_code=200)
 
 
 @app.post("/feedback")

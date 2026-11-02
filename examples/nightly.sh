@@ -6,7 +6,8 @@
 #
 # SAMPLE and CONFIDENT are the rates you label the review queue at. With SURESHOT_LOCAL_MODEL set, the classifier is
 # tier 0 and is retrained, and the LLM is tier 1. Set COSTS (JSON, as for `sureshot prune`) to prune the LLM tier, and
-# ALERT_WEBHOOK (a Slack-style incoming webhook) to be told when drift is flagged or a tier fails its labels.
+# ALERT_WEBHOOK (a Slack-style incoming webhook) to be told when drift is flagged or a tier fails its labels. With
+# SURESHOT_SLACK_CHANNEL set, it also posts up to SLACK_LIMIT (default 30) new review items there to label.
 set -eu
 rates="--sample ${SAMPLE:-0.02} --confident ${CONFIDENT:-0.1}"
 out=$(mktemp -d)
@@ -21,6 +22,9 @@ if [ -n "${COSTS:-}" ]; then
   sureshot prune --tier "$llm_tier" --costs "$COSTS" > "$out/prune.json"
 fi
 sureshot stats $rates > "$out/stats.json"
+if [ -n "${SURESHOT_SLACK_CHANNEL:-}" ]; then
+  sureshot review --slack --limit "${SLACK_LIMIT:-30}" $rates > /dev/null
+fi
 
 python3 - "$out" <<'EOF'
 import json, os, sys, urllib.request

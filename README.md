@@ -346,6 +346,9 @@ for item in review_queue(store, limit=20, sample=0.02):
     store.label(item["id"], item["key"], true_answer)   # the item leaves the queue
 ```
 
+Reviewers can also label in Slack: `sureshot review --slack` posts the queue to a channel with a button per answer,
+and each click is a label ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labeling-in-slack)).
+
 ### Calibrate: learn each question's threshold
 
 ```python
@@ -486,13 +489,14 @@ mount a volume there to keep the log, or set `SURESHOT_DB` to a `postgresql://` 
 | `POST /decide` | `state`, `questions` (inline, or a set's name from `SURESHOT_QUESTIONS`, or left out when it has one), optionally `images` (data URIs), `thresholds`, `escalate`, and `ref` (your id for the item). Returns an `id` when logging |
 | `POST /feedback` | `{"id": ..., "labels": {"urgency": 2}}` |
 | `POST /feedback/webhook/<source>` | Another tool's webhook, labeled by the rules `SURESHOT_WEBHOOKS` gives that source, checked by its signature ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labels-from-webhooks)) |
+| `POST /slack/actions` | Clicks on the review messages `sureshot review --slack` posts, checked by Slack's signature ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labeling-in-slack)) |
 | `POST /calibrate` | `{"target_accuracy": 0.95}`, optionally `min_samples`, `sample` and `confident` |
 | `GET /stats` | The `stats` report; its options are query parameters, `costs` as JSON |
 | `GET /review` | The review queue; `limit`, `reason`, `sample`, `confident` |
 | `POST /v1/chat/completions`, `/v1/messages`, `/{version}/models/{model}:generateContent` | OpenAI, Anthropic and Gemini requests (see [below](#drop-in-for-openai-anthropic-and-gemini-apps)); the key may also come as `x-api-key`, `x-goog-api-key` or `?key=` |
 | `GET /health` | No token needed |
 
-Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`, except webhooks, which are checked as their source says. The API builds its router with `router_from_env()`,
+Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`, except webhooks and Slack's clicks, which are checked by their senders' signatures. The API builds its router with `router_from_env()`,
 which you can also call yourself:
 
 | Variable | Values |
@@ -506,6 +510,7 @@ which you can also call yourself:
 | `SURESHOT_LOCAL_MODEL` | A saved `LocalDecider` to put in front of System 1 |
 | `SURESHOT_QUESTIONS` | A JSON or YAML [questions file](#questions), checked when the API starts |
 | `SURESHOT_WEBHOOKS` | A JSON or YAML file of webhook sources for `/feedback/webhook/<source>`, checked when the API starts |
+| `SURESHOT_SLACK_SIGNING_SECRET`, `SURESHOT_SLACK_BOT_TOKEN`, `SURESHOT_SLACK_CHANNEL` | Labeling in Slack: the app's signing secret enables `/slack/actions`; the token and channel are where `sureshot review --slack` posts |
 | `SURESHOT_THRESHOLD` | Default threshold (0.8) |
 | `SURESHOT_DB` | The log, a SQLite path or a `postgresql://` URL; enables `/feedback` and `/calibrate` |
 | `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache (a SQLite path or a `postgresql://` URL), and seconds an answer stays valid |
@@ -569,7 +574,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | `sureshot recheck [--tier]` | [Rechecks](#recheck-and-prune) saved thresholds against your labels |
 | `sureshot prune --costs '{...}' [--tier]` | [Prunes](#recheck-and-prune) the questions a tier doesn't pay for |
 | `sureshot stats [--costs '{...}']` | The [stats](#stats-and-drift) report |
-| `sureshot review [--limit] [--reason] [--label]` | The [review queue](#review-queue-what-to-label-next). With `--label`, shows each item and asks for its true answer (Enter accepts the router's, `-` skips, Ctrl-D stops), saving each label as it is given |
+| `sureshot review [--limit] [--reason] [--label \| --slack [--channel]]` | The [review queue](#review-queue-what-to-label-next). With `--label`, shows each item and asks for its true answer (Enter accepts the router's, `-` skips, Ctrl-D stops), saving each label as it is given. With `--slack`, posts the items not posted before to Slack to label with buttons |
 | `sureshot test golden.jsonl [--questions file] [--set name] [--min-accuracy]` | [Scores](#testing-and-comparing-models) the router without logging; exits 1 below `--min-accuracy` |
 
 `calibrate`, `retrain`, `recheck`, `stats` and `review` take `--sample` and `--confident`, the rates you give the

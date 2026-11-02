@@ -1,0 +1,17 @@
+# A Slack app for labeling sureshot's review queue: at api.slack.com/apps, Create New App > From a manifest, paste this
+# with your sureshot URL, install it, and invite the bot to the channel (/invite @sureshot). Then set
+# SURESHOT_SLACK_BOT_TOKEN (Bot User OAuth Token), SURESHOT_SLACK_SIGNING_SECRET (Basic Information) and
+# SURESHOT_SLACK_CHANNEL (the channel id). See examples/recipes.md.
+display_information:
+  name: sureshot
+  description: Label the questions sureshot was least sure about
+features:
+  bot_user:
+    display_name: sureshot
+oauth_config:
+  scopes:
+    bot: [chat:write]
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://YOUR-SURESHOT-HOST/slack/actions

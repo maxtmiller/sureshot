@@ -9,6 +9,7 @@ from pathlib import Path
 from sureshot.calibrate import calibrate, prune, recheck
 from sureshot.config import router_from_env
 from sureshot.db import is_postgres
+from sureshot.questions import show
 from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.store import Store
@@ -75,12 +76,6 @@ def retrain_local(args):
     return result["report"]
 
 
-def _show(question, answer):
-    if question["type"] == "noul":
-        return "yes" if answer else "no"
-    return f"{answer} {question['criteria'][answer]}" if question["type"] == "score" else answer
-
-
 def _parse(question, text):
     """The answer `text` gives to a question: yes/no, a score level's position or name, or a choice's name or the
     start of one. None if it is none of those."""
@@ -105,12 +100,12 @@ def label(store, items):
             print(f"\n[{n}/{len(items)}] {item['key']} ({item['reason']}): {question.get('instructions', '')}")
             for c in item["candidates"]:
                 extra = f" ({c['confidence']:.2f})" if c.get("confidence") is not None else f": {c['reason']}" if c.get("reason") else ""
-                print(f"  {c['who']}: {_show(question, c['answer'])}{extra}")
-            options = "yes/no" if question["type"] == "noul" else " · ".join(_show(question, i) for i in range(len(question["criteria"]))) \
+                print(f"  {c['who']}: {show(question, c['answer'])}{extra}")
+            options = "yes/no" if question["type"] == "noul" else " · ".join(show(question, i) for i in range(len(question["criteria"]))) \
                 if question["type"] == "score" else ", ".join(question["criteria"])
             print(f"  options: {options}")
             while True:
-                text = input(f"  answer [{_show(question, item['answer'])}] (Enter accepts, - skips, Ctrl-D stops): ")
+                text = input(f"  answer [{show(question, item['answer'])}] (Enter accepts, - skips, Ctrl-D stops): ")
                 answer = item["answer"] if not text.strip() else None if text.strip() == "-" else _parse(question, text)
                 if answer is not None or text.strip() == "-":
                     break
@@ -127,7 +122,16 @@ def label(store, items):
 
 def review(args):
     store = _store(args)
-    items = review_queue(store, args.limit, (args.reason,) if args.reason else REASONS, sample=args.sample, confident=args.confident)
+    reasons = (args.reason,) if args.reason else REASONS
+    if args.slack:
+        from sureshot.slack import post_queue
+
+        items = review_queue(store, args.limit, reasons, sample=args.sample, confident=args.confident, skip=store.posted())
+        try:
+            return post_queue(store, items, args.channel)
+        except (ValueError, RuntimeError) as e:
+            sys.exit(f"sureshot: {e}")
+    items = review_queue(store, args.limit, reasons, sample=args.sample, confident=args.confident)
     if not args.label:
         return items
     label(store, items)
@@ -204,7 +208,10 @@ def parser():
     s = sub.add_parser("review", parents=[common, sampled], help="the questions to label next, or with --label, label them")
     s.add_argument("--limit", type=int, default=50)
     s.add_argument("--reason", choices=REASONS)
-    s.add_argument("--label", action="store_true", help="show each item and ask for its true answer")
+    how = s.add_mutually_exclusive_group()
+    how.add_argument("--label", action="store_true", help="show each item and ask for its true answer")
+    how.add_argument("--slack", action="store_true", help="post the items not posted before to Slack, to label with buttons (see sureshot.slack)")
+    s.add_argument("--channel", help="the Slack channel id (default: SURESHOT_SLACK_CHANNEL)")
 
     s = sub.add_parser("test", parents=[common, routed], help="score the router on a golden JSONL file, without logging")
     s.add_argument("golden")
