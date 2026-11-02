@@ -42,6 +42,7 @@ pip install "sureshot[api]"         # the HTTP API
 pip install "sureshot[yaml]"        # YAML questions files (included in [api])
 pip install "sureshot[postgres]"    # a Postgres log and cache, shared by several machines
 pip install "sureshot[mcp]"         # the MCP server, for Claude Code, Claude Desktop and other agents (included in [api])
+pip install "sureshot[parquet]"     # Parquet files for sureshot import and decide --batch
 ```
 
 The extras combine, e.g. `pip install "sureshot[claude,api]"`. Only `httpx` is required: the Quick start uses Claude

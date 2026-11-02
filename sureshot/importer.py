@@ -45,7 +45,7 @@ def _pyarrow():
         import pyarrow
         import pyarrow.parquet  # noqa: F401
     except ImportError as e:
-        raise ImportError("Parquet files need pyarrow: pip install pyarrow") from e
+        raise ImportError('Parquet files need pyarrow: pip install "sureshot[parquet]"') from e
     return pyarrow
 
 

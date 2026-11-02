@@ -260,7 +260,7 @@ sureshot decide --batch tickets.csv --questions examples/questions.yaml --set ti
 
 - Each row gets `sureshot_id` (the decision id, for `/feedback`), and per question `sureshot_<key>`,
   `sureshot_<key>_source` (`tier 0`, `system2`...) and `sureshot_<key>_confidence`. Rows without text get
-  `sureshot_error`. CSV, JSONL and Parquet (with `pyarrow`) work, in and out; `--out` picks the output file.
+  `sureshot_error`. CSV, JSONL and Parquet (`pip install "sureshot[parquet]"`) work, in and out; `--out` picks the output file.
 - System 1 answers `--workers` rows at once. When System 2 is OpenAI (`SURESHOT_SYSTEM2_PROVIDER=openai`) or Claude
   through the API, what it must answer goes out as batches at half the price, checked every `--poll` seconds; most
   finish within an hour, and the limit is 24. Other System 2s are asked directly.
