@@ -67,8 +67,9 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 | `sureshot/stats.py` | Usage, accuracy, cost, latency and drift report from the log |
 | `sureshot/evaluate.py`, `sureshot/golden.py` | Replay logged decisions through candidate models; score a golden dataset |
 | `sureshot/config.py` | `router_from_env()`: build a Router from `SURESHOT_*` environment variables |
-| `sureshot/api.py` | FastAPI app: `/decide`, `/feedback`, `/feedback/webhook/<source>`, `/calibrate`, `/stats`, `/review` |
+| `sureshot/api.py` | FastAPI app: `/decide`, `/feedback`, `/feedback/webhook/<source>`, `/slack/actions`, `/calibrate`, `/stats`, `/review` |
 | `sureshot/webhooks.py` | Turns another tool's webhook events into labels, by the rules of a webhooks file, after checking its signature |
+| `sureshot/slack.py` | Posts review items to Slack with a button per answer, and labels from the clicks |
 | `serve/` | Dockerfile and compose file for serving a model with vLLM next to sureshot |
 | `examples/` | Case studies, a drift alert, a real-model check and a load-testing script |
 | `tests/` | Router behavior, calibration simulations, concurrency, recorded real-model exchanges |
@@ -230,7 +231,7 @@ definition automatically misses. A model with no `identity` is not cached.
 
 ### The Store (`store.py`)
 
-SQLite with six tables: `decisions` (every result, with the caller's `ref` for the item, indexed so a webhook can find it), `labels` (true answers, with who gave them: `human` or `webhook:<source>`), `tier_thresholds` (calibration output),
+SQLite (or Postgres) with these tables: `decisions` (every result, with the caller's `ref` for the item, indexed so a webhook can find it), `labels` (true answers, with who gave them: `human`, `webhook:<source>` or `slack:<user>`), `posts` (review items sent to Slack, so each goes once), `tier_thresholds` (calibration output),
 `calibration_issues` (why a question has none), `calibrations` (what the latest calibration saw, for drift) and
 `skips` (what `prune` stopped asking). Decision ids are random uuids, or come from `Store(path, seed=)` so a
 simulation that logs the same decisions in the same order gets the same ids. It uses WAL mode and a 30 second busy timeout, which fixed `database is

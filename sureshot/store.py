@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS skips (tier INTEGER, key TEXT, PRIMARY KEY (tier, key
 CREATE TABLE IF NOT EXISTS unconfirmed (tier INTEGER, key TEXT, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts DOUBLE PRECISION, threshold DOUBLE PRECISION, target DOUBLE PRECISION,
                                          escalation_rate DOUBLE PRECISION, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
+CREATE TABLE IF NOT EXISTS posts (decision_id TEXT, key TEXT, ts DOUBLE PRECISION, PRIMARY KEY (decision_id, key));
 """
 REF_INDEX = "CREATE INDEX IF NOT EXISTS decisions_ref ON decisions (ref)"
 
@@ -80,6 +81,16 @@ class Store:
             check_answer(questions[key], answer)
             db.execute("INSERT INTO labels (decision_id, key, answer, source, ts) VALUES (?, ?, ?, ?, ?) ON CONFLICT (decision_id, key) DO UPDATE "
                        "SET answer = excluded.answer, source = excluded.source, ts = excluded.ts", (decision_id, key, json.dumps(answer), source, time.time()))
+
+    def posted(self):
+        """{(decision id, key)} of the questions already sent out for labeling (see sureshot.slack)."""
+        with self._db() as db:
+            return {(i, k) for i, k in db.execute("SELECT decision_id, key FROM posts").fetchall()}
+
+    def mark_posted(self, pairs):
+        now = time.time()
+        with self._db() as db:
+            db.executemany("INSERT INTO posts VALUES (?, ?, ?) ON CONFLICT DO NOTHING", [(i, k, now) for i, k in pairs])
 
     def thresholds(self, tier=0):
         """The calibrated thresholds of one tier, {key: value}."""

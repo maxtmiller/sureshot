@@ -56,6 +56,13 @@ def load(path):
     return question_sets(read(path), str(path))
 
 
+def show(question, answer):
+    """An answer as a person reads it: yes or no, a score level's position and name, or a choice's key."""
+    if question["type"] == "noul":
+        return "yes" if answer else "no"
+    return f"{answer} {question['criteria'][answer]}" if question["type"] == "score" else answer
+
+
 def check_answer(question, answer):
     """Raises ValueError unless answer is a valid answer to the question."""
     if question["type"] == "noul":

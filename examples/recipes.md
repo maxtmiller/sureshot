@@ -10,6 +10,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 - [Email triage](#email-triage): the personal case
 - [Support-ticket routing](#support-ticket-routing): the company case
 - [Labels from webhooks](#labels-from-webhooks): Zendesk, GitHub, Jira, Linear or any automation, with no code
+- [Labeling in Slack](#labeling-in-slack): the review queue as messages with a button per answer
 
 ## Nightly upkeep
 
@@ -27,6 +28,8 @@ environment as the API:
 - `COSTS='{"tier 0": 0.0002, "system2": 0.004}'` also prunes questions the LLM tier doesn't pay for.
 - `ALERT_WEBHOOK` (a Slack, Discord `/slack` or any Slack-style incoming webhook) gets a message when drift is flagged
   or a tier fails its labels. Without it, check the log.
+- With `SURESHOT_SLACK_CHANNEL` set it posts the night's review items to [label in Slack](#labeling-in-slack), up to
+  `SLACK_LIMIT` (30).
 
 In Docker, copy the script into the volume and schedule `docker exec <container> sh /data/nightly.sh` from the host's
 cron, so it runs next to the log with the API's environment.
@@ -163,3 +166,29 @@ SURESHOT_WEBHOOKS=examples/webhooks.yaml ZENDESK_WEBHOOK_SECRET=... sureshot ser
   and its thresholds are never confirmed.
 - Gmail has no webhook with the label in it (its push notifications say only that something changed), so for email
   triage label with `sureshot review --label`, or from a script that reads label changes and calls `/feedback`.
+
+## Labeling in Slack
+
+Reviewers who never open a terminal can label from a channel. `sureshot review --slack` posts the review queue there,
+one message per decision: its text, each question with what the models said, and a button per answer (a menu past
+five). A click saves the label and replaces the buttons with who answered.
+
+1. Create the app from [slack-manifest.yaml](slack-manifest.yaml) with your sureshot URL (it needs the `chat:write`
+   scope, and Interactivity pointed at `https://<sureshot>/slack/actions`), install it, and `/invite @sureshot` to the channel.
+2. Give the API its Signing Secret (Basic Information > App Credentials; the Client Secret gets every click a 401)
+   and the posting side its Bot User OAuth Token and channel id:
+
+   ```bash
+   SURESHOT_SLACK_SIGNING_SECRET=...  sureshot serve                  # receives the clicks
+   SURESHOT_SLACK_BOT_TOKEN=xoxb-... SURESHOT_SLACK_CHANNEL=C0123 \
+     sureshot review --slack --limit 30 --sample 0.02 --confident 0.1  # posts new items
+   ```
+
+3. Run the post from cron, or let [nightly.sh](nightly.sh) do it when `SURESHOT_SLACK_CHANNEL` is set.
+
+- Each item is posted once: a later run posts only new ones, so unanswered messages stay where they are.
+- Labels are saved as `slack:<user id>`. Anyone in the channel can answer, so pick the channel accordingly; a second
+  click on another answer replaces the label.
+- The text is posted as plain text, cut at 2,900 characters, so nothing in it can mention people. Images are not posted.
+- Questions with more than 100 options don't fit a Slack menu; they are counted as `unanswerable` and left for
+  `sureshot review --label`.
