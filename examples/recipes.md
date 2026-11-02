@@ -13,6 +13,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 - [Labeling in Slack](#labeling-in-slack): the review queue as messages with a button per answer
 - [Labeling in Label Studio](#labeling-in-label-studio): the review queue as tasks for an annotation team
 - [Importing labeled data](#importing-labeled-data): start from the labels you already have
+- [Claude Code, Claude Desktop and other agents](#claude-code-claude-desktop-and-other-agents): sureshot as MCP tools
 
 ## Nightly upkeep
 
@@ -245,3 +246,31 @@ sureshot retrain                         # trains the classifier on them (with S
   drift, `prune` and the review queue leave them out. Confirmation still comes from labels on live decisions.
 - A Hugging Face dataset can be saved as JSONL first, mapping class numbers to your option keys:
   `datasets.load_dataset("banking77")["train"].to_json("labels.jsonl")`.
+
+## Claude Code, Claude Desktop and other agents
+
+`sureshot mcp` (`pip install "sureshot[mcp]"`) gives an agent four tools: `decide`, `feedback`, `review` and `stats`.
+It reads the same environment as the command line, and each question set in the questions file can be passed to
+`decide` by name and read as `sureshot://questions/<set>`.
+
+```bash
+# Claude Code, run where the log is
+claude mcp add sureshot -e SURESHOT_DB=$PWD/sureshot.db -e SURESHOT_QUESTIONS=$PWD/examples/questions.yaml -- sureshot mcp
+
+# or a running `sureshot serve`, which answers MCP at /mcp with its API key
+claude mcp add --transport http sureshot https://<sureshot>/mcp --header "Authorization: Bearer $SURESHOT_API_KEY"
+```
+
+Claude Desktop starts it from `claude_desktop_config.json` (Settings > Developer > Edit Config), with the full path
+`which sureshot` prints and the model keys it needs in `env`:
+
+```json
+{"mcpServers": {"sureshot": {"command": "/path/to/sureshot", "args": ["mcp"],
+  "env": {"SURESHOT_DB": "/path/to/sureshot.db", "SURESHOT_QUESTIONS": "/path/to/questions.yaml", "OPENAI_API_KEY": "..."}}}}
+```
+
+- Ask the agent to "work through the sureshot review queue with me": it calls `review`, asks you each question, and
+  saves your answers with `feedback`. Give it the rates you label at, e.g. "with sample 0.02 and confident 0.1".
+- Labels are saved as `mcp`. Calibration treats them as the truth, so they must be your answers, not the agent's:
+  the tools say so, and `review` leaves out what the models answered on randomly sampled items, so neither you nor
+  the agent is steered by them.

@@ -53,6 +53,15 @@ def serve(args):
     uvicorn.run("sureshot.api:app", host=args.host, port=args.port)
 
 
+def mcp(args):
+    try:
+        from sureshot.mcp import server
+    except ImportError:
+        sys.exit('sureshot: the MCP server needs the mcp package: pip install "sureshot[mcp]"')
+    router = _router(args)
+    server(lambda: router, router.questions or {}).run("stdio")
+
+
 def decide(args):
     body = _json(Path(args.file).read_text() if args.file else sys.stdin.read(), args.file or "stdin")
     try:
@@ -187,6 +196,7 @@ def test(args):
 
 COMMANDS = {
     "serve": serve,
+    "mcp": mcp,
     "decide": decide,
     "calibrate": lambda a: calibrate(_store(a), a.target, a.min_samples, tier=a.tier, sample=a.sample, confident=a.confident),
     "retrain": retrain_local,
@@ -214,6 +224,8 @@ def parser():
     s = sub.add_parser("serve", help="run the HTTP API (needs sureshot[api])")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
+
+    sub.add_parser("mcp", parents=[common, routed], help="run the MCP server over stdio, for Claude Code, Claude Desktop and other agents (needs sureshot[mcp])")
 
     s = sub.add_parser("decide", parents=[common, routed], help="decide one request, the JSON body of POST /decide")
     s.add_argument("file", nargs="?", help="the request (default: stdin)")

@@ -41,6 +41,7 @@ pip install "sureshot[local]"       # LocalDecider, the in-process classifier
 pip install "sureshot[api]"         # the HTTP API
 pip install "sureshot[yaml]"        # YAML questions files (included in [api])
 pip install "sureshot[postgres]"    # a Postgres log and cache, shared by several machines
+pip install "sureshot[mcp]"         # the MCP server, for Claude Code, Claude Desktop and other agents (included in [api])
 ```
 
 The extras combine, e.g. `pip install "sureshot[claude,api]"`. Only `httpx` is required: the Quick start uses Claude
@@ -500,6 +501,7 @@ mount a volume there to keep the log, or set `SURESHOT_DB` to a `postgresql://` 
 | `GET /stats` | The `stats` report; its options are query parameters, `costs` as JSON |
 | `GET /review` | The review queue; `limit`, `reason`, `sample`, `confident` |
 | `POST /v1/chat/completions`, `/v1/messages`, `/{version}/models/{model}:generateContent` | OpenAI, Anthropic and Gemini requests (see [below](#drop-in-for-openai-anthropic-and-gemini-apps)); the key may also come as `x-api-key`, `x-goog-api-key` or `?key=` |
+| `POST /mcp` | The [MCP server](#mcp-for-agents), over streamable HTTP |
 | `GET /health` | No token needed |
 
 Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`, except webhooks and Slack's clicks, which are checked by their senders' signatures. The API builds its router with `router_from_env()`,
@@ -567,6 +569,21 @@ matching the schema:
   requests are never forwarded.
 - Token usage is reported as zero: the models sureshot asked are not the one the app named.
 
+## MCP for agents
+
+Claude Code, Claude Desktop and other MCP clients can use sureshot as tools: `sureshot mcp` over stdio, or `/mcp` on a
+running `sureshot serve` with the API key as a bearer token.
+
+| Tool | Does |
+| --- | --- |
+| `decide` | Answers a question set (by name) or inline questions about a text, as `POST /decide` |
+| `feedback` | Saves the true answers a person gave, as `POST /feedback`, with source `mcp` |
+| `review` | The [review queue](#review-queue-what-to-label-next), without the models' answers on randomly sampled items |
+| `stats` | The [stats](#stats-and-drift) report |
+
+Each question set is also a resource, `sureshot://questions/<set>`. Setup for Claude Code and Claude Desktop is in
+the [recipes](examples/recipes.md#claude-code-claude-desktop-and-other-agents).
+
 ## Command line
 
 `pip install sureshot` adds a `sureshot` command. It reads the same environment variables as the API (and a `.env` in
@@ -575,6 +592,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | Command | Does |
 | --- | --- |
 | `sureshot serve [--host] [--port]` | Runs the HTTP API (needs `sureshot[api]`) |
+| `sureshot mcp [--questions file]` | Runs the [MCP server](#mcp-for-agents) over stdio (needs `sureshot[mcp]`) |
 | `sureshot decide [request.json] [--questions file]` | Decides one request, the body of `POST /decide`, from a file or stdin |
 | `sureshot calibrate [--target] [--tier]` | [Calibrates](#calibrate-learn-each-questions-threshold) and saves thresholds |
 | `sureshot retrain [--model local.joblib]` | [Retrains](#retrain-a-cheaper-first-tier) the `LocalDecider` (default `SURESHOT_LOCAL_MODEL`), saving it only when a question is promoted. A running API loads it on restart |
