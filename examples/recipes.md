@@ -175,7 +175,8 @@ five). A click saves the label and replaces the buttons with who answered.
 
 1. Create the app from [slack-manifest.yaml](slack-manifest.yaml) with your sureshot URL (it needs the `chat:write`
    scope, and Interactivity pointed at `https://<sureshot>/slack/actions`), install it, and `/invite @sureshot` to the channel.
-2. Give the API its signing secret and the posting side its token and channel:
+2. Give the API its Signing Secret (Basic Information > App Credentials; the Client Secret gets every click a 401)
+   and the posting side its Bot User OAuth Token and channel id:
 
    ```bash
    SURESHOT_SLACK_SIGNING_SECRET=...  sureshot serve                  # receives the clicks
