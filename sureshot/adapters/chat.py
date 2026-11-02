@@ -83,3 +83,39 @@ class ChatReasoner(HTTPReasoner):
             base_url.rstrip("/") + "/chat/completions", request, parse, api_key, timeout=timeout,
             identity=f"chat-reasoner|{base_url.rstrip('/')}|{model}|{json.dumps(extra or {}, sort_keys=True)}|{json_mode}|v{PROMPT_VERSION}",
         )
+        self.base_url = base_url.rstrip("/")
+        # OpenAI's Batch API, at half the price; other chat services' batch APIs differ, so they are called directly.
+        self.batches = self.base_url.startswith("https://api.openai.com/")
+
+    def batch_submit(self, items):
+        """Sends [(custom_id, state, questions)] as one OpenAI batch and returns its handle."""
+        lines = "\n".join(json.dumps({"custom_id": custom_id, "method": "POST", "url": "/v1/chat/completions", "body": self.request(state, questions, [])})
+                          for custom_id, state, questions in items)
+        upload = base.post(f"{self.base_url}/files", files={"file": ("sureshot.jsonl", lines.encode())}, data={"purpose": "batch"}, headers=self.headers, timeout=self.timeout)
+        base.ok(upload)
+        batch = base.post(f"{self.base_url}/batches", json={"input_file_id": upload.json()["id"], "endpoint": "/v1/chat/completions", "completion_window": "24h"},
+                          headers=self.headers, timeout=60)
+        base.ok(batch)
+        return {"openai": batch.json()["id"]}
+
+    def batch_results(self, handle, questions):
+        """None while the batch runs; then {custom_id: answers} for each request that succeeded, questions being
+        {custom_id: the questions it asked}. A failed or expired batch gives what it finished."""
+        response = base.get(f"{self.base_url}/batches/{handle['openai']}", headers=self.headers, timeout=60)
+        base.ok(response)
+        batch = response.json()
+        if batch["status"] in ("validating", "in_progress", "finalizing", "cancelling"):
+            return None
+        results = {}
+        if batch.get("output_file_id"):
+            output = base.get(f"{self.base_url}/files/{batch['output_file_id']}/content", headers=self.headers, timeout=self.timeout)
+            base.ok(output)
+            for line in output.text.splitlines():
+                item = json.loads(line)
+                reply = item.get("response") or {}
+                if reply.get("status_code") == 200 and item["custom_id"] in questions:
+                    try:
+                        results[item["custom_id"]] = self.parse(reply["body"], questions[item["custom_id"]])
+                    except (RuntimeError, KeyError, IndexError, json.JSONDecodeError):
+                        pass  # answered directly instead
+        return results

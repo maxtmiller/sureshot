@@ -62,7 +62,30 @@ def mcp(args):
     server(lambda: router, router.questions or {}).run("stdio")
 
 
+def decide_batch(args):
+    from sureshot.batch import columns, decide_rows
+    from sureshot.importer import rows, write_rows
+
+    source = Path(args.batch)
+    out = Path(args.out) if args.out else source.with_name(f"{source.stem}.decided{source.suffix}")
+    router = _router(args)
+    data = rows(source)
+    try:
+        questions = router.question_set(args.set)
+        results = decide_rows(router, questions, data, out.with_name(out.name + ".progress"), args.text, not args.no_escalate,
+                              args.workers, args.poll, lambda message: print(f"sureshot: {message}", file=sys.stderr))
+    except ValueError as e:
+        sys.exit(f"sureshot: {e}")
+    write_rows(out, [row | columns(questions, result) for row, result in zip(data, results)])
+    out.with_name(out.name + ".progress").unlink()
+    decided = [r for r in results if "error" not in r]
+    return {"rows": len(data), "decided": len(decided), "errors": len(data) - len(decided),
+            "escalated": sum(len(r["escalated"]) for r in decided), "out": str(out)}
+
+
 def decide(args):
+    if args.batch:
+        return decide_batch(args)
     body = _json(Path(args.file).read_text() if args.file else sys.stdin.read(), args.file or "stdin")
     try:
         return _router(args).decide(body["state"], body.get("questions"), body.get("images", ()), body.get("thresholds"), body.get("escalate", True), body.get("ref"))
@@ -227,8 +250,15 @@ def parser():
 
     sub.add_parser("mcp", parents=[common, routed], help="run the MCP server over stdio, for Claude Code, Claude Desktop and other agents (needs sureshot[mcp])")
 
-    s = sub.add_parser("decide", parents=[common, routed], help="decide one request, the JSON body of POST /decide")
+    s = sub.add_parser("decide", parents=[common, routed], help="decide one request, the JSON body of POST /decide, or with --batch every row of a file")
     s.add_argument("file", nargs="?", help="the request (default: stdin)")
+    s.add_argument("--batch", metavar="FILE", help="decide every row of a CSV, JSONL or Parquet file, sending System 2's questions through its batch API when it has one")
+    s.add_argument("--out", help="where to write the rows with their answers (default: FILE.decided next to it)")
+    s.add_argument("--set", help="the question set (default: the file's only set)")
+    s.add_argument("--text", default="text", help="the column holding the content")
+    s.add_argument("--workers", type=int, default=8, help="rows System 1 answers at once")
+    s.add_argument("--poll", type=float, default=60, help="seconds between checks on a running batch")
+    s.add_argument("--no-escalate", action="store_true", help="System 1 only")
 
     s = sub.add_parser("calibrate", parents=[common, sampled], help="learn and save each question's threshold for a tier")
     s.add_argument("--target", type=float, default=0.95)

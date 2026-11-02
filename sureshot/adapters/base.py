@@ -18,6 +18,10 @@ def post(url, **kwargs):
     return _client.post(url, **kwargs)
 
 
+def get(url, **kwargs):
+    return _client.get(url, **kwargs)
+
+
 def ok(response):
     """response.raise_for_status() with the server's explanation in the message: a bare "400 Bad Request" hides the
     reason (such as "Logprobs is not enabled for this model"). Still an httpx.HTTPStatusError, so retries are unchanged."""

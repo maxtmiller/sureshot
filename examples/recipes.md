@@ -13,6 +13,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 - [Labeling in Slack](#labeling-in-slack): the review queue as messages with a button per answer
 - [Labeling in Label Studio](#labeling-in-label-studio): the review queue as tasks for an annotation team
 - [Importing labeled data](#importing-labeled-data): start from the labels you already have
+- [Backfills and batch jobs](#backfills-and-batch-jobs): a whole file at once, with System 2 at batch prices
 - [Claude Code, Claude Desktop and other agents](#claude-code-claude-desktop-and-other-agents): sureshot as MCP tools
 
 ## Nightly upkeep
@@ -246,6 +247,28 @@ sureshot retrain                         # trains the classifier on them (with S
   drift, `prune` and the review queue leave them out. Confirmation still comes from labels on live decisions.
 - A Hugging Face dataset can be saved as JSONL first, mapping class numbers to your option keys:
   `datasets.load_dataset("banking77")["train"].to_json("labels.jsonl")`.
+
+## Backfills and batch jobs
+
+A backlog, or a nightly export, can be decided in one command. Every row is decided as a live request would be and
+written back with its answers:
+
+```bash
+sureshot decide --batch tickets.csv --questions examples/questions.yaml --set ticket_routing
+# {"rows": 5000, "decided": 5000, "errors": 0, "escalated": 640, "out": "tickets.decided.csv"}
+```
+
+- Each row gets `sureshot_id` (the decision id, for `/feedback`), and per question `sureshot_<key>`,
+  `sureshot_<key>_source` (`tier 0`, `system2`...) and `sureshot_<key>_confidence`. Rows without text get
+  `sureshot_error`. CSV, JSONL and Parquet (with `pyarrow`) work, in and out; `--out` picks the output file.
+- System 1 answers `--workers` rows at once. When System 2 is OpenAI (`SURESHOT_SYSTEM2_PROVIDER=openai`) or Claude
+  through the API, what it must answer goes out as batches at half the price, checked every `--poll` seconds; most
+  finish within an hour, and the limit is 24. Other System 2s are asked directly.
+- Stopping is safe: progress is kept in `<out>.progress`, so the same command picks up where it was without asking
+  or logging anything twice, and waits for batches already sent. Questions a batch could not answer (or Claude
+  declined, since batches take no fallback model) are asked directly.
+- Unlike `sureshot import`, these are live decisions: they are in the random review sample and in `stats`, so a
+  backfill's labels can confirm thresholds.
 
 ## Claude Code, Claude Desktop and other agents
 

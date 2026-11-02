@@ -594,6 +594,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | `sureshot serve [--host] [--port]` | Runs the HTTP API (needs `sureshot[api]`) |
 | `sureshot mcp [--questions file]` | Runs the [MCP server](#mcp-for-agents) over stdio (needs `sureshot[mcp]`) |
 | `sureshot decide [request.json] [--questions file]` | Decides one request, the body of `POST /decide`, from a file or stdin |
+| `sureshot decide --batch FILE [--set] [--text] [--out] [--workers] [--poll] [--no-escalate]` | Decides every row of a CSV, JSONL or Parquet file and writes them with their answers; System 2's questions go through OpenAI's or Anthropic's batch API, at half the price ([recipe](examples/recipes.md#backfills-and-batch-jobs)) |
 | `sureshot calibrate [--target] [--tier]` | [Calibrates](#calibrate-learn-each-questions-threshold) and saves thresholds |
 | `sureshot retrain [--model local.joblib]` | [Retrains](#retrain-a-cheaper-first-tier) the `LocalDecider` (default `SURESHOT_LOCAL_MODEL`), saving it only when a question is promoted. A running API loads it on restart |
 | `sureshot recheck [--tier]` | [Rechecks](#recheck-and-prune) saved thresholds against your labels |
