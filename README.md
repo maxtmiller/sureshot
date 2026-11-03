@@ -501,6 +501,7 @@ mount a volume there to keep the log, or set `SURESHOT_DB` to a `postgresql://` 
 | `POST /calibrate` | `{"target_accuracy": 0.95}`, optionally `min_samples`, `sample` and `confident` |
 | `GET /stats` | The `stats` report; its options are query parameters, `costs` as JSON |
 | `GET /review` | The review queue; `limit`, `reason`, `sample`, `confident` |
+| `GET /questions` | `{"sets": [{"name", "questions"}]}` from `SURESHOT_QUESTIONS`, for the [n8n node and Zapier app](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#n8n-zapier-and-make)'s dropdowns |
 | `POST /v1/chat/completions`, `/v1/messages`, `/{version}/models/{model}:generateContent` | OpenAI, Anthropic and Gemini requests (see [below](#drop-in-for-openai-anthropic-and-gemini-apps)); the key may also come as `x-api-key`, `x-goog-api-key` or `?key=` |
 | `POST /mcp` | The [MCP server](#mcp-for-agents), over streamable HTTP |
 | `POST /warehouse/bigquery`, `/warehouse/snowflake` | A BigQuery remote function or Snowflake external function, `sureshot('ticket_routing', body)` in SQL ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#sql-in-bigquery-and-snowflake)); the key comes in `user_defined_context` as `api_key`, or in the `authorization` `HEADERS` |

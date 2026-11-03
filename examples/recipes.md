@@ -170,9 +170,15 @@ answer when a person corrects it. Start the API with `SURESHOT_QUESTIONS` so the
 | Use the answer | `answers.team.answer`, `answers.priority.answer` (a level's position: 0 is Low), and `id` |
 | Correct it | `POST https://<sureshot>/feedback`, same header, body `{"id": "<id from the decide step>", "labels": {"team": "technical"}}` |
 
-- **n8n:** an *HTTP Request* node with *Send Body* as JSON; read the result with `{{ $json.answers.team.answer }}`.
-- **Zapier:** *Webhooks by Zapier*, *Custom Request*, method POST, data as raw JSON.
+- **n8n:** the [sureshot node](../integrations/n8n) (`n8n-nodes-sureshot`, under *Settings > Community Nodes*) has
+  *Decide*, with the server's question sets as a dropdown, and *Feedback*; read the result with
+  `{{ $json.answers.team.answer }}`. Or an *HTTP Request* node with *Send Body* as JSON.
+- **Zapier:** the [sureshot app](../integrations/zapier) has the same two actions and dropdown, once it is pushed to
+  your Zapier account (`zapier push` in that folder). Or *Webhooks by Zapier*, *Custom Request*, method POST, data as raw JSON.
 - **Make:** the *HTTP* module's *Make a request*, body type *Raw*, content type JSON, with *Parse response* on.
+
+In the node and the app, a label's answer is text: `true`/`false` for a yes-no question, a number for a score's level,
+otherwise a choice's key. `GET /questions` lists the sets they offer.
 
 Zapier and Make run in the cloud, so sureshot must be reachable over HTTPS from the internet (a host with a TLS proxy
 in front of the Docker image, or a tunnel). Self-hosted n8n can reach it on the private network.

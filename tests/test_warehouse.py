@@ -43,6 +43,11 @@ def test_bigquery_errors_are_an_error_message(client, monkeypatch):
     assert retry.status_code == 503 and retry.json() == {"errorMessage": "System 1 is not ready: loading"}
 
 
+def test_question_sets_are_listed_by_name(client):
+    assert client.get("/questions", headers={"Authorization": "Bearer secret"}).json() == {"sets": [{"name": "events", "questions": QUESTIONS}]}
+    assert client.get("/questions").status_code == 401
+
+
 def test_snowflake_answers_rows_by_number(client):
     body = {"data": [[0, "events", "standup with the team"], [1, "events", ""]]}
     rows = client.post("/warehouse/snowflake", json=body, headers={"sf-custom-authorization": "Bearer secret"}).json()["data"]

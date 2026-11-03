@@ -1,0 +1,27 @@
+{
+  "name": "n8n-nodes-sureshot",
+  "version": "0.1.0",
+  "description": "n8n node for sureshot: calibrated decisions from a fast model, escalated to a stronger one when unsure",
+  "keywords": ["n8n-community-node-package", "sureshot", "classification", "llm"],
+  "license": "Apache-2.0",
+  "author": { "name": "Maximilian Miller" },
+  "homepage": "https://github.com/maxtmiller/sureshot",
+  "repository": { "type": "git", "url": "git+https://github.com/maxtmiller/sureshot.git", "directory": "integrations/n8n" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc && cp nodes/Sureshot/sureshot.svg dist/nodes/Sureshot/",
+    "test": "npm run build && node --test"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": ["dist/credentials/SureshotApi.credentials.js"],
+    "nodes": ["dist/nodes/Sureshot/Sureshot.node.js"]
+  },
+  "devDependencies": {
+    "n8n-workflow": "2.16.0",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}

@@ -184,6 +184,13 @@ def usage_stats(since: float = 0.0, min_samples: int = Query(30, ge=1), alpha: f
     return stats(log(), since, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change, prices, sample, confident)
 
 
+@app.get("/questions")
+def question_sets(authorization: str = Header(default="")):
+    """The question sets from SURESHOT_QUESTIONS, by name: what no-code tools list in their dropdowns."""
+    authorize(authorization)
+    return {"sets": [{"name": name, "questions": questions} for name, questions in (router().questions or {}).items()]}
+
+
 @app.get("/review")
 def review(limit: int = 50, reason: str | None = None, sample: float = Query(0.0, ge=0, le=1), confident: float = Query(0.0, ge=0, le=1), authorization: str = Header(default="")):
     authorize(authorization)
