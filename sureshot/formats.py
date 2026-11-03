@@ -2,8 +2,8 @@
 can point its base URL at sureshot instead. Each format has a function that reads a request into {"state", "images",
 "questions", "encode", "tool"}, or None when sureshot can't answer it, and one that writes the response to it.
 
-A request is answered only when it asks for a schema whose fields all map to questions (see schema.from_schema), does
-not stream, and sends only text and inline images. Its state is the text of every message in order, system prompt
+A request is answered only when it asks for a schema whose fields all map to questions (see schema.from_schema) and
+sends only text and inline images. A streaming request gets the whole answer as one chunk, in that API's events. Its state is the text of every message in order, system prompt
 included. Question keys are the schema's (or forced tool's) name and the field, e.g. "ticket.team"."""
 import json
 import time
@@ -46,7 +46,7 @@ def _openai_part(p):
 def openai_request(body):
     """A chat completion that asks for a schema through response_format, or through one forced function: named in
     tool_choice, or the only tool with tool_choice "required". Several choices (n above 1) aren't answered."""
-    if body.get("stream") or (body.get("n") or 1) != 1:
+    if (body.get("n") or 1) != 1:
         return None
     fmt, tool = body.get("response_format") or {}, None
     if fmt.get("type") == "json_schema":
@@ -77,6 +77,25 @@ def openai_response(body, request, result):
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
 
 
+def _sse(events):
+    return "".join((f"event: {name}\n" if name else "") + f"data: {data if isinstance(data, str) else json.dumps(data)}\n\n" for name, data in events)
+
+
+def openai_stream(completion, include_usage):
+    """A chat completion as chunks: the message, then the finish reason, then usage when stream_options asks for it."""
+    choice, head = completion["choices"][0], {k: completion[k] for k in ("id", "created", "model")} | {"object": "chat.completion.chunk"}
+    message = choice["message"]
+    delta = {"role": "assistant", "content": message["content"]}
+    if message.get("tool_calls"):
+        delta["tool_calls"] = [{"index": i} | call for i, call in enumerate(message["tool_calls"])]
+    usage = {"usage": None} if include_usage else {}
+    chunks = [head | {"choices": [{"index": 0, "delta": delta, "finish_reason": None, "logprobs": None}]} | usage,
+              head | {"choices": [{"index": 0, "delta": {}, "finish_reason": choice["finish_reason"], "logprobs": None}]} | usage]
+    if include_usage:
+        chunks.append(head | {"choices": [], "usage": completion["usage"]})
+    return _sse([(None, c) for c in chunks] + [(None, "[DONE]")])
+
+
 def _anthropic_part(p):
     if p.get("type") == "text":
         return "text", p["text"]
@@ -89,8 +108,6 @@ def _anthropic_part(p):
 def anthropic_request(body):
     """A Messages request that asks for a schema through output_config.format (or the older output_format), or through
     one forced tool: named in tool_choice, or the only tool with tool_choice "any". The schema's title names it."""
-    if body.get("stream"):
-        return None
     fmt, tool = (body.get("output_config") or {}).get("format") or body.get("output_format") or {}, None
     if fmt.get("type") == "json_schema":
         schema = fmt.get("schema")
@@ -114,6 +131,22 @@ def anthropic_response(body, request, result):
         content = [{"type": "text", "text": json.dumps(answer)}]
     return {"id": f"msg_{result.get('id') or uuid.uuid4().hex}", "type": "message", "role": "assistant", "model": body.get("model", "sureshot"), "content": content,
             "stop_reason": "tool_use" if request["tool"] else "end_turn", "stop_sequence": None, "usage": {"input_tokens": 0, "output_tokens": 0}}
+
+
+def anthropic_stream(message):
+    """A message as Messages streaming events, with its one content block sent as a single delta."""
+    block = message["content"][0]
+    if block["type"] == "tool_use":
+        start, delta = block | {"input": {}}, {"type": "input_json_delta", "partial_json": json.dumps(block["input"])}
+    else:
+        start, delta = {"type": "text", "text": ""}, {"type": "text_delta", "text": block["text"]}
+    events = [("message_start", {"message": message | {"content": [], "stop_reason": None}}),
+              ("content_block_start", {"index": 0, "content_block": start}),
+              ("content_block_delta", {"index": 0, "delta": delta}),
+              ("content_block_stop", {"index": 0}),
+              ("message_delta", {"delta": {"stop_reason": message["stop_reason"], "stop_sequence": None}, "usage": {"output_tokens": 0}}),
+              ("message_stop", {})]
+    return _sse([(name, {"type": name} | data) for name, data in events])
 
 
 def _either(d, camel, snake):
@@ -141,3 +174,8 @@ def gemini_request(body):
 def gemini_response(model, request, result):
     return {"candidates": [{"content": {"role": "model", "parts": [{"text": json.dumps(request["encode"](result["answers"]))}]}, "finishReason": "STOP", "index": 0}],
             "usageMetadata": {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}, "modelVersion": model, "responseId": result.get("id") or uuid.uuid4().hex}
+
+
+def gemini_stream(response, sse):
+    """streamGenerateContent's one response: as server-sent events with ?alt=sse (what the SDKs ask for), else a JSON array."""
+    return _sse([(None, response)]) if sse else json.dumps([response])

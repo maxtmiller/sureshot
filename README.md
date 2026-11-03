@@ -548,7 +548,7 @@ genai.Client(api_key=key, http_options={"base_url": "http://localhost:8000"}).mo
 | --- | --- | --- |
 | OpenAI | `POST /v1/chat/completions` | `response_format.json_schema`, or one forced function (`tool_choice` naming it, or `"required"` with one tool) |
 | Anthropic | `POST /v1/messages` | `output_config.format`, or one forced tool (`tool_choice` naming it, or `"any"` with one tool) |
-| Gemini | `POST /{version}/models/{model}:generateContent` | `generationConfig.responseJsonSchema` or `responseSchema` |
+| Gemini | `POST /{version}/models/{model}:generateContent` or `:streamGenerateContent` | `generationConfig.responseJsonSchema` or `responseSchema` |
 
 sureshot turns each field of the schema into a question, routes them, and answers in the app's format with an object
 matching the schema:
@@ -563,7 +563,9 @@ matching the schema:
 - Question keys are the schema's name (or title, or the forced tool's name) and the field, e.g. `Ticket.team`, so apps sharing one sureshot are
   calibrated apart. The `x-sureshot` response header has the decision `id` and who answered each question; label with
   `POST /feedback {"id": ..., "labels": {"Ticket.team": "support"}}`. For a score, a label is the level's position (0 for `priority` 1).
-- A request sureshot can't answer (no schema, a free-text, nested or optional field, streaming, OpenAI's `n` above 1,
+- A streaming request (`"stream": true`, or Gemini's `streamGenerateContent`) gets the whole answer as one chunk, in
+  that API's stream events, so streaming clients and SDK helpers work unchanged.
+- A request sureshot can't answer (no schema, a free-text, nested or optional field, OpenAI's `n` above 1,
   an image by URL, Gemini function calling) is forwarded unchanged to `SURESHOT_OPENAI_PASSTHROUGH_URL`,
   `SURESHOT_ANTHROPIC_PASSTHROUGH_URL` or `SURESHOT_GEMINI_PASSTHROUGH_URL` when it is set (the base URL you would give
   that SDK, with the matching `_API_KEY`), so one base URL serves the whole app. Otherwise it gets a 422. Streaming
