@@ -2,7 +2,7 @@ FROM python:3.13-slim
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY sureshot ./sureshot
-RUN pip install --no-cache-dir ".[api,claude,postgres]"
+RUN pip install --no-cache-dir ".[api,claude,postgres,sqs,redis,kafka]"
 # Log decisions by default, so the feedback loop has data; mount a volume at /data to keep them.
 ENV SURESHOT_DB=/data/sureshot.db
 VOLUME /data

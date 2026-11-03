@@ -5,6 +5,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 
 - [Nightly upkeep](#nightly-upkeep): retrain, calibrate, recheck and prune on a schedule, with alerts
 - [Airflow, Dagster and Prefect](#airflow-dagster-and-prefect): the nightly loop and backfills as tasks
+- [Queues: SQS, Redis Streams and Kafka](#queues-sqs-redis-streams-and-kafka): sureshot as a consumer in an event pipeline
 - [A CI gate for question changes](#a-ci-gate-for-question-changes)
 - [LangChain and LlamaIndex](#langchain-and-llamaindex): no wrapper needed
 - [n8n, Zapier and Make](#n8n-zapier-and-make): two HTTP calls
@@ -82,6 +83,39 @@ def nightly():
 
 `decide` with `batch=` waits for System 2's batches, which can take hours, so give that task a long timeout; a retry
 picks up where it stopped.
+
+## Queues: SQS, Redis Streams and Kafka
+
+In an event pipeline, sureshot can be a consumer instead of an HTTP call. `sureshot worker` reads messages, decides
+them, and writes each decision on:
+
+```bash
+pip install "sureshot[kafka]"     # or [sqs], [redis]; the Docker image has all three
+sureshot worker --set ticket_routing \
+  --source "kafka://broker:9092/tickets?group=sureshot" \
+  --sink "kafka://broker:9092/tickets-decided" \
+  --dead-letter "kafka://broker:9092/tickets-failed"
+```
+
+| URL | Is |
+| --- | --- |
+| `sqs://<queue name>` | An SQS queue; region, credentials and `AWS_ENDPOINT_URL` come from the usual AWS settings |
+| `redis://host:6379/0?stream=<name>&group=<group>` | A Redis stream, read by a consumer group (default `sureshot`); the message is the entry's `data` field |
+| `kafka://host:9092[,host2:9092]/<topic>?group=<group>` | A Kafka topic, read by a consumer group (default `sureshot`) |
+| `https://...` | Sinks only: each decision POSTed as JSON |
+| `-`, `stderr` | Sinks only: one JSON line per decision (the defaults for `--sink` and `--dead-letter`) |
+
+- A message is the body of [`POST /decide`](../README.md#http-api-and-configuration): `{"state": ..., "ref": ...}`,
+  with `questions` (a set's name or inline) unless `--set` gives it. The decision written on is the router's result
+  plus the message's `ref`, so a later webhook or `POST /feedback` can label it.
+- A batch is decided in parallel (`--workers`), written to the sink, and only then acknowledged (deleted from SQS,
+  `XACK`ed, or its Kafka offsets committed). If the worker dies first, the broker delivers the batch again: a message
+  can be decided and logged twice, so set `SURESHOT_CACHE` to keep a redelivery from asking the models again.
+- A message that can't be decided (not JSON, no `state`, an unknown set) goes to `--dead-letter` at once with the
+  error; other failures (the log or a model down) are retried `--retries` times with backoff first. A sink that stays
+  down stops the worker without acknowledging the batch.
+- SIGTERM or Ctrl-C finishes the batch in hand and stops; a second one stops at once. Run several workers with the
+  same group to share a stream or topic.
 
 ## A CI gate for question changes
 
