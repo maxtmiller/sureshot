@@ -22,3 +22,5 @@ npm run lint    # n8n's community-node rules
 To try it in a local n8n, mount `dist/` as a custom extension, e.g.
 `docker run -p 5678:5678 -v $PWD/dist:/home/node/.n8n/custom/n8n-nodes-sureshot n8nio/n8n`.
 Publish with `npm publish` from this folder; it lints and builds first, and refuses while the lint fails.
+
+This package is MIT licensed ([LICENSE.md](LICENSE.md)), as n8n asks of community nodes; sureshot itself is Apache-2.0.

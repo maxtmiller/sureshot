@@ -8,9 +8,10 @@
     "classification",
     "llm"
   ],
-  "license": "Apache-2.0",
+  "license": "MIT",
   "author": {
-    "name": "Maximilian Miller"
+    "name": "Maximilian Miller",
+    "email": "67687590+maxtmiller@users.noreply.github.com"
   },
   "homepage": "https://github.com/maxtmiller/sureshot",
   "repository": {

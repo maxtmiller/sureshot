@@ -74,6 +74,7 @@ jobs:
           cache: npm
           cache-dependency-path: integrations/${{ matrix.package }}/package-lock.json
       - run: npm ci
+      - run: npm run lint --if-present
       - run: npm test
   image:
     runs-on: ubuntu-latest
