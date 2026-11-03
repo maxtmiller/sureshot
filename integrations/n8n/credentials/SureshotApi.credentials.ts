@@ -1,9 +1,11 @@
-import type { IAuthenticateGeneric, ICredentialTestRequest, ICredentialType, INodeProperties } from 'n8n-workflow';
+import type { IAuthenticateGeneric, ICredentialTestRequest, ICredentialType, Icon, INodeProperties } from 'n8n-workflow';
 
 export class SureshotApi implements ICredentialType {
 	name = 'sureshotApi';
 
-	displayName = 'sureshot API';
+	displayName = 'Sureshot API';
+
+	icon: Icon = { light: 'file:../nodes/Sureshot/sureshot.svg', dark: 'file:../nodes/Sureshot/sureshot.dark.svg' };
 
 	documentationUrl = 'https://github.com/maxtmiller/sureshot#http-api-and-configuration';
 

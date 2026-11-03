@@ -6,7 +6,7 @@ export class Sureshot implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'sureshot',
 		name: 'sureshot',
-		icon: 'file:sureshot.svg',
+		icon: { light: 'file:sureshot.svg', dark: 'file:sureshot.dark.svg' },
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',

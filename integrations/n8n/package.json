@@ -2,22 +2,45 @@
   "name": "n8n-nodes-sureshot",
   "version": "0.1.0",
   "description": "n8n node for sureshot: calibrated decisions from a fast model, escalated to a stronger one when unsure",
-  "keywords": ["n8n-community-node-package", "sureshot", "classification", "llm"],
+  "keywords": [
+    "n8n-community-node-package",
+    "sureshot",
+    "classification",
+    "llm"
+  ],
   "license": "Apache-2.0",
-  "author": { "name": "Maximilian Miller" },
+  "author": {
+    "name": "Maximilian Miller"
+  },
   "homepage": "https://github.com/maxtmiller/sureshot",
-  "repository": { "type": "git", "url": "git+https://github.com/maxtmiller/sureshot.git", "directory": "integrations/n8n" },
-  "files": ["dist"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maxtmiller/sureshot.git",
+    "directory": "integrations/n8n"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc && cp nodes/Sureshot/sureshot.svg dist/nodes/Sureshot/",
-    "test": "npm run build && node --test"
+    "build": "n8n-node build",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "test": "npm run build && node --test",
+    "prepublishOnly": "npm run lint && npm run build"
   },
   "n8n": {
     "n8nNodesApiVersion": 1,
-    "credentials": ["dist/credentials/SureshotApi.credentials.js"],
-    "nodes": ["dist/nodes/Sureshot/Sureshot.node.js"]
+    "strict": true,
+    "credentials": [
+      "dist/credentials/SureshotApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Sureshot/Sureshot.node.js"
+    ]
   },
   "devDependencies": {
+    "@n8n/node-cli": "0.55.4",
+    "eslint": "9.29.0",
     "n8n-workflow": "2.16.0",
     "typescript": "5.9.3"
   },
