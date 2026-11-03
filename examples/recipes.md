@@ -49,7 +49,7 @@ Workers need `pip install sureshot` and the API's environment (`SURESHOT_DB` as 
 the model keys). A step that fails raises with the command line's message, so the task fails.
 
 ```python
-# Airflow: results are XComs, options are templated
+# Airflow (2 or 3): results are XComs, options are templated
 from sureshot.airflow import SureshotOperator
 
 with DAG("sureshot_nightly", schedule="0 3 * * *"):
