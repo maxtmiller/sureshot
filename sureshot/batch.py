@@ -47,58 +47,57 @@ def decide_rows(router, questions, data, progress, text="text", escalate=True, w
         say(f"resuming: {len(done)} rows decided, {len(pending)} waiting for System 2")
     else:
         progress.write_text(json.dumps({"header": header}) + "\n")
-    lock = threading.Lock()
-    journal = progress.open("a")
+    with progress.open("a") as journal:
+        lock = threading.Lock()
 
-    def note(entry):
-        with lock:
-            journal.write(json.dumps(entry) + "\n")
-            journal.flush()
+        def note(entry):
+            with lock:
+                journal.write(json.dumps(entry) + "\n")
+                journal.flush()
 
-    def finished(n, result):
-        done[n] = result
-        note({"n": n, "result": result})
+        def finished(n, result):
+            done[n] = result
+            note({"n": n, "result": result})
 
-    system2 = router.system2 if escalate else None
-    batching = bool(getattr(system2, "batches", False))
+        system2 = router.system2 if escalate else None
+        batching = bool(getattr(system2, "batches", False))
 
-    def first(n):
-        content = data[n].get(text)
-        if not isinstance(content, str) or not content.strip():
-            return n, {"error": f"no {text!r}"}, None
-        try:
-            if not batching:
-                return n, router.decide(content, questions, escalate=escalate), None
-            start = time.perf_counter()
-            p = router.first(content, questions, escalate=escalate)
-            p["ms"] = (time.perf_counter() - start) * 1000
-            return (n, None, p) if p["ask"] else (n, router.finish(p, None, total_ms=p["ms"]), None)
-        except ValueError as e:
-            return n, {"error": str(e)}, None
-
-    todo = [n for n in range(len(data)) if n not in done and n not in pending]
-    with ThreadPoolExecutor(max(1, workers)) as pool:
-        for count, (n, result, p) in enumerate(pool.map(first, todo), 1):
-            if p is None:
-                finished(n, result)
-            else:
-                pending[n] = p
-                note({"n": n, "pending": p})
-            if count % 100 == 0:
-                say(f"System 1: {count}/{len(todo)} rows")
-
-    if pending:
-        got = _batches(router, system2, pending, sent, note, poll, say) if batching else {}
-        def last(n):
+        def first(n):
+            content = data[n].get(text)
+            if not isinstance(content, str) or not content.strip():
+                return n, {"error": f"no {text!r}"}, None
             try:
-                return n, _finish(router, system2, pending[n], got.get(n, {}))
+                if not batching:
+                    return n, router.decide(content, questions, escalate=escalate), None
+                start = time.perf_counter()
+                p = router.first(content, questions, escalate=escalate)
+                p["ms"] = (time.perf_counter() - start) * 1000
+                return (n, None, p) if p["ask"] else (n, router.finish(p, None, total_ms=p["ms"]), None)
             except ValueError as e:
-                return n, {"error": str(e)}
+                return n, {"error": str(e)}, None
+
+        todo = [n for n in range(len(data)) if n not in done and n not in pending]
         with ThreadPoolExecutor(max(1, workers)) as pool:
-            for n, result in pool.map(last, sorted(pending)):
-                finished(n, result)
-    journal.close()
-    return [done[n] for n in range(len(data))]
+            for count, (n, result, p) in enumerate(pool.map(first, todo), 1):
+                if p is None:
+                    finished(n, result)
+                else:
+                    pending[n] = p
+                    note({"n": n, "pending": p})
+                if count % 100 == 0:
+                    say(f"System 1: {count}/{len(todo)} rows")
+
+        if pending:
+            got = _batches(router, system2, pending, sent, note, poll, say) if batching else {}
+            def last(n):
+                try:
+                    return n, _finish(router, system2, pending[n], got.get(n, {}))
+                except ValueError as e:
+                    return n, {"error": str(e)}
+            with ThreadPoolExecutor(max(1, workers)) as pool:
+                for n, result in pool.map(last, sorted(pending)):
+                    finished(n, result)
+        return [done[n] for n in range(len(data))]
 
 
 def _batches(router, system2, pending, sent, note, poll, say):
