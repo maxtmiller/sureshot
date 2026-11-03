@@ -163,16 +163,26 @@ def _gemini_part(p):
 
 def gemini_request(body):
     """A generateContent request that asks for a schema through generationConfig.responseJsonSchema, or
-    responseSchema (OpenAPI types such as "STRING" are read as JSON schema ones). Function calling isn't answered."""
+    responseSchema (OpenAPI types such as "STRING" are read as JSON schema ones), or through one forced function:
+    functionCallingConfig mode "ANY" with one allowed function name, or with only one function declared."""
     config = _either(body, "generationConfig", "generation_config") or {}
     schema = _either(config, "responseJsonSchema", "response_json_schema") or _either(config, "responseSchema", "response_schema")
+    calling = _either(_either(body, "toolConfig", "tool_config"), "functionCallingConfig", "function_calling_config") or {}
+    tool = None
+    if str(calling.get("mode", "")).upper() == "ANY":
+        functions = [f for t in body.get("tools") or [] for f in _either(t, "functionDeclarations", "function_declarations") or []]
+        allowed = _either(calling, "allowedFunctionNames", "allowed_function_names") or [f.get("name") for f in functions]
+        tool = next((f for f in functions if f.get("name") == allowed[0]), None) if len(allowed) == 1 else None
+        schema = tool and (_either(tool, "parametersJsonSchema", "parameters_json_schema") or tool.get("parameters"))
     system = _either(body, "systemInstruction", "system_instruction")
     read = _read([(system or {}).get("parts")] + [c.get("parts") for c in body.get("contents") or []], _gemini_part)
-    return read and _mapped(schema, None, *read)
+    return read and _mapped(schema, tool and tool["name"], *read, tool and tool["name"])
 
 
 def gemini_response(model, request, result):
-    return {"candidates": [{"content": {"role": "model", "parts": [{"text": json.dumps(request["encode"](result["answers"]))}]}, "finishReason": "STOP", "index": 0}],
+    answer = request["encode"](result["answers"])
+    part = {"functionCall": {"name": request["tool"], "args": answer}} if request["tool"] else {"text": json.dumps(answer)}
+    return {"candidates": [{"content": {"role": "model", "parts": [part]}, "finishReason": "STOP", "index": 0}],
             "usageMetadata": {"promptTokenCount": 0, "candidatesTokenCount": 0, "totalTokenCount": 0}, "modelVersion": model, "responseId": result.get("id") or uuid.uuid4().hex}
 
 
