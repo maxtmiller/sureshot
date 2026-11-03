@@ -621,6 +621,11 @@ only the models, so it can gate a CI job:
 sureshot test golden.jsonl --questions questions.yaml --set email_triage --min-accuracy 0.95
 ```
 
+From Python, `sureshot.tasks.run("calibrate", tier=1, sample=0.02)` returns what the command prints, and raises
+`RuntimeError` with its message when it fails. `sureshot.airflow.SureshotOperator`, `sureshot.prefect.sureshot` and
+`sureshot.dagster.sureshot_op` / `sureshot_asset` wrap it, so an existing scheduler can run the loop and pass each
+step's result on ([recipe](examples/recipes.md#airflow-dagster-and-prefect)).
+
 ## Performance
 
 - One process serves roughly 90 `/decide` requests a second with two model calls each; `uvicorn sureshot.api:app

@@ -4,6 +4,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 [questions.yaml](questions.yaml).
 
 - [Nightly upkeep](#nightly-upkeep): retrain, calibrate, recheck and prune on a schedule, with alerts
+- [Airflow, Dagster and Prefect](#airflow-dagster-and-prefect): the nightly loop and backfills as tasks
 - [A CI gate for question changes](#a-ci-gate-for-question-changes)
 - [LangChain and LlamaIndex](#langchain-and-llamaindex): no wrapper needed
 - [n8n, Zapier and Make](#n8n-zapier-and-make): two HTTP calls
@@ -38,6 +39,49 @@ environment as the API:
 
 In Docker, copy the script into the volume and schedule `docker exec <container> sh /data/nightly.sh` from the host's
 cron, so it runs next to the log with the API's environment.
+
+## Airflow, Dagster and Prefect
+
+Where a scheduler already runs, the loop can be tasks in it instead of cron. Each command-line step is a task whose
+output is what the command prints, so later tasks can act on it: alert on drift from `stats`, or load a backfill's
+output file. Options are the flags with underscores (`min_samples=50`), `True` for a bare flag, and a dict for JSON.
+Workers need `pip install sureshot` and the API's environment (`SURESHOT_DB` as a `postgresql://` URL the API shares,
+the model keys). A step that fails raises with the command line's message, so the task fails.
+
+```python
+# Airflow: results are XComs, options are templated
+from sureshot.airflow import SureshotOperator
+
+with DAG("sureshot_nightly", schedule="0 3 * * *"):
+    rates = {"sample": 0.02, "confident": 0.1}
+    calibrate = SureshotOperator(task_id="calibrate", command="calibrate", options={"tier": 1, **rates})
+    recheck = SureshotOperator(task_id="recheck", command="recheck", options={"tier": 1, **rates})
+    stats = SureshotOperator(task_id="stats", command="stats", options=rates)
+    calibrate >> recheck >> stats
+
+# Prefect
+from sureshot.prefect import sureshot
+
+@flow
+def backfill(path: str):
+    done = sureshot("decide", batch=path, set="ticket_routing")
+    return sureshot("stats", wait_for=[done])
+
+# Dagster: assets, or ops chained with start=
+from sureshot.dagster import sureshot_asset, sureshot_op
+
+tickets_decided = sureshot_asset("decide", name="tickets_decided", batch="tickets.csv", set="ticket_routing")
+sureshot_stats = sureshot_asset("stats", deps=[tickets_decided])
+
+calibrate, recheck = sureshot_op("calibrate", tier=1), sureshot_op("recheck", tier=1)
+
+@job
+def nightly():
+    recheck(start=calibrate())
+```
+
+`decide` with `batch=` waits for System 2's batches, which can take hours, so give that task a long timeout; a retry
+picks up where it stopped.
 
 ## A CI gate for question changes
 
