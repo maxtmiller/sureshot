@@ -568,8 +568,8 @@ matching the schema:
 - A request sureshot can't answer (no schema, a free-text, nested or optional field, OpenAI's `n` above 1,
   an image by URL, a function call the request doesn't force) is forwarded unchanged to `SURESHOT_OPENAI_PASSTHROUGH_URL`,
   `SURESHOT_ANTHROPIC_PASSTHROUGH_URL` or `SURESHOT_GEMINI_PASSTHROUGH_URL` when it is set (the base URL you would give
-  that SDK, with the matching `_API_KEY`), so one base URL serves the whole app. Otherwise it gets a 422. Streaming
-  requests are never forwarded.
+  that SDK, with the matching `_API_KEY`), so one base URL serves the whole app. Otherwise it gets a 422. A forwarded
+  streaming request streams back as the upstream sends it.
 - Token usage is reported as zero: the models sureshot asked are not the one the app named.
 
 ## MCP for agents
