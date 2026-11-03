@@ -1,0 +1,14 @@
+{
+  "name": "sureshot-zapier",
+  "version": "0.1.0",
+  "description": "Zapier app for sureshot: calibrated decisions from a fast model, escalated to a stronger one when unsure",
+  "license": "Apache-2.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "zapier-platform-core": "19.3.0"
+  }
+}
