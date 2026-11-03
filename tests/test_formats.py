@@ -172,6 +172,22 @@ def test_gemini_requests_are_read_from_either_schema_field():
     assert gemini_request({"contents": GEMINI_BODY["contents"]}) is None
 
 
+def test_gemini_requests_are_read_from_a_forced_function():
+    # What google-genai 2.34 sends for a FunctionDeclaration with parameters, and mode ANY naming it.
+    route = {"name": "route", "parameters": GEMINI_BODY["generationConfig"]["responseSchema"]}
+    other = {"name": "other", "parametersJsonSchema": SCHEMA}
+    body = {"contents": GEMINI_BODY["contents"], "tools": [{"functionDeclarations": [route, other]}, {"googleSearch": {}}],
+            "toolConfig": {"functionCallingConfig": {"mode": "ANY", "allowedFunctionNames": ["route"]}}}
+    request = gemini_request(body)
+    assert request["tool"] == "route" and request["questions"].keys() == {"route.team", "route.urgent", "route.priority"}
+    snake = {"contents": GEMINI_BODY["contents"], "tools": [{"function_declarations": [other]}],
+             "tool_config": {"function_calling_config": {"mode": "ANY"}}}
+    assert gemini_request(snake)["tool"] == "other" and "other.team" in gemini_request(snake)["questions"]
+    assert gemini_request(body | {"toolConfig": {"functionCallingConfig": {"mode": "ANY"}}}) is None
+    assert gemini_request(body | {"toolConfig": {"functionCallingConfig": {"mode": "AUTO", "allowedFunctionNames": ["route"]}}}) is None
+    assert gemini_request({k: v for k, v in body.items() if k != "toolConfig"}) is None
+
+
 def test_anthropic_and_gemini_routes(client, monkeypatch):
     import sureshot.api as api
 
@@ -184,6 +200,10 @@ def test_anthropic_and_gemini_routes(client, monkeypatch):
     assert json.loads(response.json()["candidates"][0]["content"]["parts"][0]["text"]) == {"team": "billing", "urgent": True, "priority": 5}
     assert "Ticket.team" in json.loads(response.headers["x-sureshot"])["answers"]
     assert client.post("/v1beta/models/gemini-2.5-flash:generateContent?key=secret", json=GEMINI_BODY, headers={"Authorization": ""}).status_code == 200
+    forced = {"contents": GEMINI_BODY["contents"], "tools": [{"functionDeclarations": [{"name": "route", "parametersJsonSchema": SCHEMA}]}],
+              "toolConfig": {"functionCallingConfig": {"mode": "ANY"}}}
+    part = client.post("/v1beta/models/gemini-2.5-flash:generateContent?key=secret", json=forced).json()["candidates"][0]["content"]["parts"][0]
+    assert part == {"functionCall": {"name": "route", "args": {"team": "billing", "urgent": True, "priority": 5, "size": 40}}}
     seen = {}
 
     def post(url, json, headers, timeout):
