@@ -503,6 +503,7 @@ mount a volume there to keep the log, or set `SURESHOT_DB` to a `postgresql://` 
 | `GET /review` | The review queue; `limit`, `reason`, `sample`, `confident` |
 | `POST /v1/chat/completions`, `/v1/messages`, `/{version}/models/{model}:generateContent` | OpenAI, Anthropic and Gemini requests (see [below](#drop-in-for-openai-anthropic-and-gemini-apps)); the key may also come as `x-api-key`, `x-goog-api-key` or `?key=` |
 | `POST /mcp` | The [MCP server](#mcp-for-agents), over streamable HTTP |
+| `POST /warehouse/bigquery`, `/warehouse/snowflake` | A BigQuery remote function or Snowflake external function, `sureshot('ticket_routing', body)` in SQL ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#sql-in-bigquery-and-snowflake)); the key comes in `user_defined_context` as `api_key`, or in the `authorization` `HEADERS` |
 | `GET /health` | No token needed |
 
 Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`, except webhooks and Slack's clicks, which are checked by their senders' signatures. The API builds its router with `router_from_env()`,

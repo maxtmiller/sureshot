@@ -1,5 +1,6 @@
 """HTTP API: POST /decide, /feedback and /calibrate with a bearer token (SURESHOT_API_KEY), and the OpenAI, Anthropic
-and Gemini request formats for apps that already speak one (see formats.py), and MCP at /mcp (see mcp.py). Run locally
+and Gemini request formats for apps that already speak one (see formats.py), MCP at /mcp (see mcp.py), and SQL
+functions for BigQuery and Snowflake at /warehouse (see warehouse.py). Run locally
 with `uvicorn sureshot.api:app`."""
 import os
 import hmac
@@ -21,7 +22,7 @@ from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
 from sureshot.questions import load
-from sureshot import mcp, slack, webhooks
+from sureshot import mcp, slack, warehouse, webhooks
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 # A bad questions file fails at startup, not on the first request.
@@ -196,6 +197,33 @@ def calibrate_thresholds(request: CalibrateRequest, authorization: str = Header(
     authorize(authorization)
     return calibrate(log(), request.target_accuracy, request.min_samples, sample=request.sample, confident=request.confident)
 
+
+
+def _calls(rows, width):
+    if not isinstance(rows, list) or not all(isinstance(r, list) and len(r) == width for r in rows):
+        raise HTTPException(400, "each row must be the function's arguments: the question set's name and the text, e.g. sureshot('ticket_routing', body)")
+    return [tuple(r[-2:]) for r in rows]
+
+
+@app.post("/warehouse/bigquery")
+def bigquery(body: dict = Body(...)):
+    """A BigQuery remote function. BigQuery authenticates to Cloud Run with its own token, so the API key comes in
+    the function's user_defined_context as api_key. Errors are an errorMessage; BigQuery retries a 503."""
+    try:
+        authorize(f"Bearer {(body.get('userDefinedContext') or {}).get('api_key', '')}")
+        return {"replies": warehouse.decide(router(), _calls(body.get("calls"), 2))}
+    except HTTPException as e:
+        return JSONResponse({"errorMessage": str(e.detail)}, e.status_code)
+
+
+@app.post("/warehouse/snowflake")
+def snowflake(body: dict = Body(...), sf_custom_authorization: str = Header(default="")):
+    """A Snowflake external function. Snowflake sends the function's HEADERS with an sf-custom- prefix, so the API
+    key comes as HEADERS = ('authorization' = 'Bearer <key>')."""
+    authorize(sf_custom_authorization)
+    rows = body.get("data")
+    results = warehouse.decide(router(), _calls(rows, 3))
+    return {"data": [[row[0], result] for row, result in zip(rows, results)]}
 
 
 class MCPEndpoint:

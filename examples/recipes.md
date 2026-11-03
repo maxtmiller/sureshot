@@ -14,6 +14,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 - [Labeling in Label Studio](#labeling-in-label-studio): the review queue as tasks for an annotation team
 - [Importing labeled data](#importing-labeled-data): start from the labels you already have
 - [Backfills and batch jobs](#backfills-and-batch-jobs): a whole file at once, with System 2 at batch prices
+- [SQL in BigQuery and Snowflake](#sql-in-bigquery-and-snowflake): `SELECT sureshot('ticket_routing', body) FROM tickets`
 - [Claude Code, Claude Desktop and other agents](#claude-code-claude-desktop-and-other-agents): sureshot as MCP tools
 
 ## Nightly upkeep
@@ -269,6 +270,69 @@ sureshot decide --batch tickets.csv --questions examples/questions.yaml --set ti
   declined, since batches take no fallback model) are asked directly.
 - Unlike `sureshot import`, these are live decisions: they are in the random review sample and in `stats`, so a
   backfill's labels can confirm thresholds.
+
+## SQL in BigQuery and Snowflake
+
+Analysts can decide rows where they already are: a BigQuery remote function or a Snowflake external function sends
+batches of `(question set, text)` to a running sureshot, and each row gets back a JSON object with the same fields
+`decide --batch` writes (`sureshot_id`, `sureshot_<key>`, `_source`, `_confidence`, or `sureshot_error` for a row
+with no text or an unknown set). System 2 is asked directly, so a batch takes as long as its slowest escalation.
+
+Both run the published image on Cloud Run, with a shared log in Postgres and the questions file as a secret. Cloud
+Run pulls from Artifact Registry, so copy the image there first:
+
+```bash
+IMAGE=us-central1-docker.pkg.dev/$PROJECT/sureshot/sureshot:latest
+docker pull --platform linux/amd64 ghcr.io/maxtmiller/sureshot:latest
+docker tag ghcr.io/maxtmiller/sureshot:latest $IMAGE && docker push $IMAGE
+gcloud run deploy sureshot --image $IMAGE --region us-central1 --no-allow-unauthenticated --timeout 900 \
+  --set-env-vars SURESHOT_DB=postgresql://...,SURESHOT_CACHE=postgresql://...,SURESHOT_QUESTIONS=/config/questions.yaml,SURESHOT_SYSTEM1_MODEL=gpt-4o-mini,SURESHOT_SYSTEM1_PROVIDER=openai \
+  --set-secrets SURESHOT_API_KEY=sureshot-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,/config/questions.yaml=sureshot-questions:latest
+```
+
+Warehouses retry a batch that failed or timed out, so a row can be decided and logged twice; `SURESHOT_CACHE` keeps
+the retry from asking the models again.
+
+**BigQuery.** A connection's service account calls Cloud Run; the [remote functions guide](https://cloud.google.com/bigquery/docs/remote-functions)
+has the details.
+
+```bash
+bq mk --connection --location=US --connection_type=CLOUD_RESOURCE sureshot
+bq show --connection $PROJECT.us.sureshot    # its serviceAccountId
+gcloud run services add-iam-policy-binding sureshot --region us-central1 --member serviceAccount:<serviceAccountId> --role roles/run.invoker
+```
+
+```sql
+CREATE FUNCTION analytics.sureshot(question_set STRING, text STRING) RETURNS JSON
+REMOTE WITH CONNECTION `my-project.us.sureshot`
+OPTIONS (endpoint = 'https://sureshot-<hash>.a.run.app/warehouse/bigquery',
+         user_defined_context = [("api_key", "<SURESHOT_API_KEY>")], max_batching_rows = 50);
+
+SELECT id, JSON_VALUE(r, '$.sureshot_team') AS team, JSON_VALUE(r, '$.sureshot_id') AS decision
+FROM (SELECT id, analytics.sureshot('ticket_routing', body) AS r FROM support.tickets);
+```
+
+BigQuery authenticates to Cloud Run with its own token, so sureshot's key travels in `user_defined_context`, where
+anyone who can read the function's definition can see it; Cloud Run's invoker role is the gate that matters.
+
+**Snowflake.** External functions reach a service through an API gateway; with Cloud Run, that is Google Cloud API
+Gateway, set up as in Snowflake's [guide for Google Cloud](https://docs.snowflake.com/en/sql-reference/external-functions-creating-gcp),
+with the gateway's backend `https://sureshot-<hash>.a.run.app/warehouse/snowflake` and its service account given
+`roles/run.invoker`. Snowflake sends a function's `HEADERS` with an `sf-custom-` prefix, which is where the key goes:
+
+```sql
+CREATE EXTERNAL FUNCTION sureshot(question_set VARCHAR, text VARCHAR) RETURNS VARIANT
+API_INTEGRATION = sureshot_gateway
+HEADERS = ('authorization' = 'Bearer <SURESHOT_API_KEY>')
+MAX_BATCH_ROWS = 50
+AS 'https://<gateway-host>/warehouse/snowflake';
+
+SELECT id, r:sureshot_team::string AS team, r:sureshot_id::string AS decision
+FROM (SELECT id, sureshot('ticket_routing', body) AS r FROM support.tickets);
+```
+
+Make the function `SECURE` to hide the header from everyone but its owner. Label the decisions as usual, with the
+`sureshot_id` each row returned (`POST /feedback`, or a [webhook](#labels-from-webhooks) from where the outcome lands).
 
 ## Claude Code, Claude Desktop and other agents
 
