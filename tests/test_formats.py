@@ -115,7 +115,28 @@ def test_other_requests_pass_through_or_are_refused(client, monkeypatch):
     monkeypatch.setenv("SURESHOT_OPENAI_PASSTHROUGH_API_KEY", "up")
     assert client.post("/v1/chat/completions", json=_chat()).json()["choices"][0]["message"]["content"] == "hi"
     assert seen == {"url": "https://upstream.test/v1/chat/completions", "json": _chat(), "headers": {"Authorization": "Bearer up"}}
+
+
+def test_streaming_requests_pass_through_as_a_stream(client, monkeypatch):
+    import sureshot.api as api
+
+    seen, sent = [], []
+
+    def post_stream(url, json, headers, timeout):
+        seen.append(url)
+        sent.append(httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=httpx.ByteStream(b'data: {"a": 1}\n\ndata: [DONE]\n\n')))
+        return sent[-1]
+
+    monkeypatch.setattr(api, "post_stream", post_stream)
     assert client.post("/v1/chat/completions", json=_chat(stream=True)).status_code == 422
+    for fmt, url in (("OPENAI", "https://openai.test/v1"), ("ANTHROPIC", "https://anthropic.test"), ("GEMINI", "https://gemini.test")):
+        monkeypatch.setenv(f"SURESHOT_{fmt}_PASSTHROUGH_URL", url)
+    response = client.post("/v1/chat/completions", json=_chat(stream=True))
+    assert response.headers["content-type"].startswith("text/event-stream") and response.text == 'data: {"a": 1}\n\ndata: [DONE]\n\n'
+    client.post("/v1/messages", json={"model": "claude-haiku-5-5", "max_tokens": 10, "messages": [{"role": "user", "content": "hi"}], "stream": True})
+    client.post("/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=secret", json={"contents": GEMINI_BODY["contents"]})
+    assert seen == ["https://openai.test/v1/chat/completions", "https://anthropic.test/v1/messages",
+                    "https://gemini.test/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse"] and all(r.is_closed for r in sent)
 
 
 def test_the_openai_sdk_parses_a_pydantic_model(client):

@@ -10,10 +10,10 @@ from dotenv import load_dotenv
 from urllib.parse import parse_qs
 from fastapi import BackgroundTasks, Body, FastAPI, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
-from sureshot.adapters.base import post
+from sureshot.adapters.base import post, post_stream
 from sureshot.calibrate import calibrate
 from sureshot.formats import (anthropic_request, anthropic_response, anthropic_stream, gemini_request, gemini_response, gemini_stream,
                               openai_request, openai_response, openai_stream, summary)
@@ -213,14 +213,26 @@ class MCPEndpoint:
 app.add_route("/mcp", MCPEndpoint(), methods=["GET", "POST", "DELETE"])
 
 
+def _relay(upstream):
+    try:
+        yield from upstream.iter_bytes()
+    finally:
+        upstream.close()
+
+
 def passthrough(fmt, body, path, headers, stream):
     """Forwards a request sureshot can't answer, unchanged, to SURESHOT_{fmt}_PASSTHROUGH_URL: the base URL you would
-    give that API's SDK, with SURESHOT_{fmt}_PASSTHROUGH_API_KEY sent the way that API expects."""
+    give that API's SDK, with SURESHOT_{fmt}_PASSTHROUGH_API_KEY sent the way that API expects. A stream is relayed as
+    it arrives."""
     url = os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_URL")
-    if not url or stream:
+    if not url:
         raise HTTPException(422, "sureshot answers requests for a JSON schema whose fields are all enums, booleans or integer ranges of 2 to 10 values; "
-                                 f"set SURESHOT_{fmt}_PASSTHROUGH_URL to forward other requests, except streaming ones")
-    upstream = post(url.rstrip("/") + path, json=body, headers=headers(os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_API_KEY")), timeout=300)
+                                 f"set SURESHOT_{fmt}_PASSTHROUGH_URL to forward other requests")
+    request = {"url": url.rstrip("/") + path, "json": body, "headers": headers(os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_API_KEY")), "timeout": 300}
+    if stream:
+        upstream = post_stream(**request)
+        return StreamingResponse(_relay(upstream), upstream.status_code, media_type=upstream.headers.get("content-type"))
+    upstream = post(**request)
     return Response(upstream.content, upstream.status_code, media_type=upstream.headers.get("content-type"))
 
 
@@ -274,5 +286,5 @@ def gemini_generate(version: str, model: str, body: dict = Body(...), x_goog_api
 def gemini_stream_generate(version: str, model: str, body: dict = Body(...), x_goog_api_key: str = Header(default=""), key: str = "", alt: str = ""):
     """Gemini's streamGenerateContent, as server-sent events with ?alt=sse or else a JSON array."""
     sse = alt == "sse"
-    return gemini(version, model, body, x_goog_api_key or key, "streamGenerateContent", lambda r: gemini_stream(r, sse),
+    return gemini(version, model, body, x_goog_api_key or key, "streamGenerateContent?alt=sse" if sse else "streamGenerateContent", lambda r: gemini_stream(r, sse),
                   "text/event-stream" if sse else "application/json")

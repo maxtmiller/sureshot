@@ -18,6 +18,11 @@ def post(url, **kwargs):
     return _client.post(url, **kwargs)
 
 
+def post_stream(url, **kwargs):
+    """A POST whose body is read as it arrives; the caller closes the response."""
+    return _client.send(_client.build_request("POST", url, **kwargs), stream=True)
+
+
 def get(url, **kwargs):
     return _client.get(url, **kwargs)
 
