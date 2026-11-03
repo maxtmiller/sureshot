@@ -15,7 +15,8 @@ from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 from sureshot.adapters.base import post
 from sureshot.calibrate import calibrate
-from sureshot.formats import anthropic_request, anthropic_response, gemini_request, gemini_response, openai_request, openai_response, summary
+from sureshot.formats import (anthropic_request, anthropic_response, anthropic_stream, gemini_request, gemini_response, gemini_stream,
+                              openai_request, openai_response, openai_stream, summary)
 from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
@@ -212,23 +213,27 @@ class MCPEndpoint:
 app.add_route("/mcp", MCPEndpoint(), methods=["GET", "POST", "DELETE"])
 
 
-def passthrough(fmt, body, path, headers):
+def passthrough(fmt, body, path, headers, stream):
     """Forwards a request sureshot can't answer, unchanged, to SURESHOT_{fmt}_PASSTHROUGH_URL: the base URL you would
     give that API's SDK, with SURESHOT_{fmt}_PASSTHROUGH_API_KEY sent the way that API expects."""
     url = os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_URL")
-    if not url or body.get("stream"):
-        raise HTTPException(422, "sureshot answers requests for a JSON schema whose fields are all enums, booleans or integer ranges of 2 to 10 values, "
-                                 f"without streaming; set SURESHOT_{fmt}_PASSTHROUGH_URL to forward other requests, except streaming ones")
+    if not url or stream:
+        raise HTTPException(422, "sureshot answers requests for a JSON schema whose fields are all enums, booleans or integer ranges of 2 to 10 values; "
+                                 f"set SURESHOT_{fmt}_PASSTHROUGH_URL to forward other requests, except streaming ones")
     upstream = post(url.rstrip("/") + path, json=body, headers=headers(os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_API_KEY")), timeout=300)
     return Response(upstream.content, upstream.status_code, media_type=upstream.headers.get("content-type"))
 
 
-def answer(request, respond):
+def answer(request, respond, stream=None, media_type="text/event-stream"):
+    """Decides before responding, so a stream carries the whole answer and an error is still a 422."""
     try:
         result = router().decide(request["state"], request["questions"], request["images"])
     except ValueError as e:
         raise HTTPException(422, str(e))
-    return JSONResponse(respond(result), headers={"x-sureshot": json.dumps(summary(result))})
+    headers = {"x-sureshot": json.dumps(summary(result))}
+    if stream:
+        return Response(stream(respond(result)), media_type=media_type, headers=headers)
+    return JSONResponse(respond(result), headers=headers)
 
 
 @app.post("/v1/chat/completions")
@@ -236,8 +241,9 @@ def openai_chat(body: dict = Body(...), authorization: str = Header(default=""))
     """OpenAI's chat completions: point the client's base URL at <sureshot>/v1, with SURESHOT_API_KEY as its key."""
     authorize(authorization)
     if (request := openai_request(body)) is None:
-        return passthrough("OPENAI", body, "/chat/completions", lambda key: {"Authorization": f"Bearer {key}"} if key else {})
-    return answer(request, lambda result: openai_response(body, request, result))
+        return passthrough("OPENAI", body, "/chat/completions", lambda key: {"Authorization": f"Bearer {key}"} if key else {}, body.get("stream"))
+    include_usage = (body.get("stream_options") or {}).get("include_usage")
+    return answer(request, lambda result: openai_response(body, request, result), body.get("stream") and (lambda c: openai_stream(c, include_usage)))
 
 
 @app.post("/v1/messages")
@@ -247,14 +253,26 @@ def anthropic_messages(body: dict = Body(...), x_api_key: str = Header(default="
     authorize(f"Bearer {x_api_key}" if x_api_key else authorization)
     if (request := anthropic_request(body)) is None:
         version = {"anthropic-version": anthropic_version} | ({"anthropic-beta": anthropic_beta} if anthropic_beta else {})
-        return passthrough("ANTHROPIC", body, "/v1/messages", lambda key: version | ({"x-api-key": key} if key else {}))
-    return answer(request, lambda result: anthropic_response(body, request, result))
+        return passthrough("ANTHROPIC", body, "/v1/messages", lambda key: version | ({"x-api-key": key} if key else {}), body.get("stream"))
+    return answer(request, lambda result: anthropic_response(body, request, result), body.get("stream") and anthropic_stream)
+
+
+def gemini(version, model, body, key, method, stream=None, media_type=None):
+    authorize(f"Bearer {key}")
+    if (request := gemini_request(body)) is None:
+        return passthrough("GEMINI", body, f"/{version}/models/{model}:{method}", lambda k: {"x-goog-api-key": k} if k else {}, stream)
+    return answer(request, lambda result: gemini_response(model, request, result), stream, media_type)
 
 
 @app.post("/{version}/models/{model}:generateContent")
 def gemini_generate(version: str, model: str, body: dict = Body(...), x_goog_api_key: str = Header(default=""), key: str = ""):
     """Gemini's generateContent: point the client's base URL at <sureshot>, with SURESHOT_API_KEY as its key."""
-    authorize(f"Bearer {x_goog_api_key or key}")
-    if (request := gemini_request(body)) is None:
-        return passthrough("GEMINI", body, f"/{version}/models/{model}:generateContent", lambda k: {"x-goog-api-key": k} if k else {})
-    return answer(request, lambda result: gemini_response(model, request, result))
+    return gemini(version, model, body, x_goog_api_key or key, "generateContent")
+
+
+@app.post("/{version}/models/{model}:streamGenerateContent")
+def gemini_stream_generate(version: str, model: str, body: dict = Body(...), x_goog_api_key: str = Header(default=""), key: str = "", alt: str = ""):
+    """Gemini's streamGenerateContent, as server-sent events with ?alt=sse or else a JSON array."""
+    sse = alt == "sse"
+    return gemini(version, model, body, x_goog_api_key or key, "streamGenerateContent", lambda r: gemini_stream(r, sse),
+                  "text/event-stream" if sse else "application/json")

@@ -66,7 +66,7 @@ def test_openai_requests_are_read_from_response_format_or_a_forced_tool():
     assert openai_request(_chat(tools=tools, tool_choice="required"))["questions"].keys() == {f"route.{k}" for k in SCHEMA["properties"]}
     assert openai_request(_chat(tools=tools)) is None
     assert openai_request(_chat(response_format={"type": "json_object"})) is None
-    assert openai_request(_chat(response_format=fmt, stream=True)) is None
+    assert openai_request(_chat(response_format=fmt, stream=True))["questions"] == request["questions"]
     image = {"role": "user", "content": [{"type": "text", "text": "Is this urgent?"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}
     assert openai_request(_chat(response_format=fmt) | {"messages": [image]})["images"] == ["data:image/png;base64,AAAA"]
     image["content"][1]["image_url"]["url"] = "https://example.test/a.png"
@@ -143,7 +143,7 @@ def test_anthropic_requests_are_read_from_output_config_or_a_forced_tool():
     assert anthropic_request(body | {"tools": tools, "tool_choice": {"type": "tool", "name": "route"}})["tool"] == "route"
     assert anthropic_request(body | {"tools": tools, "tool_choice": {"type": "any"}})["tool"] == "route"
     assert anthropic_request(body | {"tools": tools}) is None
-    assert anthropic_request(body | {"tools": tools, "tool_choice": {"type": "any"}, "stream": True}) is None
+    assert anthropic_request(body | {"tools": tools, "tool_choice": {"type": "any"}, "stream": True})["tool"] == "route"
 
 
 def test_anthropic_sdk_constraints_moved_into_descriptions_still_map():
@@ -217,3 +217,55 @@ def test_the_anthropic_sdk_parses_a_pydantic_model(client):
     sdk = anthropic.Anthropic(base_url="http://testserver", api_key="secret", http_client=client)
     message = sdk.messages.parse(model="claude-haiku-5-5", max_tokens=100, messages=[{"role": "user", "content": "I was charged twice"}], output_format=Ticket)
     assert message.parsed_output == Ticket(team="billing", urgent=True, priority=5)
+
+
+def _events(response):
+    """(event name, data) of each server-sent event."""
+    events = []
+    for block in response.text.strip().split("\n\n"):
+        fields = dict(line.split(": ", 1) for line in block.split("\n"))
+        events.append((fields.get("event"), fields["data"] if fields["data"] == "[DONE]" else json.loads(fields["data"])))
+    return events
+
+
+def test_streaming_requests_get_the_answer_as_one_chunk(client):
+    fmt = {"type": "json_schema", "json_schema": {"name": "ticket", "schema": SCHEMA}}
+    response = client.post("/v1/chat/completions", json=_chat(response_format=fmt, stream=True, stream_options={"include_usage": True}))
+    assert response.headers["content-type"].startswith("text/event-stream") and "ticket.team" in json.loads(response.headers["x-sureshot"])["answers"]
+    chunks = [data for _, data in _events(response)]
+    assert json.loads(chunks[0]["choices"][0]["delta"]["content"])["team"] == "billing" and chunks[1]["choices"][0]["finish_reason"] == "stop"
+    assert chunks[2]["choices"] == [] and chunks[2]["usage"]["total_tokens"] == 0 and chunks[3] == "[DONE]"
+    tools = [{"type": "function", "function": {"name": "route", "parameters": SCHEMA}}]
+    chunks = [data for _, data in _events(client.post("/v1/chat/completions", json=_chat(tools=tools, tool_choice="required", stream=True)))]
+    assert chunks[0]["choices"][0]["delta"]["tool_calls"][0]["index"] == 0 and "usage" not in chunks[0] and len(chunks) == 3
+    body = {"model": "claude-haiku-5-5", "max_tokens": 100, "messages": [{"role": "user", "content": "I was charged twice"}], "stream": True,
+            "tools": [{"name": "route", "input_schema": SCHEMA}], "tool_choice": {"type": "any"}}
+    events = _events(client.post("/v1/messages", json=body))
+    assert [name for name, _ in events] == ["message_start", "content_block_start", "content_block_delta", "content_block_stop", "message_delta", "message_stop"]
+    assert json.loads(events[2][1]["delta"]["partial_json"])["team"] == "billing" and events[4][1]["delta"]["stop_reason"] == "tool_use"
+    url = "/v1beta/models/gemini-2.5-flash:streamGenerateContent"
+    events = _events(client.post(url + "?alt=sse&key=secret", json=GEMINI_BODY))
+    assert json.loads(events[0][1]["candidates"][0]["content"]["parts"][0]["text"])["team"] == "billing"
+    assert json.loads(client.post(url + "?key=secret", json=GEMINI_BODY).json()[0]["candidates"][0]["content"]["parts"][0]["text"])["urgent"] is True
+    assert client.post(url + "?alt=sse&key=secret", json={"contents": GEMINI_BODY["contents"]}).status_code == 422
+
+
+def test_the_sdks_parse_a_streamed_answer(client):
+    openai, anthropic = pytest.importorskip("openai"), pytest.importorskip("anthropic")
+    from typing import Literal
+    from pydantic import BaseModel
+
+    class Ticket(BaseModel):
+        team: Literal["billing", "support"]
+        urgent: bool
+
+    sdk = openai.OpenAI(base_url="http://testserver/v1", api_key="secret", http_client=client)
+    with sdk.chat.completions.stream(model="gpt-4o-mini", messages=_chat()["messages"], response_format=Ticket) as stream:
+        assert stream.get_final_completion().choices[0].message.parsed == Ticket(team="billing", urgent=True)
+    tool = {"type": "function", "function": {"name": "route", "parameters": SCHEMA}}
+    chunks = list(sdk.chat.completions.create(model="gpt-4o-mini", messages=_chat()["messages"], tools=[tool], tool_choice="required", stream=True))
+    assert json.loads(chunks[0].choices[0].delta.tool_calls[0].function.arguments)["team"] == "billing"
+    sdk = anthropic.Anthropic(base_url="http://testserver", api_key="secret", http_client=client)
+    with sdk.messages.stream(model="claude-haiku-5-5", max_tokens=100, messages=[{"role": "user", "content": "I was charged twice"}],
+                             tools=[{"name": "route", "input_schema": SCHEMA}], tool_choice={"type": "any"}) as stream:
+        assert stream.get_final_message().content[0].input == {"team": "billing", "urgent": True, "priority": 5, "size": 40}
