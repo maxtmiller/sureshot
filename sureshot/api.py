@@ -213,11 +213,19 @@ class MCPEndpoint:
 app.add_route("/mcp", MCPEndpoint(), methods=["GET", "POST", "DELETE"])
 
 
-def _relay(upstream):
-    try:
-        yield from upstream.iter_bytes()
-    finally:
-        upstream.close()
+class Relay(StreamingResponse):
+    """An upstream stream, closed however the response ends. When the client hangs up, Starlette stops iterating
+    without closing the iterator, so a generator's finally would leave the upstream open, still generating."""
+
+    def __init__(self, upstream):
+        super().__init__(upstream.iter_bytes(), upstream.status_code, media_type=upstream.headers.get("content-type"))
+        self.upstream = upstream
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.upstream.close()
 
 
 def passthrough(fmt, body, path, headers, stream):
@@ -230,8 +238,7 @@ def passthrough(fmt, body, path, headers, stream):
                                  f"set SURESHOT_{fmt}_PASSTHROUGH_URL to forward other requests")
     request = {"url": url.rstrip("/") + path, "json": body, "headers": headers(os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_API_KEY")), "timeout": 300}
     if stream:
-        upstream = post_stream(**request)
-        return StreamingResponse(_relay(upstream), upstream.status_code, media_type=upstream.headers.get("content-type"))
+        return Relay(post_stream(**request))
     upstream = post(**request)
     return Response(upstream.content, upstream.status_code, media_type=upstream.headers.get("content-type"))
 

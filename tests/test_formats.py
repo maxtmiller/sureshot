@@ -139,6 +139,37 @@ def test_streaming_requests_pass_through_as_a_stream(client, monkeypatch):
                     "https://gemini.test/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse"] and all(r.is_closed for r in sent)
 
 
+class Endless(httpx.SyncByteStream):
+    def __iter__(self):
+        while True:
+            yield b"data: {}\n\n"
+
+
+@pytest.mark.parametrize("spec", ["2.3", "2.4"])
+def test_a_relayed_stream_closes_upstream_when_the_client_hangs_up(spec):
+    """Below ASGI 2.4 Starlette hears the disconnect and stops; from 2.4 a send fails. Either way the upstream closes."""
+    import asyncio
+    from sureshot.api import Relay
+
+    upstream, sends = httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=Endless()), []
+
+    async def receive():
+        await asyncio.sleep(0.05)
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        sends.append(message)
+        if spec == "2.4" and len(sends) > 3:
+            raise OSError("client gone")
+        await asyncio.sleep(0.001)
+
+    try:
+        asyncio.run(Relay(upstream)({"type": "http", "asgi": {"spec_version": spec}}, receive, send))
+    except Exception as e:
+        assert spec == "2.4" and type(e).__name__ == "ClientDisconnect"
+    assert upstream.is_closed and len(sends) > 1
+
+
 def test_the_openai_sdk_parses_a_pydantic_model(client):
     openai = pytest.importorskip("openai")
     from typing import Literal
