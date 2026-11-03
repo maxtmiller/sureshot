@@ -8,7 +8,7 @@ import json
 from sureshot.cli import COMMANDS, parser
 
 POSITIONAL = ("action", "file", "golden")  # label-studio push|pull, import FILE, test GOLDEN
-LONG_RUNNING = ("serve", "mcp")
+LONG_RUNNING = ("serve", "mcp", "worker")
 
 
 def run(command, **options):

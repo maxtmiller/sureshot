@@ -170,6 +170,31 @@ def review(args):
     label(store, items)
 
 
+def worker(args):
+    import signal
+    from sureshot import worker as queue
+
+    router = _router(args)
+    if args.set:
+        try:
+            router.question_set(args.set)
+        except ValueError as e:
+            sys.exit(f"sureshot: {e}")
+    source, sink, dead_letter = queue.endpoint(args.source), queue.endpoint(args.sink, sink=True), queue.endpoint(args.dead_letter, sink=True)
+    stopping = []
+
+    def stop(signum, frame):
+        if stopping:
+            sys.exit("sureshot: stopped without finishing the batch; it will be delivered again")
+        stopping.append(signum)
+        print("sureshot: finishing the batch in hand, then stopping (again to stop now)", file=sys.stderr)
+
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGTERM, stop)
+    return queue.run(router, source, sink, dead_letter, args.set, args.workers, args.retries, stop=lambda: bool(stopping),
+                     say=lambda message: print(f"sureshot: {message}", file=sys.stderr))
+
+
 def import_labels(args):
     from sureshot.importer import import_rows, rows
 
@@ -230,6 +255,7 @@ COMMANDS = {
     "label-studio": label_studio,
     "import": import_labels,
     "test": test,
+    "worker": worker,
 }
 
 
@@ -307,6 +333,14 @@ def parser():
     s.add_argument("--set", help="the question set, which names the project (default: the file's only set)")
     s.add_argument("--limit", type=int, default=50, help="push at most this many new questions")
     s.add_argument("--reason", choices=REASONS)
+
+    s = sub.add_parser("worker", parents=[common, routed], help="decide messages from SQS, Redis Streams or Kafka and write the decisions to a queue, a webhook or stdout")
+    s.add_argument("--source", required=True, help="sqs://<queue>, redis://host:6379/0?stream=<name>&group=<group> or kafka://host:9092/<topic>?group=<group>")
+    s.add_argument("--sink", default="-", help="where decisions go: a source-style URL, an http(s):// webhook, or - for stdout (default)")
+    s.add_argument("--dead-letter", default="stderr", help="where messages that can't be decided go, with the error (default: stderr)")
+    s.add_argument("--set", help="the question set for messages without questions")
+    s.add_argument("--workers", type=int, default=8, help="messages decided at once")
+    s.add_argument("--retries", type=int, default=3, help="tries again on a failure other than a bad message, with backoff")
 
     s = sub.add_parser("test", parents=[common, routed], help="score the router on a golden JSONL file, without logging")
     s.add_argument("golden")
