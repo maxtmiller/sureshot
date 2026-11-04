@@ -190,12 +190,6 @@ def worker(args):
     import signal
     from sureshot import worker as queue
 
-    router = _router(args)
-    if args.set:
-        try:
-            router.question_set(args.set)
-        except ValueError as e:
-            sys.exit(f"sureshot: {e}")
     if args.metrics_port is not None:
         from sureshot import observe
 
@@ -204,6 +198,12 @@ def worker(args):
         if not os.environ.get("SURESHOT_API_KEY"):
             sys.exit("sureshot: --metrics-port needs SURESHOT_API_KEY, the bearer token Prometheus scrapes with")
         observe.serve(args.metrics_port, os.environ["SURESHOT_API_KEY"])
+    router = _router(args)
+    if args.set:
+        try:
+            router.question_set(args.set)
+        except ValueError as e:
+            sys.exit(f"sureshot: {e}")
     source, sink, dead_letter = queue.endpoint(args.source), queue.endpoint(args.sink, sink=True), queue.endpoint(args.dead_letter, sink=True)
     stopping = []
 

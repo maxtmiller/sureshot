@@ -88,11 +88,10 @@ def test_worker_metrics_server():
         server.shutdown()
 
 
-def test_worker_metrics_need_a_key(monkeypatch, tmp_path):
+def test_worker_metrics_need_a_key(monkeypatch):
     monkeypatch.delenv("SURESHOT_API_KEY", raising=False)
-    monkeypatch.setenv("SURESHOT_QUESTIONS", "examples/questions.yaml")
     with pytest.raises(SystemExit, match="SURESHOT_API_KEY"):
-        cli.main(["worker", "--source", "sqs://q", "--metrics-port", "0", "--db", str(tmp_path / "s.db")])
+        cli.main(["worker", "--source", "sqs://q", "--metrics-port", "0"])
 
 
 def test_spans_around_each_tier_and_system2():
