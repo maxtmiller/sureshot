@@ -231,6 +231,17 @@ def label_studio(args):
         sys.exit(f"sureshot: {e}")
 
 
+def migrate(args):
+    from sureshot.migrate import migrate
+
+    if is_postgres(args.source):
+        sys.exit("sureshot: --from is the SQLite file to copy")
+    try:
+        return migrate(args.source, args.target)
+    except ValueError as e:
+        sys.exit(f"sureshot: {e}")
+
+
 def test(args):
     try:
         report = _router(args).test(args.golden, args.set)
@@ -256,6 +267,7 @@ COMMANDS = {
     "import": import_labels,
     "test": test,
     "worker": worker,
+    "migrate": migrate,
 }
 
 
@@ -341,6 +353,10 @@ def parser():
     s.add_argument("--set", help="the question set for messages without questions")
     s.add_argument("--workers", type=int, default=8, help="messages decided at once")
     s.add_argument("--retries", type=int, default=3, help="tries again on a failure other than a bad message, with backoff")
+
+    s = sub.add_parser("migrate", help="copy a SQLite log (or cache) to Postgres; running it again copies only the rows the target lacks")
+    s.add_argument("--from", dest="source", required=True, help="the SQLite file")
+    s.add_argument("--to", dest="target", required=True, help="a postgresql:// URL")
 
     s = sub.add_parser("test", parents=[common, routed], help="score the router on a golden JSONL file, without logging")
     s.add_argument("golden")

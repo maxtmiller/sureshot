@@ -325,6 +325,9 @@ API replicas on several machines and the nightly job share one log, one set of l
 `calibrate` on any of them applies to every router on its next decision. `Cache` takes a Postgres URL the same way.
 The tables are created on first use, so the user needs to be able to create tables. Hosted Postgres works: add
 `?sslmode=require` for TLS, and pooled URLs (PgBouncer, or Supabase's and Neon's poolers) work in transaction mode.
+To move a log you started in SQLite, `sureshot migrate --from sureshot.db --to postgresql://...` copies its decisions,
+labels, thresholds and calibrations (and the cache, given a cache file). Running it again copies only the rows Postgres
+lacks and never overwrites one, so run it once more after stopping the writers, then point `SURESHOT_DB` at Postgres.
 
 Where nobody has labeled, sureshot grades a tier by System 2's answer. That measures agreement with System 2, which is
 not the truth when System 2 is often wrong, so label where you can and measure with a random sample (below).
@@ -609,6 +612,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | `sureshot review [--limit] [--reason] [--label \| --slack [--channel]]` | The [review queue](#review-queue-what-to-label-next). With `--label`, shows each item and asks for its true answer (Enter accepts the router's, `-` skips, Ctrl-D stops), saving each label as it is given. With `--slack`, posts the items not posted before to Slack to label with buttons |
 | `sureshot import FILE [--set] [--text] [--limit] [--escalate] [--workers]` | Decides and logs labeled examples you already have (CSV or JSONL, a column per question), so calibrate and retrain use them |
 | `sureshot label-studio push\|pull [--set] [--limit]` | Sends new review items of a question set to its Label Studio project, or saves the project's annotations as labels |
+| `sureshot migrate --from sureshot.db --to postgresql://...` | Copies a SQLite log or cache to Postgres; running it again copies only the rows the target lacks |
 | `sureshot test golden.jsonl [--questions file] [--set name] [--min-accuracy]` | [Scores](#testing-and-comparing-models) the router without logging; exits 1 below `--min-accuracy` |
 
 `calibrate`, `retrain`, `recheck`, `stats` and `review` take `--sample` and `--confident`, the rates you give the
