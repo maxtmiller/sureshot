@@ -8,7 +8,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from prometheus_client import REGISTRY
 import sureshot.alerts as alerts
 import sureshot.cli as cli
-from sureshot import Store, calibrate, review_queue
+from sureshot import Store, calibrate, observe, review_queue
 from sureshot.adapters.base import Outage
 from sureshot.router import Router
 from test_router import QUESTIONS, FakeClaude, Tier
@@ -71,6 +71,28 @@ def test_metrics_endpoint(monkeypatch):
     response = client.get("/metrics", headers={"Authorization": "Bearer secret"})
     assert response.headers["content-type"].startswith("text/plain")
     assert 'sureshot_answers_total{by="tier 0",question="m_api"}' in response.text
+
+
+def test_worker_metrics_server():
+    server = observe.serve(0, "secret", host="127.0.0.1")
+    try:
+        Router(Tier({"m_worker": (True, 0.99)}), FakeClaude()).decide("x", {"m_worker": {"type": "noul"}})
+        url = f"http://127.0.0.1:{server.server_address[1]}"
+        assert httpx.get(f"{url}/metrics").status_code == 401
+        assert httpx.get(f"{url}/metrics", headers={"Authorization": "Bearer wrong"}).status_code == 401
+        assert httpx.get(f"{url}/other", headers={"Authorization": "Bearer secret"}).status_code == 404
+        response = httpx.get(f"{url}/metrics", headers={"Authorization": "Bearer secret"})
+        assert response.headers["content-type"].startswith("text/plain")
+        assert 'sureshot_answers_total{by="tier 0",question="m_worker"}' in response.text
+    finally:
+        server.shutdown()
+
+
+def test_worker_metrics_need_a_key(monkeypatch, tmp_path):
+    monkeypatch.delenv("SURESHOT_API_KEY", raising=False)
+    monkeypatch.setenv("SURESHOT_QUESTIONS", "examples/questions.yaml")
+    with pytest.raises(SystemExit, match="SURESHOT_API_KEY"):
+        cli.main(["worker", "--source", "sqs://q", "--metrics-port", "0", "--db", str(tmp_path / "s.db")])
 
 
 def test_spans_around_each_tier_and_system2():

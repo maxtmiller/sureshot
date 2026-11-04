@@ -542,8 +542,9 @@ which you can also call yourself:
 ## Monitoring and alerts
 
 `GET /metrics` serves Prometheus metrics for the decisions each process makes (the API, its drop-in routes and MCP;
-with several replicas or uvicorn workers, scrape each one). Prometheus sends the API key with
-`authorization: {credentials: ...}` in the scrape config.
+with several replicas or uvicorn workers, scrape each one). `sureshot worker --metrics-port 9100` serves the same
+`/metrics` for a queue worker, which has no API. Prometheus sends the API key with `authorization: {credentials: ...}`
+in the scrape config.
 
 | Metric | Labels |
 | --- | --- |
@@ -635,7 +636,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | --- | --- |
 | `sureshot serve [--host] [--port]` | Runs the HTTP API (needs `sureshot[api]`) |
 | `sureshot mcp [--questions file]` | Runs the [MCP server](#mcp-for-agents) over stdio (needs `sureshot[mcp]`) |
-| `sureshot worker --source URL [--sink URL] [--dead-letter URL] [--set] [--workers] [--retries]` | Decides messages from SQS, Redis Streams or Kafka (each `/decide` bodies) and writes the decisions to a queue, a webhook or stdout, acknowledging each batch only once it is decided and sent ([recipe](examples/recipes.md#queues-sqs-redis-streams-and-kafka)) |
+| `sureshot worker --source URL [--sink URL] [--dead-letter URL] [--set] [--workers] [--retries] [--metrics-port]` | Decides messages from SQS, Redis Streams or Kafka (each `/decide` bodies) and writes the decisions to a queue, a webhook or stdout, acknowledging each batch only once it is decided and sent ([recipe](examples/recipes.md#queues-sqs-redis-streams-and-kafka)) |
 | `sureshot decide [request.json] [--questions file]` | Decides one request, the body of `POST /decide`, from a file or stdin |
 | `sureshot decide --batch FILE [--set] [--text] [--out] [--workers] [--poll] [--no-escalate]` | Decides every row of a CSV, JSONL or Parquet file and writes them with their answers; System 2's questions go through OpenAI's or Anthropic's batch API, at half the price ([recipe](examples/recipes.md#backfills-and-batch-jobs)) |
 | `sureshot calibrate [--target] [--tier]` | [Calibrates](#calibrate-learn-each-questions-threshold) and saves thresholds |

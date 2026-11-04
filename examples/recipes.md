@@ -117,6 +117,8 @@ sureshot worker --set ticket_routing \
   down stops the worker without acknowledging the batch.
 - SIGTERM or Ctrl-C finishes the batch in hand and stops; a second one stops at once. Run several workers with the
   same group to share a stream or topic.
+- `--metrics-port 9100` serves the worker's [Prometheus metrics](../README.md#monitoring-and-alerts) at
+  `GET /metrics`, with `SURESHOT_API_KEY` as the bearer token; scrape each worker.
 
 ## A CI gate for question changes
 
