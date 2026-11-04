@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import subprocess
 import time
 import httpx
+from sureshot import observe
 from sureshot.adapters.base import Outage
 from sureshot.cache import cache_key
 from pathlib import Path
@@ -160,19 +161,28 @@ class Router:
         misconfiguration is not hidden by silently using another model.
 
         questions is an object of questions, or the name of one of the router's sets (see __init__)."""
-        start = time.perf_counter()
-        pending = self.first(state, questions, images, thresholds, escalate)
-        slow = outage = system2_ms = None
-        if pending["ask"]:
-            slow_start = time.perf_counter()
+        with observe.span("sureshot.decide", images=len(images)) as decision:
             try:
-                slow = self._cached(self.system2, "answer", state, pending["ask"], images, pending["cache"])
-            except Exception as e:
-                if not _transient(e) or any(key not in pending["latest"] for key in pending["escalated"]):
-                    raise
-                outage = repr(e)
-            system2_ms = (time.perf_counter() - slow_start) * 1000
-        return self.finish(pending, slow, outage, system2_ms, (time.perf_counter() - start) * 1000, len(images), ref)
+                start = time.perf_counter()
+                pending = self.first(state, questions, images, thresholds, escalate)
+                slow = outage = system2_ms = None
+                if pending["ask"]:
+                    slow_start = time.perf_counter()
+                    with observe.span("sureshot.system2", questions=len(pending["ask"])) as s:
+                        try:
+                            slow = self._cached(self.system2, "answer", state, pending["ask"], images, pending["cache"])
+                        except Exception as e:
+                            if not _transient(e) or any(key not in pending["latest"] for key in pending["escalated"]):
+                                raise
+                            outage = repr(e)
+                            s.outage(e)
+                    system2_ms = (time.perf_counter() - slow_start) * 1000
+                result = self.finish(pending, slow, outage, system2_ms, (time.perf_counter() - start) * 1000, len(images), ref)
+            except Exception:
+                observe.failed()
+                raise
+            decision.set_attribute("sureshot.escalated", len(result["escalated"]))
+            return result
 
     def first(self, state, questions=None, images=(), thresholds=None, escalate=True):
         """The System 1 half of decide: asks the tiers (and the guard) and returns what finish needs, JSON-ready so a
@@ -194,13 +204,15 @@ class Router:
             # question has somewhere to go.
             asked = [key for key in remaining
                      if (limit[key] != float("inf") and key not in skipped) or not onward or random.random() < self.probe]
-            try:
-                fast = self._cached(tier, "decide", state, {key: questions[key] for key in asked}, images, tally) if asked else {}
-            except Exception as e:
-                if not (_transient(e) and onward):
-                    raise
-                degraded.append({"system": 1, "tier": i, "error": repr(e)})
-                fast = {}
+            with observe.span("sureshot.tier", tier=i, questions=len(asked)) as s:
+                try:
+                    fast = self._cached(tier, "decide", state, {key: questions[key] for key in asked}, images, tally) if asked else {}
+                except Exception as e:
+                    if not (_transient(e) and onward):
+                        raise
+                    degraded.append({"system": 1, "tier": i, "error": repr(e)})
+                    fast = {}
+                    s.outage(e)
             tier_ms.append((time.perf_counter() - tier_start) * 1000)
             unsure = []
             for key in remaining:
@@ -218,13 +230,15 @@ class Router:
             remaining = unsure
         vetoed = {}
         if self.guard and answers:
-            try:
-                checks = self._cached(self.guard, "decide", state, {key: questions[key] for key in answers}, images, tally)
-            except Exception as e:
-                if not _transient(e):
-                    raise
-                degraded.append({"system": "guard", "tier": None, "error": repr(e)})
-                checks = {}
+            with observe.span("sureshot.guard", questions=len(answers)) as s:
+                try:
+                    checks = self._cached(self.guard, "decide", state, {key: questions[key] for key in answers}, images, tally)
+                except Exception as e:
+                    if not _transient(e):
+                        raise
+                    degraded.append({"system": "guard", "tier": None, "error": repr(e)})
+                    checks = {}
+                    s.outage(e)
             vetoed = {key: check for key, check in checks.items()
                       if check["answer"] != answers[key]["answer"] and check["confidence"] >= self.guard_threshold}
             for key in vetoed:
@@ -262,6 +276,13 @@ class Router:
                   "latency_ms": {k: v and round(v, 1) for k, v in latency.items()} | {"tiers": [round(ms, 1) for ms in p["tiers_ms"]]}}
         if self.log and self.record:
             result["id"] = self.log.log(p["state"], questions, result | {"audit_rate": self.audit}, images, ref)
+        asked = {}
+        for key in questions:
+            for entry in p["tried"][key]:
+                asked.setdefault(f"tier {entry['tier']}", []).append(key)
+        if slow is not None:
+            asked["system2"] = list(p["ask"])
+        observe.decided(result, asked)
         return result
 
     def test(self, cases, questions=None, thresholds=None):

@@ -43,6 +43,7 @@ pip install "sureshot[yaml]"        # YAML questions files (included in [api])
 pip install "sureshot[postgres]"    # a Postgres log and cache, shared by several machines
 pip install "sureshot[mcp]"         # the MCP server, for Claude Code, Claude Desktop and other agents (included in [api])
 pip install "sureshot[parquet]"     # Parquet files for sureshot import and decide --batch
+pip install "sureshot[otel]"        # OpenTelemetry spans (Prometheus metrics are included in [api])
 ```
 
 The extras combine, e.g. `pip install "sureshot[claude,api]"`. Only `httpx` is required: the Quick start uses Claude
@@ -86,7 +87,7 @@ thresholds from your data, add a log and [calibrate](#calibrate-learn-each-quest
 | [`prune`](#recheck-and-prune) | Stops asking a tier the questions it doesn't pay for |
 | [`stats`](#stats-and-drift) | Usage, accuracy, cost, latency and drift report |
 | [`router.test`, `evaluate`](#testing-and-comparing-models) | Score a golden dataset; compare candidate models on your log |
-| [HTTP API](#http-api-and-configuration) | `/decide`, `/feedback`, `/calibrate`, `/stats`, `/review`, configured from env vars |
+| [HTTP API](#http-api-and-configuration) | `/decide`, `/feedback`, `/calibrate`, `/stats`, `/review`, `/metrics`, configured from env vars |
 | [Drop-in formats](#drop-in-for-openai-anthropic-and-gemini-apps) | Answers an app's OpenAI, Anthropic or Gemini structured-output requests with no code change but its base URL |
 | [`sureshot` command](#command-line) | The API, a single decision and every feedback-loop step from a shell, cron or CI |
 
@@ -454,8 +455,8 @@ report["drift"]                                     # what changed since each ca
   spread of its confidences), `accuracy`, and `change_*` for a change that started later. `unchecked` names the
   checks that lacked data, so an empty `flags` isn't read as no drift. `upstream` points at an earlier tier that
   drifted first. A flag means grade a fresh sample and calibrate again.
-- `examples/drift_alert.py sureshot.db` prints what moved and exits with status 1 when anything is flagged; run it on
-  a schedule.
+- With `SURESHOT_ALERT_URL` set, `sureshot stats` [alerts](#monitoring-and-alerts) on what is flagged; run it on a
+  schedule. `examples/drift_alert.py sureshot.db` instead prints what moved and exits with status 1.
 
 How the drift checks keep false alarms rare however often you poll: [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#measuring-statspy-evaluatepy-goldenpy).
 
@@ -508,6 +509,7 @@ mount a volume there to keep the log, or set `SURESHOT_DB` to a `postgresql://` 
 | `POST /v1/chat/completions`, `/v1/messages`, `/{version}/models/{model}:generateContent` | OpenAI, Anthropic and Gemini requests (see [below](#drop-in-for-openai-anthropic-and-gemini-apps)); the key may also come as `x-api-key`, `x-goog-api-key` or `?key=` |
 | `POST /mcp` | The [MCP server](#mcp-for-agents), over streamable HTTP |
 | `POST /warehouse/bigquery`, `/warehouse/snowflake` | A BigQuery remote function or Snowflake external function, `sureshot('ticket_routing', body)` in SQL ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#sql-in-bigquery-and-snowflake)); the key comes in `user_defined_context` as `api_key`, or in the `authorization` `HEADERS` |
+| `GET /metrics` | This process's [metrics](#monitoring-and-alerts) in the Prometheus text format |
 | `GET /health` | No token needed |
 
 Every other route needs `Authorization: Bearer $SURESHOT_API_KEY`, except webhooks and Slack's clicks, which are checked by their senders' signatures. The API builds its router with `router_from_env()`,
@@ -530,7 +532,36 @@ which you can also call yourself:
 | `SURESHOT_DB` | The log, a SQLite path or a `postgresql://` URL; enables `/feedback` and `/calibrate` |
 | `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache (a SQLite path or a `postgresql://` URL), and seconds an answer stays valid |
 | `SURESHOT_AUDIT` | Share of confident answers audited (default 0) |
+| `SURESHOT_COSTS` | Cost per question of each stage as JSON, e.g. `{"tier 0": 0, "system2": 0.004}`, for the `sureshot_cost_total` metric |
+| `SURESHOT_ALERT_URL` | A Slack incoming webhook or any URL that gets an [alert](#monitoring-and-alerts) on a demotion, a failed recheck or drift |
 | `SURESHOT_OPENAI_PASSTHROUGH_URL`, `SURESHOT_ANTHROPIC_PASSTHROUGH_URL`, `SURESHOT_GEMINI_PASSTHROUGH_URL`, each with `_API_KEY` | Where each format's requests that sureshot can't answer are forwarded |
+
+## Monitoring and alerts
+
+`GET /metrics` serves Prometheus metrics for the decisions each process makes (the API, its drop-in routes and MCP;
+with several replicas or uvicorn workers, scrape each one). Prometheus sends the API key with
+`authorization: {credentials: ...}` in the scrape config.
+
+| Metric | Labels |
+| --- | --- |
+| `sureshot_decisions_total` | |
+| `sureshot_answers_total` | `question`, `by` (`tier 0`, `tier 1`, ..., `system2`) |
+| `sureshot_stage_seconds` (histogram) | `stage` (`tier N`, `system2`, `total`) |
+| `sureshot_cost_total` | `question`, `stage`; only with `SURESHOT_COSTS` |
+| `sureshot_errors_total` | `stage`, `kind` (`outage`: a model was down and the decision fell back; `error`: the decision raised) |
+
+The escalation rate of a question is
+`sum by (question) (rate(sureshot_answers_total{by="system2"}[1h])) / sum by (question) (rate(sureshot_answers_total[1h]))`.
+
+With an OpenTelemetry SDK set up (`pip install "sureshot[otel]" opentelemetry-distro opentelemetry-exporter-otlp`,
+then `opentelemetry-instrument sureshot serve`), each decision is a `sureshot.decide` span with a child for each tier,
+the guard and System 2, marked as errors when that model was down.
+
+`SURESHOT_ALERT_URL` gets an alert when a tier is demoted from a question (`sureshot calibrate`, `retrain` or
+`POST /calibrate` took its threshold away), a `sureshot recheck` fails, or `sureshot stats` flags drift. A Slack
+incoming webhook gets the message as `text`; any other URL gets `{"event": "demotion" | "recheck" | "drift", "text",
+"items"}`. Drift alerts repeat on each `stats` run until a fresh calibration resets the baseline; an alert that can't
+be delivered is reported on stderr and never fails the job.
 
 ## Drop-in for OpenAI, Anthropic and Gemini apps
 

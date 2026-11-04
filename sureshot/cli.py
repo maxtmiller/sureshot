@@ -7,6 +7,7 @@ import os
 import sys
 import httpx
 from pathlib import Path
+from sureshot import alerts
 from sureshot.calibrate import calibrate, prune, recheck
 from sureshot.config import router_from_env
 from sureshot.db import is_postgres
@@ -95,7 +96,22 @@ def decide(args):
         sys.exit(f"sureshot: {e}")
 
 
-def retrain_local(args):
+def _watched(args, event, run):
+    """Runs a command that may move a tier's thresholds, alerting on the questions it demoted (see sureshot.alerts)."""
+    store = _store(args)
+    before = store.thresholds(args.tier)
+    result = run(store)
+    alerts.demoted(before, store.thresholds(args.tier), args.tier, event)
+    return result
+
+
+def usage_stats(args):
+    report = stats(_store(args), args.since, args.min_samples, costs=_costs(args.costs) if args.costs else None, sample=args.sample, confident=args.confident)
+    alerts.drift(report)
+    return report
+
+
+def retrain_local(args, store):
     from sureshot.learn import retrain
     from sureshot.local import LocalDecider
 
@@ -103,7 +119,7 @@ def retrain_local(args):
     if not path:
         sys.exit("sureshot: set SURESHOT_LOCAL_MODEL or pass --model")
     current = LocalDecider.load(path) if Path(path).exists() else None
-    result = retrain(_store(args), current, args.tier, args.target, args.min_samples, sample=args.sample, confident=args.confident)
+    result = retrain(store, current, args.tier, args.target, args.min_samples, sample=args.sample, confident=args.confident)
     if result["decider"] is not current:
         result["decider"].save(path)
     return result["report"]
@@ -257,11 +273,11 @@ COMMANDS = {
     "serve": serve,
     "mcp": mcp,
     "decide": decide,
-    "calibrate": lambda a: calibrate(_store(a), a.target, a.min_samples, tier=a.tier, sample=a.sample, confident=a.confident),
-    "retrain": retrain_local,
-    "recheck": lambda a: recheck(_store(a), a.tier, a.sample, a.target, a.confident),
+    "calibrate": lambda a: _watched(a, "demotion", lambda store: calibrate(store, a.target, a.min_samples, tier=a.tier, sample=a.sample, confident=a.confident)),
+    "retrain": lambda a: _watched(a, "demotion", lambda store: retrain_local(a, store)),
+    "recheck": lambda a: _watched(a, "recheck", lambda store: recheck(store, a.tier, a.sample, a.target, a.confident)),
     "prune": lambda a: prune(_store(a), _costs(a.costs), a.tier, a.min_answers),
-    "stats": lambda a: stats(_store(a), a.since, a.min_samples, costs=_costs(a.costs) if a.costs else None, sample=a.sample, confident=a.confident),
+    "stats": usage_stats,
     "review": review,
     "label-studio": label_studio,
     "import": import_labels,
