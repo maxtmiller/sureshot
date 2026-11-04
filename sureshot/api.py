@@ -1,4 +1,4 @@
-"""HTTP API: POST /decide, /feedback and /calibrate with a bearer token (SURESHOT_API_KEY), and the OpenAI, Anthropic
+"""HTTP API: POST /decide, /feedback and /calibrate and GET /metrics with a bearer token (SURESHOT_API_KEY), and the OpenAI, Anthropic
 and Gemini request formats for apps that already speak one (see formats.py), MCP at /mcp (see mcp.py), and SQL
 functions for BigQuery and Snowflake at /warehouse (see warehouse.py). Run locally
 with `uvicorn sureshot.api:app`."""
@@ -22,7 +22,7 @@ from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
 from sureshot.questions import load
-from sureshot import mcp, slack, warehouse, webhooks
+from sureshot import alerts, mcp, observe, slack, warehouse, webhooks
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 # A bad questions file fails at startup, not on the first request.
@@ -202,7 +202,21 @@ def review(limit: int = 50, reason: str | None = None, sample: float = Query(0.0
 @app.post("/calibrate")
 def calibrate_thresholds(request: CalibrateRequest, authorization: str = Header(default="")):
     authorize(authorization)
-    return calibrate(log(), request.target_accuracy, request.min_samples, sample=request.sample, confident=request.confident)
+    store = log()
+    before = store.thresholds()
+    report = calibrate(store, request.target_accuracy, request.min_samples, sample=request.sample, confident=request.confident)
+    alerts.demoted(before, store.thresholds(), 0)
+    return report
+
+
+@app.get("/metrics")
+def metrics(authorization: str = Header(default="")):
+    """This process's decisions in the Prometheus text format (see observe.py): scrape each replica."""
+    authorize(authorization)
+    if not observe.available():
+        raise HTTPException(501, 'metrics need prometheus-client: pip install "sureshot[api]"')
+    body, media_type = observe.latest()
+    return Response(body, media_type=media_type)
 
 
 
