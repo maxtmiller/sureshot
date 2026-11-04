@@ -190,6 +190,14 @@ def worker(args):
     import signal
     from sureshot import worker as queue
 
+    if args.metrics_port is not None:
+        from sureshot import observe
+
+        if not observe.available():
+            sys.exit('sureshot: --metrics-port needs prometheus-client: pip install "sureshot[api]"')
+        if not os.environ.get("SURESHOT_API_KEY"):
+            sys.exit("sureshot: --metrics-port needs SURESHOT_API_KEY, the bearer token Prometheus scrapes with")
+        observe.serve(args.metrics_port, os.environ["SURESHOT_API_KEY"])
     router = _router(args)
     if args.set:
         try:
@@ -378,6 +386,7 @@ def parser():
     s.add_argument("--set", help="the question set for messages without questions")
     s.add_argument("--workers", type=int, default=8, help="messages decided at once")
     s.add_argument("--retries", type=int, default=3, help="tries again on a failure other than a bad message, with backoff")
+    s.add_argument("--metrics-port", type=int, help="serve GET /metrics on this port, with SURESHOT_API_KEY as the bearer token")
 
     s = sub.add_parser("migrate", help="copy a SQLite log (or cache) to Postgres; running it again copies only the rows the target lacks")
     s.add_argument("--from", dest="source", required=True, help="the SQLite file")

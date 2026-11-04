@@ -2,14 +2,19 @@
 
 With prometheus-client installed (it comes with sureshot[api]), each process counts its decisions, answers (by
 question and by who answered: "tier N" or "system2"), latency by stage, outages and errors, and with SURESHOT_COSTS
-(the JSON `sureshot stats --costs` takes) what each stage cost. The API serves them at GET /metrics.
+(the JSON `sureshot stats --costs` takes) what each stage cost. The API serves them at GET /metrics, and
+`sureshot worker --metrics-port` serves them the same way with serve().
 
 With opentelemetry-api installed (sureshot[otel]) and an OpenTelemetry SDK configured, each decide is a span
 "sureshot.decide" with a child per tier, the guard and System 2. Without it, both cost nothing."""
+import hmac
 import json
 import os
+import threading
 from contextlib import contextmanager
 from functools import lru_cache
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 try:
     from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
@@ -38,6 +43,31 @@ def available():
 def latest():
     """(body, content type) of the metrics in the Prometheus text format."""
     return generate_latest(), CONTENT_TYPE_LATEST
+
+
+def serve(port, key, host="0.0.0.0"):
+    """Serves GET /metrics with the bearer token key on a background thread, for a process without the API."""
+    class Metrics(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if urlparse(self.path).path != "/metrics":
+                return self.reply(404, b"not found\n")
+            if not hmac.compare_digest(self.headers.get("Authorization", "").encode(), f"Bearer {key}".encode()):
+                return self.reply(401, b"missing or wrong bearer token\n")
+            self.reply(200, *latest())
+
+        def reply(self, status, body, content_type="text/plain; charset=utf-8"):
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer((host, port), Metrics)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 @lru_cache(maxsize=4)
