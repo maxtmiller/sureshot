@@ -224,26 +224,32 @@ def import_labels(args):
         sys.exit(f"sureshot: {e}")
 
 
-def label_studio(args):
-    from sureshot import labelstudio
+def labeling_tool(args):
+    """sureshot label-studio and sureshot argilla: push review items to the tool, or pull its labels."""
     from sureshot.questions import load
 
+    if args.command == "argilla":
+        from sureshot import argilla as tool
+        connect = tool.Argilla
+    else:
+        from sureshot import labelstudio as tool
+        connect = tool.LabelStudio
     path = args.questions or os.environ.get("SURESHOT_QUESTIONS")
     if not path:
-        sys.exit("sureshot: set SURESHOT_QUESTIONS or pass --questions: the project's interface is built from a question set")
+        sys.exit(f"sureshot: set SURESHOT_QUESTIONS or pass --questions: the {args.command} labeling interface is built from a question set")
     sets = load(path)
     name = args.set or (next(iter(sets)) if len(sets) == 1 else None)
     if name not in sets:
         sys.exit(f"sureshot: pass --set, one of {sorted(sets)}")
     store = _store(args)
     try:
-        studio = labelstudio.LabelStudio()
+        server = connect()
         if args.action == "pull":
-            return labelstudio.pull(store, studio, name, sets[name])
+            return tool.pull(store, server, name, sets[name])
         items = review_queue(store, args.limit, (args.reason,) if args.reason else REASONS, sample=args.sample, confident=args.confident,
                              skip=store.posted(), keys=set(sets[name]))
-        return labelstudio.push(store, studio, name, sets[name], items)
-    except (ValueError, RuntimeError, httpx.HTTPError) as e:
+        return tool.push(store, server, name, sets[name], items)
+    except (ValueError, RuntimeError, ImportError, httpx.HTTPError) as e:
         sys.exit(f"sureshot: {e}")
 
 
@@ -279,7 +285,8 @@ COMMANDS = {
     "prune": lambda a: prune(_store(a), _costs(a.costs), a.tier, a.min_answers),
     "stats": usage_stats,
     "review": review,
-    "label-studio": label_studio,
+    "label-studio": labeling_tool,
+    "argilla": labeling_tool,
     "import": import_labels,
     "test": test,
     "worker": worker,
@@ -356,11 +363,13 @@ def parser():
     s.add_argument("--escalate", action="store_true", help="also ask System 2 about what System 1 is unsure of (costs more)")
     s.add_argument("--workers", type=int, default=4)
 
-    s = sub.add_parser("label-studio", parents=[common, routed, sampled], help="send review items to a Label Studio project (push), or save its annotations as labels (pull)")
-    s.add_argument("action", choices=["push", "pull"])
-    s.add_argument("--set", help="the question set, which names the project (default: the file's only set)")
-    s.add_argument("--limit", type=int, default=50, help="push at most this many new questions")
-    s.add_argument("--reason", choices=REASONS)
+    for command, what, help in [("label-studio", "project", "send review items to a Label Studio project (push), or save its annotations as labels (pull)"),
+                                ("argilla", "dataset", "send review items to an Argilla dataset (push), or save its submitted responses as labels (pull)")]:
+        s = sub.add_parser(command, parents=[common, routed, sampled], help=help)
+        s.add_argument("action", choices=["push", "pull"])
+        s.add_argument("--set", help=f"the question set, which names the {what} (default: the file's only set)")
+        s.add_argument("--limit", type=int, default=50, help="push at most this many new questions")
+        s.add_argument("--reason", choices=REASONS)
 
     s = sub.add_parser("worker", parents=[common, routed], help="decide messages from SQS, Redis Streams or Kafka and write the decisions to a queue, a webhook or stdout")
     s.add_argument("--source", required=True, help="sqs://<queue>, redis://host:6379/0?stream=<name>&group=<group> or kafka://host:9092/<topic>?group=<group>")

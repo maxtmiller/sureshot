@@ -44,6 +44,7 @@ pip install "sureshot[postgres]"    # a Postgres log and cache, shared by severa
 pip install "sureshot[mcp]"         # the MCP server, for Claude Code, Claude Desktop and other agents (included in [api])
 pip install "sureshot[parquet]"     # Parquet files for sureshot import and decide --batch
 pip install "sureshot[otel]"        # OpenTelemetry spans (Prometheus metrics are included in [api])
+pip install "sureshot[argilla]"     # sureshot argilla, labeling the review queue in Argilla
 ```
 
 The extras combine, e.g. `pip install "sureshot[claude,api]"`. Only `httpx` is required: the Quick start uses Claude
@@ -356,6 +357,7 @@ Reviewers can also label in Slack: `sureshot review --slack` posts the queue to 
 and each click is a label ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labeling-in-slack)).
 An annotation team can label in Label Studio: `sureshot label-studio push` sends the queue to a project built from your
 questions, and `sureshot label-studio pull` saves the annotations ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labeling-in-label-studio)).
+`sureshot argilla push` and `pull` do the same with an Argilla dataset ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#labeling-in-argilla)).
 
 Labeled examples you already have count from day one: `sureshot import labels.csv` (or JSONL) asks System 1 about each
 row and logs it with its labels, so `calibrate` grades on them and `retrain` learns from them ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#importing-labeled-data)).
@@ -528,6 +530,7 @@ which you can also call yourself:
 | `SURESHOT_WEBHOOKS` | A JSON or YAML file of webhook sources for `/feedback/webhook/<source>`, checked when the API starts |
 | `SURESHOT_SLACK_SIGNING_SECRET`, `SURESHOT_SLACK_BOT_TOKEN`, `SURESHOT_SLACK_CHANNEL` | Labeling in Slack: the app's signing secret enables `/slack/actions`; the token and channel are where `sureshot review --slack` posts |
 | `SURESHOT_LABEL_STUDIO_URL`, `SURESHOT_LABEL_STUDIO_TOKEN` | Labeling in Label Studio: the server, and a personal access token (or a legacy token) for `sureshot label-studio` |
+| `SURESHOT_ARGILLA_URL`, `SURESHOT_ARGILLA_API_KEY`, `SURESHOT_ARGILLA_WORKSPACE` | Labeling in Argilla: the server, an API key, and optionally the workspace for `sureshot argilla` |
 | `SURESHOT_THRESHOLD` | Default threshold (0.8) |
 | `SURESHOT_DB` | The log, a SQLite path or a `postgresql://` URL; enables `/feedback` and `/calibrate` |
 | `SURESHOT_CACHE`, `SURESHOT_CACHE_TTL` | Response cache (a SQLite path or a `postgresql://` URL), and seconds an answer stays valid |
@@ -643,6 +646,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | `sureshot review [--limit] [--reason] [--label \| --slack [--channel]]` | The [review queue](#review-queue-what-to-label-next). With `--label`, shows each item and asks for its true answer (Enter accepts the router's, `-` skips, Ctrl-D stops), saving each label as it is given. With `--slack`, posts the items not posted before to Slack to label with buttons |
 | `sureshot import FILE [--set] [--text] [--limit] [--escalate] [--workers]` | Decides and logs labeled examples you already have (CSV or JSONL, a column per question), so calibrate and retrain use them |
 | `sureshot label-studio push\|pull [--set] [--limit]` | Sends new review items of a question set to its Label Studio project, or saves the project's annotations as labels |
+| `sureshot argilla push\|pull [--set] [--limit]` | The same with an Argilla dataset (needs `sureshot[argilla]`) |
 | `sureshot migrate --from sureshot.db --to postgresql://...` | Copies a SQLite log or cache to Postgres; running it again copies only the rows the target lacks |
 | `sureshot test golden.jsonl [--questions file] [--set name] [--min-accuracy]` | [Scores](#testing-and-comparing-models) the router without logging; exits 1 below `--min-accuracy` |
 

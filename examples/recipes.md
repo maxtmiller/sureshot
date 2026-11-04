@@ -14,6 +14,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 - [Labels from webhooks](#labels-from-webhooks): Zendesk, GitHub, Jira, Linear or any automation, with no code
 - [Labeling in Slack](#labeling-in-slack): the review queue as messages with a button per answer
 - [Labeling in Label Studio](#labeling-in-label-studio): the review queue as tasks for an annotation team
+- [Labeling in Argilla](#labeling-in-argilla): the review queue as an Argilla dataset
 - [Importing labeled data](#importing-labeled-data): start from the labels you already have
 - [Backfills and batch jobs](#backfills-and-batch-jobs): a whole file at once, with System 2 at batch prices
 - [SQL in BigQuery and Snowflake](#sql-in-bigquery-and-snowflake): `SELECT sureshot('ticket_routing', body) FROM tickets`
@@ -303,6 +304,29 @@ sureshot label-studio pull --questions examples/questions.yaml --set ticket_rout
 - Changing a question set updates the project's interface on the next push. Label Studio refuses to drop a question
   that already has annotations; make a new set (and so a new project) for that.
 - Label Studio 1.23 turns legacy tokens off by default; a personal access token works either way.
+
+## Labeling in Argilla
+
+A team that labels in [Argilla](https://argilla.io) (2.x) works the same way. `sureshot argilla push` sends new queue
+items of one question set to a dataset named `sureshot-<set>`, created on first use with a text field and a label
+question per sureshot question (the instructions and each answer's description as its description), one record per
+decision with the decision's id as the record id. `sureshot argilla pull` saves the submitted responses as labels.
+
+```bash
+pip install "sureshot[argilla]"
+export SURESHOT_ARGILLA_URL=http://localhost:6900 SURESHOT_ARGILLA_API_KEY=...   # My settings > API key
+sureshot argilla push --questions examples/questions.yaml --set ticket_routing --limit 100 --sample 0.02 --confident 0.1
+sureshot argilla pull --questions examples/questions.yaml --set ticket_routing
+```
+
+- The dataset goes in `SURESHOT_ARGILLA_WORKSPACE`, or else the first workspace the key can use; a server with none
+  needs one created first.
+- Every question is required, as Argilla needs at least one; an annotator who can't answer discards the record.
+  Only submitted responses are read, not drafts or discards.
+- Items are sent once, shared with Slack and Label Studio. Annotators who disagree, and unchanged labels, are handled
+  as in Label Studio.
+- Argilla can't change a published dataset's questions, so a push refuses a dataset that asks other questions than
+  the set; delete or rename it in Argilla to start over.
 
 ## Importing labeled data
 
