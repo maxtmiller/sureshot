@@ -72,6 +72,7 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 | `sureshot/slack.py` | Posts review items to Slack with a button per answer, and labels from the clicks |
 | `sureshot/importer.py` | Decides and logs labeled examples you already have, kept apart from live traffic |
 | `sureshot/labelstudio.py` | Sends review items to a Label Studio project built from a question set, and labels from its annotations |
+| `sureshot/migrate.py` | Copies a SQLite log or cache to Postgres, adding only the rows the target lacks |
 | `serve/` | Dockerfile and compose file for serving a model with vLLM next to sureshot |
 | `examples/` | Case studies, a drift alert, a real-model check and a load-testing script |
 | `tests/` | Router behavior, calibration simulations, concurrency, recorded real-model exchanges |
