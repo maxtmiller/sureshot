@@ -72,6 +72,7 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 | `sureshot/slack.py` | Posts review items to Slack with a button per answer, and labels from the clicks |
 | `sureshot/importer.py` | Decides and logs labeled examples you already have, kept apart from live traffic |
 | `sureshot/labelstudio.py` | Sends review items to a Label Studio project built from a question set, and labels from its annotations |
+| `sureshot/argilla.py` | Sends review items to an Argilla dataset built from a question set, and labels from its submitted responses |
 | `sureshot/observe.py` | Prometheus metrics and OpenTelemetry spans for each decision, both optional dependencies |
 | `sureshot/alerts.py` | Alerts to Slack or a webhook on a demotion, a failed recheck or drift, sent by the CLI and `POST /calibrate` |
 | `sureshot/migrate.py` | Copies a SQLite log or cache to Postgres, adding only the rows the target lacks |
@@ -236,7 +237,7 @@ definition automatically misses. A model with no `identity` is not cached.
 
 ### The Store (`store.py`)
 
-SQLite (or Postgres) with these tables: `decisions` (every result, with the caller's `ref` for the item, indexed so a webhook can find it; imported ones have ids starting `import-`, which `in_sample` never picks and `results()` leaves out, so they train and grade but never confirm a threshold or count as traffic), `labels` (true answers, with who gave them: `human`, `webhook:<source>` or `slack:<user>`, `label-studio` or `import`; giving the same answer again keeps its time, since confirmation reads labels in order), `posts` (review items sent to Slack or Label Studio, so each goes once), `tier_thresholds` (calibration output),
+SQLite (or Postgres) with these tables: `decisions` (every result, with the caller's `ref` for the item, indexed so a webhook can find it; imported ones have ids starting `import-`, which `in_sample` never picks and `results()` leaves out, so they train and grade but never confirm a threshold or count as traffic), `labels` (true answers, with who gave them: `human`, `webhook:<source>` or `slack:<user>`, `label-studio`, `argilla` or `import`; giving the same answer again keeps its time, since confirmation reads labels in order), `posts` (review items sent to Slack, Label Studio or Argilla, so each goes once), `tier_thresholds` (calibration output),
 `calibration_issues` (why a question has none), `calibrations` (what the latest calibration saw, for drift) and
 `skips` (what `prune` stopped asking). Decision ids are random uuids, or come from `Store(path, seed=)` so a
 simulation that logs the same decisions in the same order gets the same ids. It uses WAL mode and a 30 second busy timeout, which fixed `database is
