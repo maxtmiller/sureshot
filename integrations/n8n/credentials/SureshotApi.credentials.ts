@@ -7,7 +7,7 @@ export class SureshotApi implements ICredentialType {
 
 	icon: Icon = { light: 'file:../nodes/Sureshot/sureshot.svg', dark: 'file:../nodes/Sureshot/sureshot.dark.svg' };
 
-	documentationUrl = 'https://github.com/maxtmiller/sureshot#http-api-and-configuration';
+	documentationUrl = 'https://github.com/maxtmiller/sureshot/blob/main/docs/guide.md#http-api-and-configuration';
 
 	properties: INodeProperties[] = [
 		{

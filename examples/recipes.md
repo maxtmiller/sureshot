@@ -23,7 +23,7 @@ Short, copyable ways to plug sureshot into tools you already run. The question s
 ## Nightly upkeep
 
 sureshot only improves if calibration runs. [nightly.sh](nightly.sh) runs the whole loop with the
-[command line](../README.md#command-line) and prints one line on what changed. Run it where the log is, with the same
+[command line](../docs/guide.md#command-line) and prints one line on what changed. Run it where the log is, with the same
 environment as the API:
 
 ```bash
@@ -31,7 +31,7 @@ environment as the API:
 0 3 * * *  SAMPLE=0.02 CONFIDENT=0.1 ALERT_WEBHOOK=https://hooks.slack.com/... /path/to/nightly.sh >> /var/log/sureshot-nightly.log 2>&1
 ```
 
-- `SAMPLE` and `CONFIDENT` are the rates you label the [review queue](../README.md#review-queue-what-to-label-next) at.
+- `SAMPLE` and `CONFIDENT` are the rates you label the [review queue](../docs/guide.md#review-queue-what-to-label-next) at.
 - With `SURESHOT_LOCAL_MODEL` set it retrains the classifier (tier 0) and calibrates the LLM as tier 1; without it the LLM is tier 0.
 - `COSTS='{"tier 0": 0.0002, "system2": 0.004}'` also prunes questions the LLM tier doesn't pay for.
 - `ALERT_WEBHOOK` (a Slack, Discord `/slack` or any Slack-style incoming webhook) gets a message when drift is flagged
@@ -106,7 +106,7 @@ sureshot worker --set ticket_routing \
 | `https://...` | Sinks only: each decision POSTed as JSON |
 | `-`, `stderr` | Sinks only: one JSON line per decision (the defaults for `--sink` and `--dead-letter`) |
 
-- A message is the body of [`POST /decide`](../README.md#http-api-and-configuration): `{"state": ..., "ref": ...}`,
+- A message is the body of [`POST /decide`](../docs/guide.md#http-api-and-configuration): `{"state": ..., "ref": ...}`,
   with `questions` (a set's name or inline) unless `--set` gives it. The decision written on is the router's result
   plus the message's `ref`, so a later webhook or `POST /feedback` can label it.
 - A batch is decided in parallel (`--workers`), written to the sink, and only then acknowledged (deleted from SQS,
@@ -117,7 +117,7 @@ sureshot worker --set ticket_routing \
   down stops the worker without acknowledging the batch.
 - SIGTERM or Ctrl-C finishes the batch in hand and stops; a second one stops at once. Run several workers with the
   same group to share a stream or topic.
-- `--metrics-port 9100` serves the worker's [Prometheus metrics](../README.md#monitoring-and-alerts) at
+- `--metrics-port 9100` serves the worker's [Prometheus metrics](../docs/guide.md#monitoring-and-alerts) at
   `GET /metrics`, with `SURESHOT_API_KEY` as the bearer token; scrape each worker.
 
 ## A CI gate for question changes
@@ -137,7 +137,7 @@ production log to test with its calibrated thresholds.
 
 ## LangChain and LlamaIndex
 
-Both already speak the OpenAI format, so pointing them at sureshot's [drop-in endpoint](../README.md#drop-in-for-openai-anthropic-and-gemini-apps)
+Both already speak the OpenAI format, so pointing them at sureshot's [drop-in endpoint](../docs/guide.md#drop-in-for-openai-anthropic-and-gemini-apps)
 is enough. Structured output then routes through sureshot:
 
 ```python
