@@ -1,5 +1,10 @@
 # sureshot
 
+[![PyPI](https://img.shields.io/pypi/v/sureshot)](https://pypi.org/project/sureshot/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/sureshot/)
+[![CI](https://github.com/maxtmiller/sureshot/actions/workflows/ci.yml/badge.svg)](https://github.com/maxtmiller/sureshot/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/maxtmiller/sureshot)](https://github.com/maxtmiller/sureshot/blob/main/LICENSE)
+
 Fast, calibrated answers from a cheap model, with escalation to a stronger model only when the cheap one isn't sure.
 
 You ask structured questions about a piece of content (an email, a ticket, an image). **System 1** is a fast model
