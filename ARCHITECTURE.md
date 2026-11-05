@@ -142,13 +142,9 @@ answered.
   option (a "thinking" model that spends its one token starting to think), and `extra` lets you turn thinking off.
 - **`VLLMDecider`** is a `ChatDecider` with local defaults (and thinking turned off where the model supports it), for
   a model you serve yourself. *Why:* the largest latency cost in practice was the network. A model co-located with
-  sureshot answered in about 150 ms, against about 580 ms for a hosted API and about 1.1 s from a laptop to a cloud GPU.
-  On an NVIDIA L4, Qwen2.5-7B-Instruct answered a three-question email in about 150 ms (p50 and p95), and zero-shot it
-  was less accurate than `gpt-4o-mini` on a small labeled set (71% against 84%). `--max-logprobs 20` matches the 20
-  top logprobs sureshot requests. The compose file in `serve/` has not been run as a whole (it needs Docker with an NVIDIA
-  GPU); its pieces were: the official `vllm/vllm-openai` image with the compose flags on an L4, `serve/Dockerfile`, and
-  `VLLMDecider`, `check()`, `router.test`, `/decide` and `/feedback` against that server. A pip-installed vLLM may need
-  `nvcc` for FlashInfer; set `VLLM_USE_FLASHINFER_SAMPLER=0` or use the official image.
+  sureshot (Qwen2.5-7B-Instruct on an NVIDIA L4) answered a three-question email in about 150 ms, against about 580 ms
+  for a hosted API, though zero-shot it was less accurate than `gpt-4o-mini` (71% against 84%). The `serve/` compose
+  file was checked piece by piece, not run as a whole.
 - **`HTTPDecider`** takes two functions (`request`, `parse`) for any API that is not chat-shaped.
 - **`LocalDecider`** embeds the text with a small frozen model, then fits one logistic regression per question on your
   graded decisions. It runs in about 10 ms with no server. *Why:* many questions are topical, and a classifier trained
@@ -203,18 +199,12 @@ available truth for grading System 1 when no human has labeled the item.
   which is a biased sample. If calibration only saw those, it would think System 1 was worse than it is. Auditing a
   random share of confident answers gives an unbiased sample (see weights under the Store).
 - **Guard.** *Why:* confidence cannot reveal errors a model is confidently wrong about, and a second model often knows
-  them. Measurements:
-  - On 506 held-out job emails with their original labels, `gpt-4o-mini` looked wrong 37 times at 0.95 confidence or
-    more, and a local guard at 0.9 caught 13. Claude then reviewed every email where the label and `gpt-4o-mini`
-    disagreed, and sided with `gpt-4o-mini` on 68%. Against those corrected labels `gpt-4o-mini` had 9 confident
-    errors (accuracy 0.97, not 0.91), and the guard caught 0 to 2 while raising 5 to 35 false alarms: most of what it
-    had "caught" was label noise. The guard learns whatever your labels say, so measure it against checked labels.
-  - On 1,178 held-out items from ag_news, rotten_tomatoes and enron_spam, labels reviewed the same way, `gpt-4o-mini`
-    was confident on 97% and wrong on 56 of those. At about 3% extra escalation, a second LLM disagreeing at 0.9
-    caught 24 (13 false alarms) and the local guard 14 (20 false alarms); the local guard did well on topics and
-    poorly on sentiment (1 of 16). Asking `gpt-4o-mini` to check its own answer caught 7 to 12 with 28 to 43 false
-    alarms, and per-cluster thresholds caught 4 with 65.
-  - A second LLM costs a call for every confident answer; the local guard runs in-process.
+  them. On 1,178 held-out items from ag_news, rotten_tomatoes and enron_spam (labels checked by hand), `gpt-4o-mini`
+  made 56 confident errors. At about 3% extra escalation, a second LLM as the guard caught 24 (13 false alarms) and a
+  local guard 14 (20 false alarms, and 1 of 16 on sentiment); a self-check and per-cluster thresholds did worse. The
+  second LLM costs a call per confident answer; the local guard runs in-process. Measure a guard against checked
+  labels: it learns whatever your labels say, and on job emails most of the errors a local guard "caught" turned out
+  to be label noise.
 - **Probe.** A tier that failed closed on a question, or that `prune` skips, is asked only on a random `probe` share
   (default 5%). *Why:* its answers would be thrown away, so asking it every time only adds cost and latency, but with
   no answers at all a later calibration or prune could never see it improve.
@@ -243,11 +233,21 @@ definition automatically misses. A model with no `identity` is not cached.
 
 ### The Store (`store.py`)
 
-SQLite (or Postgres) with these tables: `decisions` (every result, with the caller's `ref` for the item, indexed so a webhook can find it; imported ones have ids starting `import-`, which `in_sample` never picks and `results()` leaves out, so they train and grade but never confirm a threshold or count as traffic), `labels` (true answers, with who gave them: `human`, `webhook:<source>` or `slack:<user>`, `label-studio`, `argilla` or `import`; giving the same answer again keeps its time, since confirmation reads labels in order), `posts` (review items sent to Slack, Label Studio or Argilla, so each goes once), `tier_thresholds` (calibration output),
-`calibration_issues` (why a question has none), `calibrations` (what the latest calibration saw, for drift) and
-`skips` (what `prune` stopped asking). Decision ids are random uuids, or come from `Store(path, seed=)` so a
-simulation that logs the same decisions in the same order gets the same ids. It uses WAL mode and a 30 second busy timeout, which fixed `database is
-locked` errors and lost decisions under concurrent load.
+SQLite (or Postgres), with these tables:
+
+| Table | Holds |
+| --- | --- |
+| `decisions` | Every result, with the caller's `ref` for the item (indexed, so a webhook can find it). Imported ones have ids starting `import-`, which `in_sample` never picks and `results()` leaves out, so they train and grade but never confirm a threshold or count as traffic |
+| `labels` | True answers and who gave them (`human`, `webhook:<source>`, `slack:<user>`, `label-studio`, `argilla`, `import`). Giving the same answer again keeps its time, since confirmation reads labels in order |
+| `posts` | Review items sent to Slack, Label Studio or Argilla, so each goes once |
+| `tier_thresholds`, `calibration_issues` | Calibration's thresholds, and why a question has none |
+| `unconfirmed` | Thresholds `calibrate` saved that labels have not confirmed yet |
+| `calibrations` | What the latest calibration saw, for drift |
+| `skips` | What `prune` stopped asking |
+
+Decision ids are random uuids, or come from `Store(path, seed=)` so a simulation that logs the same decisions in the
+same order gets the same ids. SQLite runs in WAL mode with a 30 second busy timeout, which fixed `database is locked`
+errors and lost decisions under concurrent load.
 
 The same tables live in Postgres when the path is a `postgresql://` URL (`sureshot/db.py`). The SQL is written once
 for both: `?` placeholders (rewritten for psycopg), `ON CONFLICT` upserts, and `DOUBLE PRECISION` columns, since
@@ -273,8 +273,6 @@ the router) and `confident` (the answers a tier was confident about, to confirm 
 the same hash makes them nested. Both take precedence over the other review reasons, so a decision in a sample is
 queued as such even when the models disagreed on it: if it were queued for disagreeing instead, it might be left
 unlabeled, and the labels that did come in would no longer be a random pick.
-
-The `unconfirmed` table lists thresholds `calibrate` saved that labels have not confirmed yet.
 
 ### Calibration (`calibrate.py`)
 

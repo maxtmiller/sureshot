@@ -174,7 +174,8 @@ router = Router(VLLMDecider("Qwen/Qwen2.5-7B-Instruct").check(), ClaudeAPI())
 
 `serve/docker-compose.yml` runs vLLM and the sureshot API together on one GPU machine: `cp .env.example .env`, set
 `SURESHOT_SYSTEM1_MODEL`, `SURESHOT_API_KEY` and a System 2 key, then `docker compose -f serve/docker-compose.yml up`
-(add `--build` to build sureshot from your checkout instead of pulling the published image). A zero-shot 7B model is less accurate than `gpt-4o-mini`, so log decisions, calibrate, and keep a System 2
+(add `--build` to build sureshot from your checkout instead of pulling the published image). A pip-installed vLLM may
+need `nvcc` for FlashInfer; set `VLLM_USE_FLASHINFER_SAMPLER=0` or use the official `vllm/vllm-openai` image. A zero-shot 7B model is less accurate than `gpt-4o-mini`, so log decisions, calibrate, and keep a System 2
 behind it.
 
 ## The router
