@@ -67,7 +67,14 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 | `sureshot/stats.py` | Usage, accuracy, cost, latency and drift report from the log |
 | `sureshot/evaluate.py`, `sureshot/golden.py` | Replay logged decisions through candidate models; score a golden dataset |
 | `sureshot/config.py` | `router_from_env()`: build a Router from `SURESHOT_*` environment variables |
-| `sureshot/api.py` | FastAPI app: `/decide`, `/feedback`, `/feedback/webhook/<source>`, `/slack/actions`, `/calibrate`, `/stats`, `/review` |
+| `sureshot/api.py` | FastAPI app: the HTTP API (its routes are in the [guide](docs/guide.md#http-api-and-configuration)) |
+| `sureshot/formats.py`, `sureshot/schema.py` | The OpenAI, Anthropic and Gemini request formats, read into questions and answered as an object matching the request's JSON schema |
+| `sureshot/mcp.py` | The MCP server, over stdio or at `/mcp` |
+| `sureshot/cli.py` | The `sureshot` command |
+| `sureshot/batch.py` | `decide --batch`: every row of a file, with System 2 through a vendor's batch API where there is one |
+| `sureshot/worker.py` | A queue worker for SQS, Redis Streams and Kafka |
+| `sureshot/warehouse.py` | BigQuery remote functions and Snowflake external functions |
+| `sureshot/tasks.py`, `airflow.py`, `dagster.py`, `prefect.py` | The command line's steps as Python calls, and wrappers for those schedulers |
 | `sureshot/webhooks.py` | Turns another tool's webhook events into labels, by the rules of a webhooks file, after checking its signature |
 | `sureshot/slack.py` | Posts review items to Slack with a button per answer, and labels from the clicks |
 | `sureshot/importer.py` | Decides and logs labeled examples you already have, kept apart from live traffic |
@@ -161,7 +168,6 @@ Contract: `answer(state, questions, images) -> {key: {answer, reason}}`.
   on refusals and truncation instead of returning a half answer.
 - **`ClaudeCLI`** runs the local `claude` CLI with no tools, for use with a Claude Code login and no API key.
 - **`HTTPReasoner` / `ChatReasoner`** let any chat model with structured outputs act as System 2.
-- `default_system2()` picks the API if a key is set, else the CLI if installed, else none.
 
 ### Vendors
 
@@ -416,10 +422,11 @@ accurate, so everything above it can skip System 2.
 
 ### Configuration and API (`config.py`, `api.py`)
 
-`router_from_env()` builds a Router from `SURESHOT_SYSTEM1_*`, `SURESHOT_SYSTEM2_*`, `SURESHOT_LOCAL_MODEL`, `SURESHOT_DB`,
-`SURESHOT_CACHE`, `SURESHOT_AUDIT` and `SURESHOT_THRESHOLD`, so a deployment swaps models with no code change. The FastAPI app
-wraps one shared Router, checks System 1 is reachable before serving (`ChatDecider.check`), and protects every route
-except `/health` with a bearer token. Labels arrive through `/feedback`; `/calibrate` recomputes thresholds.
+`router_from_env()` builds a Router from `SURESHOT_*` environment variables (listed in the
+[guide](docs/guide.md#http-api-and-configuration)), so a deployment swaps models with no code change. The API, the
+command line, the MCP server and the queue worker all build their router this way, so one set of variables configures
+every entry point. The FastAPI app wraps one shared Router and checks System 1 is reachable before serving
+(`ChatDecider.check`).
 
 ## How the parts form a loop
 
@@ -472,7 +479,6 @@ What load testing found, with fake models that take 20 ms (so these show suresho
 - Calibration quality depends on label quality. On real job emails some labels looked noisy, which caps measured accuracy.
 - Isotonic or Venn-Abers calibration was evaluated and not adopted: in simulation it gained nothing (#16).
 - Per-slice thresholds and a self-verifier were measured and lost to a second LLM as the guard (#17).
-- A CLI is not built (#8).
 - `recheck` needs a few hundred labels on a tier's confident answers to rule out a target the tier misses by a few
   points, and at least 52 all-right labels to confirm a 95% threshold (25 for 90%).
 - Confirmation only counts held-out labels on flagged answers, so a classifier needs roughly three times the random labels a

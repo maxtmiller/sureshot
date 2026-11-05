@@ -339,8 +339,7 @@ the cost of the target. Call it once per tier. It needs graded answers at every 
 `audit` provides.
 
 Where nobody labeled, an answer is graded by System 2's, so on its own a threshold only shows agreement with
-System 2. When two models make the same mistakes, that can look perfect: on the trec case study `gpt-4o-mini` was
-certified at 95% this way and was 81% to 87% right. So pass `sample=` and `confident=` (the rates you give
+System 2, and two models that make the same mistakes look perfect graded by each other. So pass `sample=` and `confident=` (the rates you give
 `review_queue`), and your labels on those random samples must **confirm** the threshold: until they show the target,
 it is saved but unconfirmed (`reason` is `not enough labels`), and the router keeps asking the tier without keeping
 its answers. `recheck` confirms it once the labels arrive.
@@ -633,13 +632,11 @@ step's result on ([recipe](../examples/recipes.md#airflow-dagster-and-prefect)).
 
 ## Performance
 
-- One process serves roughly 90 `/decide` requests a second with two model calls each; `uvicorn sureshot.api:app
-  --workers 4` reached about 300, sharing the SQLite log and cache.
-- Identical concurrent requests ask the model once.
+- For more throughput, run more processes: `uvicorn sureshot.api:app --workers 4`. They share the SQLite log and cache.
 - `/stats` and `/review` read the whole log; poll them rarely and use `since=`.
 - SQLite is for one machine: several workers on one disk are fine. For separate machines, point `SURESHOT_DB` and
   `SURESHOT_CACHE` at Postgres; each decision then makes a few round trips to it (reading thresholds, logging).
 
-`examples/loadtest.py <url> questions.json --clients 32 --requests 1000` measures your own setup. What load testing
-found is in [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#concurrency).
+`examples/loadtest.py <url> questions.json --clients 32 --requests 1000` measures your own setup. The throughput load
+testing measured is in [ARCHITECTURE.md](https://github.com/maxtmiller/sureshot/blob/main/ARCHITECTURE.md#concurrency).
 
