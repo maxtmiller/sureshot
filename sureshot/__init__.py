@@ -13,11 +13,12 @@ from sureshot.learn import retrain
 from sureshot.local import LocalDecider
 from sureshot.providers import PROVIDERS
 from sureshot.review import review_queue
+from sureshot.shadow import shadow
 from sureshot.router import Router
 from sureshot.stats import stats
 from sureshot.store import Store
 from sureshot.questions import validate, answer_schema
 
-__all__ = ["Router", "Store", "Cache", "calibrate", "recheck", "prune", "evaluate", "stats", "review_queue", "retrain", "LocalDecider", "router_from_env", "HTTPDecider", "ChatDecider", "VLLMDecider",
+__all__ = ["Router", "Store", "Cache", "calibrate", "recheck", "prune", "evaluate", "stats", "review_queue", "shadow", "retrain", "LocalDecider", "router_from_env", "HTTPDecider", "ChatDecider", "VLLMDecider",
            "HTTPReasoner", "ChatReasoner", "GeminiDecider", "GeminiReasoner", *[cls.__name__ for cls in VENDOR_CLASSES], "Outage", "PROVIDERS", "ClaudeAPI", "ClaudeCLI", "default_system2", "validate", "prompt",
            "SYSTEM_PROMPT", "answer_schema"]

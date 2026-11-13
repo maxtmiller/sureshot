@@ -439,6 +439,27 @@ report["failures"]   # [{"case": 7, "key": "urgency", "expected": 2, "got": 1, .
 `evaluate(store, {"qwen": ChatDecider(...), "llama": ChatDecider(...)})` replays your graded decisions through
 candidate System 1 models, to see which meets the target with the least escalation.
 
+### Shadow: what sureshot would do on your traffic
+
+Before switching, replay requests your current model already answered. `shadow` asks every System 1 tier about each
+row, picks each tier's threshold so its kept answers certify a target agreement with your model, replays the cascade
+with those thresholds and reports what it would keep and cost. Nothing is logged and your model is not called.
+
+```python
+from sureshot import Router, shadow
+from sureshot.importer import rows
+
+report = shadow(Router([local, llm]), questions, rows("history.jsonl"), target=0.95,
+                costs={"tier 0": 0, "tier 1": 0.00008, "system2": 0.004})   # "system2" is your current model
+report["kept"], report["agreement"], report["low"]     # 0.78, 0.983, 0.971
+report["cost"]                                        # {"current": 12.0, "sureshot": 3.1, "savings": 0.74}
+report["questions"]["category"]["tiers"]              # each tier's threshold, as calibrate reports it
+```
+
+Each row has the content (`text`) and a column per question holding your model's answer, read as `import` reads
+labels. Agreement says whether switching would change your outputs, not whether either model is right: label a random
+sample for that. The thresholds are picked on the rows they are scored on, so calibrate live before relying on them.
+
 ## HTTP API and configuration
 
 ```bash
@@ -609,6 +630,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | `sureshot stats [--costs '{...}']` | The [stats](#stats-and-drift) report |
 | `sureshot review [--limit] [--reason] [--label \| --slack [--channel]]` | The [review queue](#review-queue-what-to-label-next). With `--label`, shows each item and asks for its true answer (Enter accepts the router's, `-` skips, Ctrl-D stops), saving each label as it is given. With `--slack`, posts the items not posted before to Slack to label with buttons |
 | `sureshot import FILE [--set] [--text] [--limit] [--escalate] [--workers]` | Decides and logs labeled examples you already have (CSV or JSONL, a column per question), so calibrate and retrain use them |
+| `sureshot shadow FILE [--set] [--text] [--limit] [--target] [--costs '{...}'] [--workers]` | [Replays](#shadow-what-sureshot-would-do-on-your-traffic) traffic your current model answered and reports what sureshot would keep, agree on and cost |
 | `sureshot label-studio push\|pull [--set] [--limit]` | Sends new review items of a question set to its Label Studio project, or saves the project's annotations as labels |
 | `sureshot argilla push\|pull [--set] [--limit]` | The same with an Argilla dataset (needs `sureshot[argilla]`) |
 | `sureshot migrate --from sureshot.db --to postgresql://...` | Copies a SQLite log or cache to Postgres; running it again copies only the rows the target lacks |

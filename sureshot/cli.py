@@ -27,7 +27,7 @@ def _store(args):
 
 
 def _router(args):
-    if args.db:
+    if getattr(args, "db", None):
         os.environ["SURESHOT_DB"] = args.db
     if args.questions:
         os.environ["SURESHOT_QUESTIONS"] = args.questions
@@ -232,6 +232,18 @@ def import_labels(args):
         sys.exit(f"sureshot: {e}")
 
 
+def shadow_report(args):
+    from sureshot.importer import rows
+    from sureshot.shadow import shadow
+
+    router = _router(args)
+    try:
+        return shadow(router, router.question_set(args.set), rows(args.file)[:args.limit], args.text, args.target,
+                      _costs(args.costs) if args.costs else None, args.min_samples, args.workers)
+    except ValueError as e:
+        sys.exit(f"sureshot: {e}")
+
+
 def labeling_tool(args):
     """sureshot label-studio and sureshot argilla: push review items to the tool, or pull its labels."""
     from sureshot.questions import load
@@ -296,6 +308,7 @@ COMMANDS = {
     "label-studio": labeling_tool,
     "argilla": labeling_tool,
     "import": import_labels,
+    "shadow": shadow_report,
     "test": test,
     "worker": worker,
     "migrate": migrate,
@@ -369,6 +382,16 @@ def parser():
     s.add_argument("--text", default="text", help="the column holding the content")
     s.add_argument("--limit", type=int, help="import at most this many rows")
     s.add_argument("--escalate", action="store_true", help="also ask System 2 about what System 1 is unsure of (costs more)")
+    s.add_argument("--workers", type=int, default=4)
+
+    s = sub.add_parser("shadow", parents=[routed], help="replay traffic your current model answered (CSV, JSONL or Parquet) and report what sureshot would keep, agree on and cost")
+    s.add_argument("file")
+    s.add_argument("--set", help="the question set (default: the file's only set)")
+    s.add_argument("--text", default="text", help="the column holding the content")
+    s.add_argument("--limit", type=int, help="replay at most this many rows")
+    s.add_argument("--target", type=float, default=0.95, help="the agreement with your current model each kept answer must meet")
+    s.add_argument("--min-samples", type=int, default=30)
+    s.add_argument("--costs", help='cost per question of each tier and of your current model as "system2", e.g. {"tier 0": 0.0001, "system2": 0.004}')
     s.add_argument("--workers", type=int, default=4)
 
     for command, what, help in [("label-studio", "project", "send review items to a Label Studio project (push), or save its annotations as labels (pull)"),
