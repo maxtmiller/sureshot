@@ -15,7 +15,7 @@ def _mapped(schema, name, texts, images, tool=None):
     mapped = isinstance(schema, dict) and from_schema(schema, f"{name or schema.get('title') or 'response'}.")
     if not mapped:
         return None
-    return {"state": "\n\n".join(t for t in texts if t), "images": images, "questions": mapped[0], "encode": mapped[1], "tool": tool}
+    return {"state": "\n\n".join(t for t in texts if t), "images": images, "questions": mapped[0], "encode": mapped[1], "decode": mapped[2], "tool": tool}
 
 
 def _read(contents, part):
@@ -189,3 +189,66 @@ def gemini_response(model, request, result):
 def gemini_stream(response, sse):
     """streamGenerateContent's one response: as server-sent events with ?alt=sse (what the SDKs ask for), else a JSON array."""
     return _sse([(None, response)]) if sse else json.dumps([response])
+
+
+def _events(raw):
+    """The JSON data of each server-sent event in a response body."""
+    for line in raw.decode("utf-8", "replace").splitlines():
+        if line.startswith("data:") and (data := line[5:].strip()) and data != "[DONE]":
+            yield json.loads(data)
+
+
+def _object(value):
+    return json.loads(value) if isinstance(value, str) else value
+
+
+def _openai_answer(raw, request, stream):
+    if not stream:
+        message = json.loads(raw)["choices"][0]["message"]
+        return message["tool_calls"][0]["function"]["arguments"] if request["tool"] else message["content"]
+    parts = []
+    for chunk in _events(raw):
+        for choice in chunk.get("choices") or []:
+            delta = choice.get("delta") or {}
+            if request["tool"]:
+                parts += [(call.get("function") or {}).get("arguments") or "" for call in delta.get("tool_calls") or []]
+            else:
+                parts.append(delta.get("content") or "")
+    return "".join(parts)
+
+
+def _anthropic_answer(raw, request, stream):
+    if not stream:
+        blocks = json.loads(raw)["content"]
+        if request["tool"]:
+            return next(b["input"] for b in blocks if b["type"] == "tool_use" and b["name"] == request["tool"])
+        return "".join(b["text"] for b in blocks if b["type"] == "text")
+    tools, parts = set(), []
+    for event in _events(raw):
+        if event.get("type") == "content_block_start" and event["content_block"].get("name") == request["tool"]:
+            tools.add(event["index"])
+        delta = event.get("delta") or {}
+        if request["tool"] and delta.get("type") == "input_json_delta" and event["index"] in tools:
+            parts.append(delta["partial_json"])
+        elif not request["tool"] and delta.get("type") == "text_delta":
+            parts.append(delta["text"])
+    return "".join(parts)
+
+
+def _gemini_answer(raw, request, stream):
+    responses = [json.loads(raw)] if not stream else list(_events(raw)) if stream == "sse" else json.loads(raw)
+    parts = [p for r in responses for c in r["candidates"][:1] for p in c["content"]["parts"]]
+    if request["tool"]:
+        return next(p["functionCall"]["args"] for p in parts if (p.get("functionCall") or {}).get("name") == request["tool"])
+    return "".join(p.get("text", "") for p in parts)
+
+
+def model_answer(fmt, raw, request, stream=None):
+    """{key: answer} of the object another model answered a request with, read from its response body (bytes) in that
+    API's format ("OPENAI", "ANTHROPIC" or "GEMINI"); stream is whether it was streamed (for Gemini, "sse" or True for a
+    JSON array). Fields that are missing or not a valid answer are left out; a body that can't be read gives {}."""
+    read = {"OPENAI": _openai_answer, "ANTHROPIC": _anthropic_answer, "GEMINI": _gemini_answer}[fmt]
+    try:
+        return request["decode"](_object(read(raw, request, stream)))
+    except (AttributeError, KeyError, IndexError, TypeError, StopIteration, ValueError):
+        return {}

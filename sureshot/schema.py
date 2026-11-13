@@ -1,6 +1,7 @@
 """Questions from a JSON schema, and the router's answers back as an object matching it, so sureshot can answer the
 structured-output requests of other APIs (see formats.py)."""
 import re
+from sureshot.questions import check_answer
 
 # The Anthropic SDK moves constraints its API doesn't take into the description, e.g. "Priority\n\n{maximum: 5, minimum: 1}".
 _MOVED = re.compile(r"\{([^{}]*)\}\s*$")
@@ -75,11 +76,12 @@ def _question(prop, root):
 
 
 def from_schema(schema, prefix=""):
-    """(questions, encode) when every property of an object schema maps to a question, else None: a string enum is a
-    choice, a boolean a noul, and an integer enum or minimum-to-maximum range of 2 to 10 values a score. A property's
-    description (or title) is its instructions. Keys are prefix + the property name, so apps that share a router and a
-    property name (say "category") are calibrated apart. encode turns the router's answers into an object matching the
-    schema."""
+    """(questions, encode, decode) when every property of an object schema maps to a question, else None: a string enum
+    is a choice, a boolean a noul, and an integer enum or minimum-to-maximum range of 2 to 10 values a score. A
+    property's description (or title) is its instructions. Keys are prefix + the property name, so apps that share a
+    router and a property name (say "category") are calibrated apart. encode turns the router's answers into an object
+    matching the schema; decode reads such an object (another model's answer) back into {key: answer}, leaving out the
+    fields it lacks or that are not a valid answer."""
     root, schema = schema, _resolve(schema, schema)
     if schema is None or str(schema.get("type", "object")).lower() != "object" or not isinstance(schema.get("properties"), dict) or not schema["properties"]:
         return None
@@ -95,4 +97,17 @@ def from_schema(schema, prefix=""):
     def encode(answers):
         return {name: values[name][answers[prefix + name]["answer"]] if name in values else answers[prefix + name]["answer"] for name in schema["properties"]}
 
-    return questions, encode
+    def decode(value):
+        found = {}
+        for name in schema["properties"] if isinstance(value, dict) else ():
+            key, v = prefix + name, value.get(name)
+            if name in values:
+                v = next((i for i, level in enumerate(values[name]) if _integers([v]) and level == v), None)
+            try:
+                check_answer(questions[key], v)
+            except ValueError:
+                continue
+            found[key] = v
+        return found
+
+    return questions, encode, decode

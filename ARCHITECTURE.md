@@ -65,6 +65,7 @@ confidence, to *measure* whether it is right, and to *shrink* the share that nee
 | `sureshot/learn.py` | `retrain`: trains a better local tier from the log and promotes it only if it helps |
 | `sureshot/review.py` | The queue of questions where a person's label would help most |
 | `sureshot/stats.py` | Usage, accuracy, cost, latency and drift report from the log |
+| `sureshot/shadow.py` | What sureshot would do on traffic your current model answers: a replay of past rows, or the log shadow mode keeps (`SURESHOT_SHADOW`) |
 | `sureshot/evaluate.py`, `sureshot/golden.py` | Replay logged decisions through candidate models; score a golden dataset |
 | `sureshot/config.py` | `router_from_env()`: build a Router from `SURESHOT_*` environment variables |
 | `sureshot/api.py` | FastAPI app: the HTTP API (its routes are in the [guide](docs/guide.md#http-api-and-configuration)) |

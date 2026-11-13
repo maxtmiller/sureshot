@@ -29,19 +29,21 @@ class FirstOption:
 
 
 def test_schema_fields_map_to_questions():
-    questions, encode = from_schema(SCHEMA, "ticket.")
+    questions, encode, decode = from_schema(SCHEMA, "ticket.")
     assert questions["ticket.team"] == {"type": "choice", "instructions": "Which team should handle it?", "criteria": {"billing": "", "support": ""}}
     assert questions["ticket.urgent"] == {"type": "noul"}
     assert questions["ticket.priority"]["criteria"] == ["1", "2", "3", "4", "5"] and questions["ticket.size"]["criteria"] == ["10", "20", "40"]
     answers = {"ticket.team": {"answer": "support"}, "ticket.urgent": {"answer": False}, "ticket.priority": {"answer": 0}, "ticket.size": {"answer": 2}}
     assert encode(answers) == {"team": "support", "urgent": False, "priority": 1, "size": 40}
+    assert decode({"team": "support", "urgent": False, "priority": 1, "size": 40}) == {k: a["answer"] for k, a in answers.items()}
+    assert decode({"team": "sales", "urgent": 1, "priority": True, "size": 30}) == {} and decode("not an object") == {}
 
 
 def test_pydantic_style_refs_resolve():
     schema = {"$defs": {"Team": {"enum": ["billing", "support"], "title": "Team", "type": "string"}},
               "properties": {"team": {"$ref": "#/$defs/Team"}, "other": {"allOf": [{"$ref": "#/$defs/Team"}], "description": "Second team"}},
               "required": ["team", "other"], "title": "Ticket", "type": "object"}
-    questions, _ = from_schema(schema)
+    questions, _, _ = from_schema(schema)
     assert questions["team"]["criteria"] == {"billing": "", "support": ""} and questions["team"]["instructions"] == "Team"
     assert questions["other"]["instructions"] == "Second team"
 
@@ -200,7 +202,7 @@ def test_anthropic_requests_are_read_from_output_config_or_a_forced_tool():
 
 def test_anthropic_sdk_constraints_moved_into_descriptions_still_map():
     prop = {"type": "integer", "description": "Priority\n\n{maximum: 5, minimum: 1}", "title": "P"}
-    questions, encode = from_schema({"type": "object", "properties": {"p": prop}})
+    questions, encode, _ = from_schema({"type": "object", "properties": {"p": prop}})
     assert questions["p"]["criteria"] == ["1", "2", "3", "4", "5"] and encode({"p": {"answer": 4}}) == {"p": 5}
 
 

@@ -1860,3 +1860,10 @@ def test_api_and_env_use_the_questions_file(tmp_path, monkeypatch):
     assert list(client.post("/decide", json={"state": "event", "questions": "kind"}, headers=auth).json()["answers"]) == ["event_type"]
     assert list(client.post("/decide", json={"state": "event"}, headers=auth).json()["answers"]) == ["event_type"]
     assert client.post("/decide", json={"state": "event", "questions": "nope"}, headers=auth).status_code == 422
+
+
+def test_choices_without_descriptions_show_their_names():
+    from sureshot.adapters.base import OptionDecider
+
+    text = OptionDecider._prompt("hi", {"type": "choice", "instructions": "Team?", "criteria": {"billing": "", "sales": "Buying more"}})
+    assert "A: billing\nB: Buying more" in text

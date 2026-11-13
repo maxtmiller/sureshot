@@ -27,7 +27,7 @@ def _store(args):
 
 
 def _router(args):
-    if getattr(args, "db", None):
+    if args.db:
         os.environ["SURESHOT_DB"] = args.db
     if args.questions:
         os.environ["SURESHOT_QUESTIONS"] = args.questions
@@ -234,12 +234,14 @@ def import_labels(args):
 
 def shadow_report(args):
     from sureshot.importer import rows
-    from sureshot.shadow import shadow
+    from sureshot.shadow import report, shadow
 
+    costs = _costs(args.costs) if args.costs else None
+    if args.file is None:
+        return report(_store(args), args.target, costs, args.min_samples, args.since)
     router = _router(args)
     try:
-        return shadow(router, router.question_set(args.set), rows(args.file)[:args.limit], args.text, args.target,
-                      _costs(args.costs) if args.costs else None, args.min_samples, args.workers)
+        return shadow(router, router.question_set(args.set), rows(args.file)[:args.limit], args.text, args.target, costs, args.min_samples, args.workers)
     except ValueError as e:
         sys.exit(f"sureshot: {e}")
 
@@ -384,8 +386,10 @@ def parser():
     s.add_argument("--escalate", action="store_true", help="also ask System 2 about what System 1 is unsure of (costs more)")
     s.add_argument("--workers", type=int, default=4)
 
-    s = sub.add_parser("shadow", parents=[routed], help="replay traffic your current model answered (CSV, JSONL or Parquet) and report what sureshot would keep, agree on and cost")
-    s.add_argument("file")
+    s = sub.add_parser("shadow", parents=[common, routed], help="replay traffic your current model answered (CSV, JSONL or Parquet), or without a file report on what "
+                                                              "shadow mode logged: what sureshot would keep, agree on and cost")
+    s.add_argument("file", nargs="?")
+    s.add_argument("--since", type=float, default=0.0, help="without a file, only requests logged since this unix time")
     s.add_argument("--set", help="the question set (default: the file's only set)")
     s.add_argument("--text", default="text", help="the column holding the content")
     s.add_argument("--limit", type=int, help="replay at most this many rows")
