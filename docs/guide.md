@@ -441,7 +441,7 @@ candidate System 1 models, to see which meets the target with the least escalati
 
 ### Shadow: what sureshot would do on your traffic
 
-Before switching, replay requests your current model already answered. `shadow` asks every System 1 tier about each
+Before switching, replay requests your current model already answered (or watch live ones with [shadow mode](#shadow-mode)). `shadow` asks every System 1 tier about each
 row, picks each tier's threshold so its kept answers certify a target agreement with your model, replays the cascade
 with those thresholds and reports what it would keep and cost. Nothing is logged and your model is not called.
 
@@ -495,6 +495,7 @@ mount a volume there to keep the log, or set `SURESHOT_DB` to a `postgresql://` 
 | `POST /v1/chat/completions`, `/v1/messages`, `/{version}/models/{model}:generateContent` | OpenAI, Anthropic and Gemini requests (see [below](#drop-in-for-openai-anthropic-and-gemini-apps)); the key may also come as `x-api-key`, `x-goog-api-key` or `?key=` |
 | `POST /mcp` | The [MCP server](#mcp-for-agents), over streamable HTTP |
 | `POST /warehouse/bigquery`, `/warehouse/snowflake` | A BigQuery remote function or Snowflake external function, `sureshot('ticket_routing', body)` in SQL ([recipe](https://github.com/maxtmiller/sureshot/blob/main/examples/recipes.md#sql-in-bigquery-and-snowflake)); the key comes in `user_defined_context` as `api_key`, or in the `authorization` `HEADERS` |
+| `GET /shadow` | The [shadow mode](#shadow-mode) report; `target`, `min_samples`, `since`, and `costs` as JSON with your current model as `"system2"` |
 | `GET /metrics` | This process's [metrics](#monitoring-and-alerts) in the Prometheus text format |
 | `GET /health` | No token needed |
 
@@ -522,6 +523,7 @@ which you can also call yourself:
 | `SURESHOT_COSTS` | Cost per question of each stage as JSON, e.g. `{"tier 0": 0, "system2": 0.004}`, for the `sureshot_cost_total` metric |
 | `SURESHOT_ALERT_URL` | A Slack incoming webhook or any URL that gets an [alert](#monitoring-and-alerts) on a demotion, a failed recheck or drift |
 | `SURESHOT_OPENAI_PASSTHROUGH_URL`, `SURESHOT_ANTHROPIC_PASSTHROUGH_URL`, `SURESHOT_GEMINI_PASSTHROUGH_URL`, each with `_API_KEY` | Where each format's requests that sureshot can't answer are forwarded |
+| `SURESHOT_SHADOW` | `1` forwards every drop-in request and logs what System 1 would say beside your model's answer; a number below 1 shadows that share ([shadow mode](#shadow-mode)) |
 
 ## Monitoring and alerts
 
@@ -596,6 +598,20 @@ matching the schema:
   streaming request streams back as the upstream sends it.
 - Token usage is reported as zero: the models sureshot asked are not the one the app named.
 
+### Shadow mode
+
+With `SURESHOT_SHADOW=1` (and `SURESHOT_DB` and the passthrough URLs set), every request goes to your current model and
+its response comes back unchanged, streamed or not, with nothing added to its latency. After each structured response
+is sent, sureshot reads your model's answer, asks every System 1 tier the same questions, and logs a decision that
+your model answered in full as System 2, with each tier's answer beside it. `SURESHOT_SHADOW=0.1` does this for a
+random 10% of structured requests, to cap what the System 1 calls cost.
+
+`GET /shadow` (or `sureshot shadow` without a file) gives the [shadow report](#shadow-what-sureshot-would-do-on-your-traffic)
+on that log, plus `traffic`: how many requests were structured, how many were not, and the share sureshot could
+answer at all. Since the log has the usual shape, `calibrate`, `stats` and `review_queue` work on it too: calibrate
+during shadow mode, label the random sample, then unset `SURESHOT_SHADOW` and the router starts with thresholds it
+already learned. Until people label, those thresholds measure agreement with your current model, not accuracy.
+
 ## MCP for agents
 
 Claude Code, Claude Desktop and other MCP clients can use sureshot as tools: `sureshot mcp` over stdio, or `/mcp` on a
@@ -630,7 +646,7 @@ the current directory when `python-dotenv` is installed), takes `--db` in place 
 | `sureshot stats [--costs '{...}']` | The [stats](#stats-and-drift) report |
 | `sureshot review [--limit] [--reason] [--label \| --slack [--channel]]` | The [review queue](#review-queue-what-to-label-next). With `--label`, shows each item and asks for its true answer (Enter accepts the router's, `-` skips, Ctrl-D stops), saving each label as it is given. With `--slack`, posts the items not posted before to Slack to label with buttons |
 | `sureshot import FILE [--set] [--text] [--limit] [--escalate] [--workers]` | Decides and logs labeled examples you already have (CSV or JSONL, a column per question), so calibrate and retrain use them |
-| `sureshot shadow FILE [--set] [--text] [--limit] [--target] [--costs '{...}'] [--workers]` | [Replays](#shadow-what-sureshot-would-do-on-your-traffic) traffic your current model answered and reports what sureshot would keep, agree on and cost |
+| `sureshot shadow [FILE] [--set] [--text] [--limit] [--target] [--costs '{...}'] [--workers] [--since]` | [Replays](#shadow-what-sureshot-would-do-on-your-traffic) traffic your current model answered and reports what sureshot would keep, agree on and cost; without a file, reports on what [shadow mode](#shadow-mode) logged |
 | `sureshot label-studio push\|pull [--set] [--limit]` | Sends new review items of a question set to its Label Studio project, or saves the project's annotations as labels |
 | `sureshot argilla push\|pull [--set] [--limit]` | The same with an Argilla dataset (needs `sureshot[argilla]`) |
 | `sureshot migrate --from sureshot.db --to postgresql://...` | Copies a SQLite log or cache to Postgres; running it again copies only the rows the target lacks |

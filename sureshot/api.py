@@ -5,6 +5,7 @@ with `uvicorn sureshot.api:app`."""
 import os
 import hmac
 import json
+import random
 from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
@@ -12,17 +13,19 @@ from urllib.parse import parse_qs
 from fastapi import BackgroundTasks, Body, FastAPI, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from starlette.background import BackgroundTask
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 from sureshot.adapters.base import post, post_stream
 from sureshot.calibrate import calibrate
-from sureshot.formats import (anthropic_request, anthropic_response, anthropic_stream, gemini_request, gemini_response, gemini_stream,
+from sureshot.formats import (anthropic_request, anthropic_response, anthropic_stream, gemini_request, gemini_response, gemini_stream, model_answer,
                               openai_request, openai_response, openai_stream, summary)
 from sureshot.review import REASONS, review_queue
 from sureshot.stats import stats
 from sureshot.config import router_from_env
 from sureshot.questions import load
 from sureshot import alerts, mcp, observe, slack, warehouse, webhooks
+from sureshot.shadow import record, report as shadow_log
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 # A bad questions file fails at startup, not on the first request.
@@ -171,17 +174,21 @@ def usage_stats(since: float = 0.0, min_samples: int = Query(30, ge=1), alpha: f
                 confident: float = Query(0.0, ge=0, le=1), authorization: str = Header(default="")):
     """costs is JSON, e.g. {"tier 0": 0, "tier 1": 0.0002, "system2": 0.004}: a cost per question of each stage."""
     authorize(authorization)
-    prices = None
-    if costs is not None:
-        try:
-            prices = json.loads(costs)
-        except json.JSONDecodeError:
-            raise HTTPException(422, "costs must be JSON, e.g. {\"system2\": 0.004}")
-        if not isinstance(prices, dict) or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in prices.values()):
-            raise HTTPException(422, "costs must map each stage to a number")
-        if "system2" not in prices:
-            raise HTTPException(422, 'costs needs a "system2" cost per question')
-    return stats(log(), since, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change, prices, sample, confident)
+    return stats(log(), since, min_samples, alpha, false_alarm_every, min_escalation_change, min_distribution_change, _prices(costs), sample, confident)
+
+
+def _prices(costs):
+    if costs is None:
+        return None
+    try:
+        prices = json.loads(costs)
+    except json.JSONDecodeError:
+        raise HTTPException(422, "costs must be JSON, e.g. {\"system2\": 0.004}")
+    if not isinstance(prices, dict) or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in prices.values()):
+        raise HTTPException(422, "costs must map each stage to a number")
+    if "system2" not in prices:
+        raise HTTPException(422, 'costs needs a "system2" cost per question')
+    return prices
 
 
 @app.get("/questions")
@@ -207,6 +214,14 @@ def calibrate_thresholds(request: CalibrateRequest, authorization: str = Header(
     report = calibrate(store, request.target_accuracy, request.min_samples, sample=request.sample, confident=request.confident)
     alerts.demoted(before, store.thresholds(), 0)
     return report
+
+
+@app.get("/shadow")
+def shadow_report(target: float = Query(0.95, gt=0, le=1), min_samples: int = Query(30, ge=1), since: float = 0.0, costs: str | None = None,
+                  authorization: str = Header(default="")):
+    """What shadow mode saw: sureshot.shadow.report on the log. costs is JSON, as for /stats, with your current model as "system2"."""
+    authorize(authorization)
+    return shadow_log(log(), target, _prices(costs), min_samples, since)
 
 
 @app.get("/metrics")
@@ -264,32 +279,67 @@ app.add_route("/mcp", MCPEndpoint(), methods=["GET", "POST", "DELETE"])
 
 class Relay(StreamingResponse):
     """An upstream stream, closed however the response ends. When the client hangs up, Starlette stops iterating
-    without closing the iterator, so a generator's finally would leave the upstream open, still generating."""
+    without closing the iterator, so a generator's finally would leave the upstream open, still generating. With
+    done, the whole body is handed to it once relayed (after the upstream is closed)."""
 
-    def __init__(self, upstream):
-        super().__init__(upstream.iter_bytes(), upstream.status_code, media_type=upstream.headers.get("content-type"))
-        self.upstream = upstream
+    def __init__(self, upstream, done=None):
+        self.chunks = []
+        body = upstream.iter_bytes() if done is None else self._kept(upstream.iter_bytes())
+        super().__init__(body, upstream.status_code, media_type=upstream.headers.get("content-type"))
+        self.upstream, self.done = upstream, done
+
+    def _kept(self, chunks):
+        for chunk in chunks:
+            self.chunks.append(chunk)
+            yield chunk
 
     async def __call__(self, scope, receive, send):
         try:
             await super().__call__(scope, receive, send)
         finally:
             self.upstream.close()
+        if self.done:
+            await run_in_threadpool(self.done, b"".join(self.chunks))
 
 
-def passthrough(fmt, body, path, headers, stream):
+def passthrough(fmt, body, path, headers, stream, done=None):
     """Forwards a request sureshot can't answer, unchanged, to SURESHOT_{fmt}_PASSTHROUGH_URL: the base URL you would
     give that API's SDK, with SURESHOT_{fmt}_PASSTHROUGH_API_KEY sent the way that API expects. A stream is relayed as
-    it arrives."""
+    it arrives. done, if given, gets the body of a successful response after it is sent."""
     url = os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_URL")
     if not url:
         raise HTTPException(422, "sureshot answers requests for a JSON schema whose fields are all enums, booleans or integer ranges of 2 to 10 values; "
                                  f"set SURESHOT_{fmt}_PASSTHROUGH_URL to forward other requests")
     request = {"url": url.rstrip("/") + path, "json": body, "headers": headers(os.environ.get(f"SURESHOT_{fmt}_PASSTHROUGH_API_KEY")), "timeout": 300}
     if stream:
-        return Relay(post_stream(**request))
+        upstream = post_stream(**request)
+        return Relay(upstream, done if upstream.status_code == 200 else None)
     upstream = post(**request)
-    return Response(upstream.content, upstream.status_code, media_type=upstream.headers.get("content-type"))
+    task = BackgroundTask(done, upstream.content) if done and upstream.status_code == 200 else None
+    return Response(upstream.content, upstream.status_code, media_type=upstream.headers.get("content-type"), background=task)
+
+
+def shadow_rate():
+    """SURESHOT_SHADOW: the share of structured requests to shadow (1 or "true" for all), or 0 when shadow mode is off."""
+    value = os.environ.get("SURESHOT_SHADOW", "").strip().lower()
+    return 1.0 if value == "true" else float(value or 0)
+
+
+def shadowed(fmt, request, stream):
+    """In shadow mode every request goes to your current model and its response comes back unchanged. This counts the
+    request and returns what to do with a sampled structured one's response body: log what each System 1 tier says
+    next to your model's answer (see sureshot.shadow.record)."""
+    store = log()
+    store.count_traffic("structured" if request else "other")
+    if not request or random.random() >= shadow_rate():
+        return None
+
+    def done(raw):
+        current = model_answer(fmt, raw, request, stream)
+        if current:
+            record(router(), request["state"], request["questions"], current, request["images"])
+
+    return done
 
 
 def answer(request, respond, stream=None, media_type="text/event-stream"):
@@ -308,8 +358,10 @@ def answer(request, respond, stream=None, media_type="text/event-stream"):
 def openai_chat(body: dict = Body(...), authorization: str = Header(default="")):
     """OpenAI's chat completions: point the client's base URL at <sureshot>/v1, with SURESHOT_API_KEY as its key."""
     authorize(authorization)
-    if (request := openai_request(body)) is None:
-        return passthrough("OPENAI", body, "/chat/completions", lambda key: {"Authorization": f"Bearer {key}"} if key else {}, body.get("stream"))
+    request = openai_request(body)
+    if request is None or shadow_rate():
+        done = shadowed("OPENAI", request, body.get("stream")) if shadow_rate() else None
+        return passthrough("OPENAI", body, "/chat/completions", lambda key: {"Authorization": f"Bearer {key}"} if key else {}, body.get("stream"), done)
     include_usage = (body.get("stream_options") or {}).get("include_usage")
     return answer(request, lambda result: openai_response(body, request, result), body.get("stream") and (lambda c: openai_stream(c, include_usage)))
 
@@ -319,16 +371,20 @@ def anthropic_messages(body: dict = Body(...), x_api_key: str = Header(default="
                        anthropic_version: str = Header(default="2023-06-01"), anthropic_beta: str | None = Header(default=None)):
     """Anthropic's Messages: point the client's base URL at <sureshot>, with SURESHOT_API_KEY as its key."""
     authorize(f"Bearer {x_api_key}" if x_api_key else authorization)
-    if (request := anthropic_request(body)) is None:
+    request = anthropic_request(body)
+    if request is None or shadow_rate():
+        done = shadowed("ANTHROPIC", request, body.get("stream")) if shadow_rate() else None
         version = {"anthropic-version": anthropic_version} | ({"anthropic-beta": anthropic_beta} if anthropic_beta else {})
-        return passthrough("ANTHROPIC", body, "/v1/messages", lambda key: version | ({"x-api-key": key} if key else {}), body.get("stream"))
+        return passthrough("ANTHROPIC", body, "/v1/messages", lambda key: version | ({"x-api-key": key} if key else {}), body.get("stream"), done)
     return answer(request, lambda result: anthropic_response(body, request, result), body.get("stream") and anthropic_stream)
 
 
 def gemini(version, model, body, key, method, stream=None, media_type=None):
     authorize(f"Bearer {key}")
-    if (request := gemini_request(body)) is None:
-        return passthrough("GEMINI", body, f"/{version}/models/{model}:{method}", lambda k: {"x-goog-api-key": k} if k else {}, stream)
+    request = gemini_request(body)
+    if request is None or shadow_rate():
+        done = shadowed("GEMINI", request, ("sse" if "alt=sse" in method else True) if stream else None) if shadow_rate() else None
+        return passthrough("GEMINI", body, f"/{version}/models/{model}:{method}", lambda k: {"x-goog-api-key": k} if k else {}, stream, done)
     return answer(request, lambda result: gemini_response(model, request, result), stream, media_type)
 
 

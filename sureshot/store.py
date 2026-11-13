@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS unconfirmed (tier INTEGER, key TEXT, PRIMARY KEY (tie
 CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts DOUBLE PRECISION, threshold DOUBLE PRECISION, target DOUBLE PRECISION,
                                          escalation_rate DOUBLE PRECISION, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS posts (decision_id TEXT, key TEXT, ts DOUBLE PRECISION, PRIMARY KEY (decision_id, key));
+CREATE TABLE IF NOT EXISTS shadow_traffic (ts DOUBLE PRECISION, kind TEXT);
 """
 REF_INDEX = "CREATE INDEX IF NOT EXISTS decisions_ref ON decisions (ref)"
 IMPORTED = "import-"
@@ -86,6 +87,16 @@ class Store:
             check_answer(questions[key], answer)
             db.execute("INSERT INTO labels (decision_id, key, answer, source, ts) VALUES (?, ?, ?, ?, ?) ON CONFLICT (decision_id, key) DO UPDATE "
                        "SET answer = excluded.answer, source = excluded.source, ts = excluded.ts WHERE labels.answer <> excluded.answer", (decision_id, key, json.dumps(answer), source, time.time()))
+
+    def count_traffic(self, kind):
+        """Counts one request seen in shadow mode: "structured" (sureshot could answer it) or "other"."""
+        with self._db() as db:
+            db.execute("INSERT INTO shadow_traffic VALUES (?, ?)", (time.time(), kind))
+
+    def traffic(self, since=0.0):
+        """{kind: requests} seen in shadow mode since a unix time."""
+        with self._db() as db:
+            return dict(db.execute("SELECT kind, COUNT(*) FROM shadow_traffic WHERE ts >= ? GROUP BY kind", (since,)).fetchall())
 
     def posted(self):
         """{(decision id, key)} of the questions already sent out for labeling (see sureshot.slack)."""

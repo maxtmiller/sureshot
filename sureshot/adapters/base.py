@@ -80,7 +80,8 @@ class OptionDecider:
 
     @classmethod
     def _prompt(cls, state, question):
-        options = "\n".join(f"{label}: {description}" for label, _, description in cls._labels(question)) if question["type"] != "noul" else ""
+        # A choice read from a schema enum has no descriptions, only option names.
+        options = "\n".join(f"{label}: {description or option}" for label, option, description in cls._labels(question)) if question["type"] != "noul" else ""
         return (f"<state>\n{state}\n</state>\n\n{question.get('instructions', '')}\n\n{options}\n\n"
                 f"Reply with only {'yes or no' if question['type'] == 'noul' else 'the label of the best option'}.")
 
