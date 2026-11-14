@@ -96,6 +96,8 @@ Or `pip install "sureshot[api]"` and `sureshot serve`. The routes and settings a
 
 ## Where next
 
+- [Shadow mode](https://github.com/maxtmiller/sureshot/blob/main/docs/guide.md#shadow-mode): see what sureshot would
+  keep, agree on and save on your own traffic before switching, with `sureshot shadow history.jsonl` or `SURESHOT_SHADOW=1`
 - [Guide](https://github.com/maxtmiller/sureshot/blob/main/docs/guide.md): the full reference, including the
   [drop-in for OpenAI, Anthropic and Gemini apps](https://github.com/maxtmiller/sureshot/blob/main/docs/guide.md#drop-in-for-openai-anthropic-and-gemini-apps),
   the [MCP server](https://github.com/maxtmiller/sureshot/blob/main/docs/guide.md#mcp-for-agents) and the
