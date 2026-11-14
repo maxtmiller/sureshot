@@ -26,13 +26,15 @@ def _sqlite_log(tmp_path, monkeypatch):
     store.save_skips(1, ["needs_prep"], [])
     store.save_unconfirmed(0, ["other"], [])
     store.mark_posted([(result["id"], "needs_prep")])
+    store.count_traffic("structured")
+    store.count_traffic("other")
     cache.put_many({"k1": {"answer": True}, "k2": {"answer": False}})
     return path, store
 
 
 def _snapshot(store):
     return (store.results(), store.labels(), store.thresholds(), store.skipped(1), store.unconfirmed(), store.posted(),
-            store.calibrations(), store.issues(), store.find("ticket-7"))
+            store.calibrations(), store.issues(), store.find("ticket-7"), store.traffic())
 
 
 def test_migrate_copies_every_table_and_is_idempotent(tmp_path, monkeypatch):

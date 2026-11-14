@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS unconfirmed (tier INTEGER, key TEXT, PRIMARY KEY (tie
 CREATE TABLE IF NOT EXISTS calibrations (tier INTEGER, key TEXT, ts DOUBLE PRECISION, threshold DOUBLE PRECISION, target DOUBLE PRECISION,
                                          escalation_rate DOUBLE PRECISION, answers INTEGER, histogram TEXT, PRIMARY KEY (tier, key));
 CREATE TABLE IF NOT EXISTS posts (decision_id TEXT, key TEXT, ts DOUBLE PRECISION, PRIMARY KEY (decision_id, key));
-CREATE TABLE IF NOT EXISTS shadow_traffic (ts DOUBLE PRECISION, kind TEXT);
+CREATE TABLE IF NOT EXISTS shadow_traffic (id TEXT PRIMARY KEY, ts DOUBLE PRECISION, kind TEXT);
 """
 REF_INDEX = "CREATE INDEX IF NOT EXISTS decisions_ref ON decisions (ref)"
 IMPORTED = "import-"
@@ -91,7 +91,7 @@ class Store:
     def count_traffic(self, kind):
         """Counts one request seen in shadow mode: "structured" (sureshot could answer it) or "other"."""
         with self._db() as db:
-            db.execute("INSERT INTO shadow_traffic VALUES (?, ?)", (time.time(), kind))
+            db.execute("INSERT INTO shadow_traffic VALUES (?, ?, ?)", (uuid.uuid4().hex, time.time(), kind))
 
     def traffic(self, since=0.0):
         """{kind: requests} seen in shadow mode since a unix time."""
