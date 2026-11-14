@@ -5,6 +5,7 @@ from pathlib import Path
 from sureshot.local import LocalDecider
 from sureshot.adapters.chat import ChatDecider, VLLMDecider, ChatReasoner
 from sureshot.adapters.gemini import GeminiDecider, GeminiReasoner
+from sureshot.adapters.sampled import SampledDecider
 from sureshot.cache import Cache
 from sureshot.router import Router
 from sureshot.store import Store
@@ -24,16 +25,26 @@ def _gemini(cls, n):
 
 
 def system1_from_env():
-    """The LLM System 1, behind a trained LocalDecider tier when SURESHOT_LOCAL_MODEL names a saved one."""
-    kind = os.environ.get("SURESHOT_SYSTEM1", "chat")
-    if kind == "chat":
+    """The LLM System 1, behind a trained LocalDecider tier when SURESHOT_LOCAL_MODEL names a saved one. With
+    SURESHOT_SYSTEM1_SAMPLES (and always for claude, 5 by default) the model answers several times without logprobs,
+    and the share of answers that agree is the confidence (see SampledDecider)."""
+    env = os.environ
+    kind, samples = env.get("SURESHOT_SYSTEM1", "chat"), env.get("SURESHOT_SYSTEM1_SAMPLES")
+    if kind == "claude":
+        from sureshot.adapters.anthropic import ClaudeAPI
+
+        llm = SampledDecider(ClaudeAPI(**({"model": env["SURESHOT_SYSTEM1_MODEL"]} if env.get("SURESHOT_SYSTEM1_MODEL") else {})), int(samples or 5))
+    elif kind not in ("chat", "vllm", "gemini"):
+        raise ValueError(f"SURESHOT_SYSTEM1 must be chat, vllm, gemini or claude, not {kind!r}")
+    elif samples:
+        reasoner = _gemini(GeminiReasoner, 1) if kind == "gemini" else _chat(ChatReasoner, 1, "http://localhost:8000/v1" if kind == "vllm" else None)
+        llm = SampledDecider(reasoner, int(samples))
+    elif kind == "chat":
         llm = _chat(ChatDecider, 1)
     elif kind == "vllm":
         llm = _chat(VLLMDecider, 1, "http://localhost:8000/v1")
-    elif kind == "gemini":
-        llm = _gemini(GeminiDecider, 1)
     else:
-        raise ValueError(f"SURESHOT_SYSTEM1 must be chat, vllm or gemini, not {kind!r}")
+        llm = _gemini(GeminiDecider, 1)
     return [LocalDecider.load(os.environ["SURESHOT_LOCAL_MODEL"]), llm] if os.environ.get("SURESHOT_LOCAL_MODEL") else llm
 
 
