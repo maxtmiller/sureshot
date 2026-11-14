@@ -3,6 +3,7 @@ from sureshot.adapters.base import Outage, prompt, SYSTEM_PROMPT
 from sureshot.adapters.chat import ChatDecider, VLLMDecider, ChatReasoner
 from sureshot.adapters.gemini import GeminiDecider, GeminiReasoner
 from sureshot.adapters.http import HTTPDecider, HTTPReasoner
+from sureshot.adapters.sampled import SampledDecider
 from sureshot.adapters.vendors import *  # noqa: F401,F403
 from sureshot.adapters.vendors import VENDOR_CLASSES
 from sureshot.cache import Cache
@@ -19,6 +20,6 @@ from sureshot.stats import stats
 from sureshot.store import Store
 from sureshot.questions import validate, answer_schema
 
-__all__ = ["Router", "Store", "Cache", "calibrate", "recheck", "prune", "evaluate", "stats", "review_queue", "shadow", "retrain", "LocalDecider", "router_from_env", "HTTPDecider", "ChatDecider", "VLLMDecider",
+__all__ = ["Router", "Store", "Cache", "calibrate", "recheck", "prune", "evaluate", "stats", "review_queue", "shadow", "retrain", "LocalDecider", "router_from_env", "HTTPDecider", "ChatDecider", "VLLMDecider", "SampledDecider",
            "HTTPReasoner", "ChatReasoner", "GeminiDecider", "GeminiReasoner", *[cls.__name__ for cls in VENDOR_CLASSES], "Outage", "PROVIDERS", "ClaudeAPI", "ClaudeCLI", "default_system2", "validate", "prompt",
            "SYSTEM_PROMPT", "answer_schema"]

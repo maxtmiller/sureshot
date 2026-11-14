@@ -93,7 +93,8 @@ An object of named questions, each one of three types:
 ### System 1
 
 A System 1 must return a probability for each option. Each question is asked on its own with `max_tokens=1`, and
-the probability on the option labels is the confidence.
+the probability on the option labels is the confidence. A model without logprobs can be sampled instead
+(`SampledDecider`, [below](#models-without-logprobs)).
 
 | Class | Use it for |
 | --- | --- |
@@ -102,10 +103,25 @@ the probability on the option labels is the confidence.
 | `VLLMDecider(model)` | A model you serve with vLLM, at `http://localhost:8000/v1` by default (see [self-hosting](#self-hosting-system-1-with-vllm)) |
 | `HTTPDecider(url, request, parse)` | Any other HTTP API: you write the request body and parse the probabilities |
 | `LocalDecider` | An in-process classifier trained on your labels, about 10 ms (see [retrain](#retrain-a-cheaper-first-tier)) |
+| `SampledDecider(reasoner, n=5)` | A model without logprobs, such as Claude: any System 2 class asked `n` times, the share of agreeing answers being the confidence |
 
 Run `.check()` on a decider before using it: it asks one yes/no question and says what is wrong (unreachable,
 unknown model, no logprobs, or a model that starts thinking). A model that thinks before answering needs thinking
 turned off through `extra=`, e.g. `extra={"reasoning_effort": "none"}`.
+
+### Models without logprobs
+
+`SampledDecider(ClaudeAPI(), n=5)` asks the model all the questions `n` times at once, in parallel. Each question's
+answer is the one most samples gave, and its confidence the share that gave it: 5 of 5 is 1.0, 4 of 5 is 0.8. From
+the environment, `SURESHOT_SYSTEM1=claude` (with `SURESHOT_SYSTEM1_MODEL`, Haiku by default) does this, and
+`SURESHOT_SYSTEM1_SAMPLES=n` samples a `chat`, `vllm` or `gemini` model the same way.
+
+It costs `n` calls per item, and the confidence is coarser than a logprob. Calibration treats it like any other: a
+split vote is a good sign the model is unsure, but a unanimous one only means the model is consistent, and it can be
+consistently wrong. In one check (100 TREC questions, Claude Haiku, 5 samples) 90% of answers were unanimous and 93%
+of those were right, about the model's own accuracy, while `gpt-4o-mini` with logprobs ranked its answers more
+finely. So expect it to certify targets up to roughly the model's accuracy on its unanimous answers, and calibration
+to fail closed (escalating) above that. Keep the temperature above 0, or every vote is unanimous.
 
 ### System 2
 
@@ -504,7 +520,8 @@ which you can also call yourself:
 
 | Variable | Values |
 | --- | --- |
-| `SURESHOT_SYSTEM1` | `chat` (default), `vllm` or `gemini` |
+| `SURESHOT_SYSTEM1` | `chat` (default), `vllm`, `gemini` or `claude` (sampled, see [models without logprobs](#models-without-logprobs)) |
+| `SURESHOT_SYSTEM1_SAMPLES` | Sample System 1 this many times instead of reading logprobs (5 for `claude` when unset) |
 | `SURESHOT_SYSTEM1_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 1's model (required), and a URL or a provider, and key |
 | `SURESHOT_SYSTEM2` | `auto` (default), `claude`, `claude-cli`, `chat`, `gemini`, `none` |
 | `SURESHOT_SYSTEM2_MODEL`, `_URL`, `_PROVIDER`, `_API_KEY` | System 2's model, URL or provider, and key |
